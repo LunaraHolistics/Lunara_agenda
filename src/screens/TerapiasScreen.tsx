@@ -2,8 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Edit2, Trash2, X } from 'lucide-react';
 import { StorageService, StorageKeys } from '../services/StorageService';
 import { Terapia } from '../types';
+import { useAppContext } from '../AppContext';
 
 export default function TerapiasScreen() {
+  const { showNotification, confirmAction } = useAppContext();
   const [terapias, setTerapias] = useState<Terapia[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTerapia, setEditingTerapia] = useState<Terapia | null>(null);
@@ -17,6 +19,8 @@ export default function TerapiasScreen() {
 
   useEffect(() => {
     loadTerapias();
+    window.addEventListener('storage-sync', loadTerapias);
+    return () => window.removeEventListener('storage-sync', loadTerapias);
   }, []);
 
   const loadTerapias = async () => {
@@ -26,7 +30,7 @@ export default function TerapiasScreen() {
 
   const handleSave = async () => {
     if (!nome.trim() || !valor || !duracao) {
-      alert('Preencha todos os campos corretamente.');
+      showNotification('Preencha todos os campos corretamente.', 'error');
       return;
     }
 
@@ -48,11 +52,12 @@ export default function TerapiasScreen() {
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm('Deseja realmente excluir esta terapia?')) {
+    confirmAction('Deseja realmente excluir esta terapia?', async () => {
       await StorageService.deleteItem(StorageKeys.TERAPIAS, id);
       loadTerapias();
       setActiveActionId(null);
-    }
+      closeModal();
+    }, { isDanger: true });
   };
 
   const openModal = (terapia?: Terapia) => {

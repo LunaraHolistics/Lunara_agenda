@@ -6,7 +6,7 @@ import { AsyncStorage } from '../utils/storage';
 import { useAppContext } from '../AppContext';
 
 export default function AgendaScreen() {
-  const { completeAppointment } = useAppContext();
+  const { completeAppointment, showNotification, confirmAction, promptAction } = useAppContext();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [terapias, setTerapias] = useState<Terapia[]>([]);
@@ -54,8 +54,10 @@ export default function AgendaScreen() {
     };
 
     window.addEventListener('focus', handleFocus);
+    window.addEventListener('storage-sync', loadData);
     return () => {
       window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('storage-sync', loadData);
     };
   }, [refreshTrigger]);
 
@@ -269,7 +271,7 @@ export default function AgendaScreen() {
 
   const handleSaveBloqueio = async () => {
     if (!blockData || !blockHoraInicio || !blockHoraFim) {
-      alert('Preencha data, hora início e hora fim.');
+      showNotification('Preencha data, hora início e hora fim.', 'error');
       return;
     }
 
@@ -296,59 +298,58 @@ export default function AgendaScreen() {
 
   const handleDeleteAgendamento = async (agendamentoId: string) => {
     console.log("Botão Excluir Clicado para o ID:", agendamentoId);
-    if (!window.confirm('Deseja realmente excluir este agendamento?')) {
-      return;
-    }
-
-    try {
-      // 1. Buscar todos os agendamentos do Storage para garantir array completo
-      const allAgendamentos = await StorageService.getItems<Agendamento>(StorageKeys.AGENDAMENTOS);
-      const agendamento = allAgendamentos.find(a => String(a.id) === String(agendamentoId));
-      
-      if (!agendamento) {
-        console.warn("Agendamento não encontrado para exclusão:", agendamentoId);
-        return;
-      }
-
-      // 2. Lógica de Pacote (Devolver sessão se necessário)
-      if (agendamento.pacoteId && agendamento.itemPacoteId) {
-        const pacotesList = await StorageService.getItems<Pacote>(StorageKeys.PACOTES);
-        const pacote = pacotesList.find(p => String(p.id) === String(agendamento.pacoteId));
-        if (pacote) {
-          const updatedItens = pacote.itens.map(item => {
-            if (String(item.id) === String(agendamento.itemPacoteId)) {
-              return { ...item, quantidadeRestante: item.quantidadeRestante + 1 };
-            }
-            return item;
-          });
-          const updatedPacote = { ...pacote, itens: updatedItens };
-          await StorageService.updateItem(StorageKeys.PACOTES, updatedPacote);
+    confirmAction('Deseja realmente excluir este agendamento?', async () => {
+      try {
+        // 1. Buscar todos os agendamentos do Storage para garantir array completo
+        const allAgendamentos = await StorageService.getItems<Agendamento>(StorageKeys.AGENDAMENTOS);
+        const agendamento = allAgendamentos.find(a => String(a.id) === String(agendamentoId));
+        
+        if (!agendamento) {
+          console.warn("Agendamento não encontrado para exclusão:", agendamentoId);
+          return;
         }
-      }
 
-      // 3. Filtrar o array completo (Correção Estrutural)
-      const novaLista = allAgendamentos.filter(a => String(a.id) !== String(agendamentoId));
-      
-      // 4. Salvar novo array no AsyncStorage imediatamente
-      await AsyncStorage.setItem(StorageKeys.AGENDAMENTOS, JSON.stringify(novaLista));
-      
-      // 5. Atualizar UI (setState funcional)
-      setAgendamentos(prev => prev.filter(a => String(a.id) !== String(agendamentoId)));
-      setRefreshTrigger(prev => prev + 1);
-      
-      console.log('DEBUG: Item removido com sucesso da persistência e do estado.');
-      alert('Agendamento excluído com sucesso!');
-    } catch (error: any) {
-      console.error('Erro ao excluir agendamento:', error);
-      alert('Erro ao excluir agendamento: ' + error.message);
-    }
+        // 2. Lógica de Pacote (Devolver sessão se necessário)
+        if (agendamento.pacoteId && agendamento.itemPacoteId) {
+          const pacotesList = await StorageService.getItems<Pacote>(StorageKeys.PACOTES);
+          const pacote = pacotesList.find(p => String(p.id) === String(agendamento.pacoteId));
+          if (pacote) {
+            const updatedItens = pacote.itens.map(item => {
+              if (String(item.id) === String(agendamento.itemPacoteId)) {
+                return { ...item, quantidadeRestante: item.quantidadeRestante + 1 };
+              }
+              return item;
+            });
+            const updatedPacote = { ...pacote, itens: updatedItens };
+            await StorageService.updateItem(StorageKeys.PACOTES, updatedPacote);
+          }
+        }
+
+        // 3. Filtrar o array completo (Correção Estrutural)
+        const novaLista = allAgendamentos.filter(a => String(a.id) !== String(agendamentoId));
+        
+        // 4. Salvar novo array no AsyncStorage imediatamente
+        await AsyncStorage.setItem(StorageKeys.AGENDAMENTOS, JSON.stringify(novaLista));
+        
+        // 5. Atualizar UI (setState funcional)
+        setAgendamentos(prev => prev.filter(a => String(a.id) !== String(agendamentoId)));
+        setRefreshTrigger(prev => prev + 1);
+        
+        console.log('DEBUG: Item removido com sucesso da persistência e do estado.');
+        showNotification('Agendamento excluído com sucesso!', 'success');
+      } catch (error: any) {
+        console.error('Erro ao excluir agendamento:', error);
+        showNotification('Erro ao excluir agendamento: ' + error.message, 'error');
+      }
+    }, { isDanger: true });
   };
 
   const handleCompleteAppointment = async (id: string) => {
-    if (window.confirm('Confirmar realização deste atendimento?')) {
+    confirmAction('Confirmar realização deste atendimento?', async () => {
       await completeAppointment(id);
       loadData();
-    }
+      showNotification('Atendimento realizado com sucesso!', 'success');
+    });
   };
 
   const handleLongPress = (id: string) => {
@@ -516,19 +517,25 @@ export default function AgendaScreen() {
                           onClick={async (e) => {
                             e.stopPropagation();
                             if (ag.statusPagamento === 'Pendente') {
-                              const forma = window.prompt('Forma de Pagamento (PIX, Crédito, Débito, Transferência, Dinheiro):', 'PIX');
-                              if (forma) {
-                                const updatedAg: Agendamento = { 
-                                  ...ag, 
-                                  statusPagamento: 'Pago',
-                                  dataPagamento: new Date().toISOString().split('T')[0],
-                                  formaPagamento: forma
-                                };
-                                await StorageService.updateItem(StorageKeys.AGENDAMENTOS, updatedAg);
-                                await loadData();
-                              }
+                              promptAction(
+                                'Forma de Pagamento (PIX, Crédito, Débito, Transferência, Dinheiro):',
+                                'PIX',
+                                async (forma) => {
+                                  if (forma) {
+                                    const updatedAg: Agendamento = { 
+                                      ...ag, 
+                                      statusPagamento: 'Pago',
+                                      dataPagamento: new Date().toISOString().split('T')[0],
+                                      formaPagamento: forma
+                                    };
+                                    await StorageService.updateItem(StorageKeys.AGENDAMENTOS, updatedAg);
+                                    await loadData();
+                                    showNotification('Pagamento registrado!', 'success');
+                                  }
+                                }
+                              );
                             } else {
-                              if (window.confirm('Mudar status para Pendente?')) {
+                              confirmAction('Mudar status para Pendente?', async () => {
                                 const updatedAg: Agendamento = { 
                                   ...ag, 
                                   statusPagamento: 'Pendente',
@@ -537,7 +544,8 @@ export default function AgendaScreen() {
                                 };
                                 await StorageService.updateItem(StorageKeys.AGENDAMENTOS, updatedAg);
                                 await loadData();
-                              }
+                                showNotification('Status alterado para Pendente.', 'info');
+                              });
                             }
                           }}
                           className={`text-xs font-medium px-4 py-1.5 rounded-lg transition-all shadow-sm ${

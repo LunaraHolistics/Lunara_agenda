@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ChevronLeft, Search, CheckCircle, Calendar, DollarSign, CreditCard, Banknote, Landmark, User, X } from 'lucide-react';
 import { StorageService, StorageKeys } from '../services/StorageService';
 import { Agendamento, Cliente, Terapia, Pacote, PagamentoInfo } from '../types';
+import { useAppContext } from '../AppContext';
 
 interface ContasAReceberScreenProps {
   onBack: () => void;
@@ -19,6 +20,7 @@ type Pendencia = {
 };
 
 export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenProps) {
+  const { showNotification } = useAppContext();
   const [pendencias, setPendencias] = useState<Pendencia[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
@@ -109,7 +111,7 @@ export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenPro
         const p = allPacotes.find(item => String(item.id) === String(selectedPendencia.id));
         
         if (!p) {
-          alert('Pacote não encontrado para atualização.');
+          showNotification('Pacote não encontrado para atualização.', 'error');
           return;
         }
 
@@ -131,7 +133,7 @@ export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenPro
         const ag = allAgendamentos.find(item => String(item.id) === String(selectedPendencia.id));
         
         if (!ag) {
-          alert('Agendamento não encontrado para atualização.');
+          showNotification('Agendamento não encontrado para atualização.', 'error');
           return;
         }
 
@@ -147,12 +149,12 @@ export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenPro
         console.log('DEBUG: Pagamento de Agendamento Avulso registrado com sucesso:', updatedAg.id);
       }
 
-      alert('Baixa realizada com sucesso!');
+      showNotification('Baixa realizada com sucesso!', 'success');
       setSelectedPendencia(null);
       loadPendencias();
     } catch (error: any) {
       console.error('Erro ao confirmar baixa:', error);
-      alert('Erro ao confirmar baixa: ' + error.message);
+      showNotification('Erro ao confirmar baixa: ' + error.message, 'error');
     }
   };
 

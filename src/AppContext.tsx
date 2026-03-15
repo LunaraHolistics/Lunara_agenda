@@ -1,6 +1,6 @@
 import React, { createContext, useContext, ReactNode, useState, useEffect } from 'react';
-import { StorageService, StorageKeys } from './services/StorageService';
-import { Agendamento } from './types';
+import { supabase } from './supabaseClient';
+import { Agendamento, Cliente, Terapia, Pacote, Bloqueio } from './types';
 
 export interface ImportedContact {
   nome: string;
@@ -32,18 +32,146 @@ interface AppContextType {
   handleImportContacts: () => Promise<ImportedContact[] | null>;
   ddiList: CountryDDI[];
   completeAppointment: (agendamentoId: string) => Promise<void>;
+  session: any;
+  loading: boolean;
+  clientes: Cliente[];
+  agendamentos: Agendamento[];
+  terapias: Terapia[];
+  pacotes: Pacote[];
+  bloqueios: Bloqueio[];
+  fetchData: () => Promise<void>;
+  addCliente: (cliente: Omit<Cliente, 'id'>) => Promise<void>;
+  updateCliente: (cliente: Cliente) => Promise<void>;
+  deleteCliente: (id: string) => Promise<void>;
+  addAgendamento: (agendamento: Omit<Agendamento, 'id'>) => Promise<void>;
+  updateAgendamento: (agendamento: Agendamento) => Promise<void>;
+  deleteAgendamento: (id: string) => Promise<void>;
+  addTerapia: (terapia: Omit<Terapia, 'id'>) => Promise<void>;
+  updateTerapia: (terapia: Terapia) => Promise<void>;
+  deleteTerapia: (id: string) => Promise<void>;
+  addPacote: (pacote: Omit<Pacote, 'id'>) => Promise<void>;
+  updatePacote: (pacote: Pacote) => Promise<void>;
+  deletePacote: (id: string) => Promise<void>;
+  addBloqueio: (bloqueio: Omit<Bloqueio, 'id'>) => Promise<void>;
+  deleteBloqueio: (id: string) => Promise<void>;
+  showNotification: (message: string, type?: 'success' | 'error' | 'info') => void;
+  confirmAction: (message: string, onConfirm: () => void, options?: { title?: string; confirmText?: string; cancelText?: string; isDanger?: boolean; onCancel?: () => void }) => void;
+  promptAction: (message: string, defaultValue: string, onConfirm: (value: string) => void, options?: { title?: string; placeholder?: string }) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const ddiList = DDI_LIST;
+  const [session, setSession] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [notifiedAppointments, setNotifiedAppointments] = useState<Set<string>>(new Set());
+
+  // Data states
+  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
+  const [terapias, setTerapias] = useState<Terapia[]>([]);
+  const [pacotes, setPacotes] = useState<Pacote[]>([]);
+  const [bloqueios, setBloqueios] = useState<Bloqueio[]>([]);
+
+  // UI States
+  const [notifications, setNotifications] = useState<{ id: string; message: string; type: 'success' | 'error' | 'info' }[]>([]);
+  const [confirmation, setConfirmation] = useState<{ message: string; onConfirm: () => void; title?: string; confirmText?: string; cancelText?: string; isDanger?: boolean; onCancel?: () => void } | null>(null);
+  const [prompt, setPrompt] = useState<{ message: string; defaultValue: string; onConfirm: (value: string) => void; title?: string; placeholder?: string } | null>(null);
+
+  const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    const id = Math.random().toString(36).substring(2, 9);
+    setNotifications(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 4000);
+  };
+
+  const confirmAction = (message: string, onConfirm: () => void, options: { title?: string; confirmText?: string; cancelText?: string; isDanger?: boolean; onCancel?: () => void } = {}) => {
+    setConfirmation({ message, onConfirm, ...options });
+  };
+
+  const promptAction = (message: string, defaultValue: string, onConfirm: (value: string) => void, options: { title?: string; placeholder?: string } = {}) => {
+    setPrompt({ message, defaultValue, onConfirm, ...options });
+  };
+
+  useEffect(() => {
+    // Check current session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setLoading(false);
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session) {
+        fetchData();
+      } else {
+        // Clear data on logout
+        setClientes([]);
+        setAgendamentos([]);
+        setTerapias([]);
+        setPacotes([]);
+        setBloqueios([]);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const fetchData = async () => {
+    if (!session?.user) return;
+
+    try {
+      const [clis, agends, ters, pacs, blks] = await Promise.all([
+        supabase.from('clientes').select('*').order('nome'),
+        supabase.from('agendamentos').select('*').order('data_hora', { ascending: false }),
+        supabase.from('terapias').select('*').order('nome'),
+        supabase.from('pacotes').select('*').order('data_criacao', { ascending: false }),
+        supabase.from('bloqueios').select('*').order('data'),
+      ]);
+
+      if (clis.data) setClientes(clis.data.map(mapFromSnakeCase));
+      if (agends.data) setAgendamentos(agends.data.map(mapFromSnakeCase));
+      if (ters.data) setTerapias(ters.data.map(mapFromSnakeCase));
+      if (pacs.data) setPacotes(pacs.data.map(mapFromSnakeCase));
+      if (blks.data) setBloqueios(blks.data.map(mapFromSnakeCase));
+    } catch (error) {
+      console.error('Erro ao buscar dados:', error);
+    }
+  };
+
+  // Real-time subscription
+  useEffect(() => {
+    if (!session?.user) return;
+
+    const channels = ['clientes', 'agendamentos', 'terapias', 'pacotes', 'bloqueios'].map(table => {
+      return supabase
+        .channel(`public:${table}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table }, () => {
+          fetchData();
+        })
+        .subscribe();
+    });
+
+    return () => {
+      channels.forEach(channel => supabase.removeChannel(channel));
+    };
+  }, [session]);
+
+  const mapFromSnakeCase = (item: any) => {
+    const newItem: any = {};
+    for (const [k, v] of Object.entries(item)) {
+      const camelK = k.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
+      newItem[camelK] = v;
+    }
+    return newItem;
+  };
 
   useEffect(() => {
     const checkPendingAppointments = async () => {
       try {
-        const agendamentos = await StorageService.getItems<Agendamento>(StorageKeys.AGENDAMENTOS);
         const now = new Date();
         const today = now.toISOString().split('T')[0];
 
@@ -51,7 +179,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           const agDate = new Date(ag.dataHora);
           const agDay = agDate.toISOString().split('T')[0];
           
-          // Check if it's today, not realized/canceled, and more than 30 mins overdue
           if (agDay === today && ag.statusAtendimento === 'Agendado') {
             const overdueTime = new Date(agDate.getTime() + 30 * 60000);
             return now > overdueTime && !notifiedAppointments.has(ag.id);
@@ -78,15 +205,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
     };
 
-    // Check immediately and then every 15 minutes
     checkPendingAppointments();
     const interval = setInterval(checkPendingAppointments, 15 * 60000);
-
     return () => clearInterval(interval);
-  }, [notifiedAppointments]);
+  }, [notifiedAppointments, agendamentos]);
 
   const handleImportContacts = async (): Promise<ImportedContact[] | null> => {
-    // 1. Try Web Contacts API
     if ('contacts' in navigator && 'select' in (navigator as any).contacts) {
       try {
         const props = ['name', 'tel'];
@@ -105,7 +229,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
     }
 
-    // Fallback: CSV Import
     return new Promise((resolve) => {
       const input = document.createElement('input');
       input.type = 'file';
@@ -123,7 +246,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           try {
             const text = event.target.result;
             const lines = text.split('\n');
-            // Assuming CSV format: Nome,Telefone
             const imported = lines.slice(1)
               .map((line: string) => {
                 const parts = line.split(',');
@@ -138,39 +260,354 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             if (imported.length > 0) {
               resolve(imported);
             } else {
-              alert("Nenhum contato válido encontrado no CSV. Certifique-se de que o arquivo segue o formato 'Nome,Telefone'.");
+              showNotification("Nenhum contato válido encontrado no CSV.", "error");
               resolve(null);
             }
           } catch (err) {
             console.error('Erro ao processar CSV:', err);
-            alert("Erro ao processar o arquivo CSV.");
             resolve(null);
           }
         };
         reader.readAsText(file);
       };
-
-      alert("Não foi possível acessar seus contatos. Esta funcionalidade pode não estar disponível neste navegador. Tente importar via CSV.");
       input.click();
     });
   };
 
   const completeAppointment = async (agendamentoId: string) => {
     try {
-      const agendamentos = await StorageService.getItems<Agendamento>(StorageKeys.AGENDAMENTOS);
-      const index = agendamentos.findIndex(a => String(a.id) === String(agendamentoId));
-      if (index !== -1) {
-        agendamentos[index] = { ...agendamentos[index], statusAtendimento: 'Realizado' };
-        await StorageService.updateItem(StorageKeys.AGENDAMENTOS, agendamentos[index]);
-      }
+      const { error } = await supabase
+        .from('agendamentos')
+        .update({ status_atendimento: 'Realizado' })
+        .eq('id', agendamentoId);
+      
+      if (error) throw error;
+      fetchData();
     } catch (error) {
       console.error('Erro ao completar agendamento:', error);
     }
   };
 
+  const mapToSnakeCase = (item: any) => {
+    const newItem: any = {};
+    for (const [k, v] of Object.entries(item)) {
+      const snakeK = k.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+      newItem[snakeK] = v;
+    }
+    return newItem;
+  };
+
+  const addCliente = async (cliente: Omit<Cliente, 'id'>) => {
+    try {
+      const { error } = await supabase
+        .from('clientes')
+        .insert([{ ...mapToSnakeCase(cliente), user_id: session.user.id }]);
+      if (error) throw error;
+      fetchData();
+    } catch (error) {
+      console.error('Erro ao adicionar cliente:', error);
+    }
+  };
+
+  const updateCliente = async (cliente: Cliente) => {
+    try {
+      const { error } = await supabase
+        .from('clientes')
+        .update(mapToSnakeCase(cliente))
+        .eq('id', cliente.id);
+      if (error) throw error;
+      fetchData();
+    } catch (error) {
+      console.error('Erro ao atualizar cliente:', error);
+    }
+  };
+
+  const deleteCliente = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('clientes')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      fetchData();
+    } catch (error) {
+      console.error('Erro ao deletar cliente:', error);
+    }
+  };
+
+  const addAgendamento = async (agendamento: Omit<Agendamento, 'id'>) => {
+    try {
+      const { error } = await supabase
+        .from('agendamentos')
+        .insert([{ ...mapToSnakeCase(agendamento), user_id: session.user.id }]);
+      if (error) throw error;
+      fetchData();
+    } catch (error) {
+      console.error('Erro ao adicionar agendamento:', error);
+    }
+  };
+
+  const updateAgendamento = async (agendamento: Agendamento) => {
+    try {
+      const { error } = await supabase
+        .from('agendamentos')
+        .update(mapToSnakeCase(agendamento))
+        .eq('id', agendamento.id);
+      if (error) throw error;
+      fetchData();
+    } catch (error) {
+      console.error('Erro ao atualizar agendamento:', error);
+    }
+  };
+
+  const deleteAgendamento = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('agendamentos')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      fetchData();
+    } catch (error) {
+      console.error('Erro ao deletar agendamento:', error);
+    }
+  };
+
+  const addTerapia = async (terapia: Omit<Terapia, 'id'>) => {
+    try {
+      const { error } = await supabase
+        .from('terapias')
+        .insert([{ ...mapToSnakeCase(terapia), user_id: session.user.id }]);
+      if (error) throw error;
+      fetchData();
+    } catch (error) {
+      console.error('Erro ao adicionar terapia:', error);
+    }
+  };
+
+  const updateTerapia = async (terapia: Terapia) => {
+    try {
+      const { error } = await supabase
+        .from('terapias')
+        .update(mapToSnakeCase(terapia))
+        .eq('id', terapia.id);
+      if (error) throw error;
+      fetchData();
+    } catch (error) {
+      console.error('Erro ao atualizar terapia:', error);
+    }
+  };
+
+  const deleteTerapia = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('terapias')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      fetchData();
+    } catch (error) {
+      console.error('Erro ao deletar terapia:', error);
+    }
+  };
+
+  const addPacote = async (pacote: Omit<Pacote, 'id'>) => {
+    try {
+      const { error } = await supabase
+        .from('pacotes')
+        .insert([{ ...mapToSnakeCase(pacote), user_id: session.user.id }]);
+      if (error) throw error;
+      fetchData();
+    } catch (error) {
+      console.error('Erro ao adicionar pacote:', error);
+    }
+  };
+
+  const updatePacote = async (pacote: Pacote) => {
+    try {
+      const { error } = await supabase
+        .from('pacotes')
+        .update(mapToSnakeCase(pacote))
+        .eq('id', pacote.id);
+      if (error) throw error;
+      fetchData();
+    } catch (error) {
+      console.error('Erro ao atualizar pacote:', error);
+    }
+  };
+
+  const deletePacote = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('pacotes')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      fetchData();
+    } catch (error) {
+      console.error('Erro ao deletar pacote:', error);
+    }
+  };
+
+  const addBloqueio = async (bloqueio: Omit<Bloqueio, 'id'>) => {
+    try {
+      const { error } = await supabase
+        .from('bloqueios')
+        .insert([{ ...mapToSnakeCase(bloqueio), user_id: session.user.id }]);
+      if (error) throw error;
+      fetchData();
+    } catch (error) {
+      console.error('Erro ao adicionar bloqueio:', error);
+    }
+  };
+
+  const deleteBloqueio = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('bloqueios')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      fetchData();
+    } catch (error) {
+      console.error('Erro ao deletar bloqueio:', error);
+    }
+  };
+
   return (
-    <AppContext.Provider value={{ handleImportContacts, ddiList, completeAppointment }}>
+    <AppContext.Provider value={{ 
+      handleImportContacts, 
+      ddiList, 
+      completeAppointment, 
+      session, 
+      loading,
+      clientes,
+      agendamentos,
+      terapias,
+      pacotes,
+      bloqueios,
+      fetchData,
+      addCliente,
+      updateCliente,
+      deleteCliente,
+      addAgendamento,
+      updateAgendamento,
+      deleteAgendamento,
+      addTerapia,
+      updateTerapia,
+      deleteTerapia,
+      addPacote,
+      updatePacote,
+      deletePacote,
+      addBloqueio,
+      deleteBloqueio,
+      showNotification,
+      confirmAction,
+      promptAction
+    }}>
       {children}
+
+      {/* Global Notifications (Toasts) */}
+      <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none">
+        {notifications.map(n => (
+          <div 
+            key={n.id} 
+            className={`px-4 py-3 rounded-xl shadow-lg border flex items-center gap-3 animate-in slide-in-from-right-full duration-300 pointer-events-auto ${
+              n.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' :
+              n.type === 'error' ? 'bg-red-50 border-red-200 text-red-800' :
+              'bg-blue-50 border-blue-200 text-blue-800'
+            }`}
+          >
+            <p className="text-sm font-medium">{n.message}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Global Confirmation Modal */}
+      {confirmation && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
+                {confirmation.title || 'Confirmar Ação'}
+              </h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                {confirmation.message}
+              </p>
+            </div>
+            <div className="flex border-t border-gray-100 dark:border-gray-800">
+              <button 
+                onClick={() => {
+                  if (confirmation.onCancel) confirmation.onCancel();
+                  setConfirmation(null);
+                }}
+                className="flex-1 py-4 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
+              >
+                {confirmation.cancelText || 'Cancelar'}
+              </button>
+              <button 
+                onClick={() => {
+                  confirmation.onConfirm();
+                  setConfirmation(null);
+                }}
+                className={`flex-1 py-4 text-sm font-bold border-l border-gray-100 dark:border-gray-800 hover:opacity-90 transition-colors ${
+                  confirmation.isDanger ? 'text-red-600' : 'text-[var(--color-primary)]'
+                }`}
+              >
+                {confirmation.confirmText || 'Confirmar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Global Prompt Modal */}
+      {prompt && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
+                {prompt.title || 'Entrada de Dados'}
+              </h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                {prompt.message}
+              </p>
+              <input 
+                type="text"
+                autoFocus
+                defaultValue={prompt.defaultValue}
+                placeholder={prompt.placeholder}
+                className="w-full px-4 py-3 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-gray-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    prompt.onConfirm((e.target as HTMLInputElement).value);
+                    setPrompt(null);
+                  }
+                }}
+                id="global-prompt-input"
+              />
+            </div>
+            <div className="flex border-t border-gray-100 dark:border-gray-800">
+              <button 
+                onClick={() => setPrompt(null)}
+                className="flex-1 py-4 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={() => {
+                  const val = (document.getElementById('global-prompt-input') as HTMLInputElement)?.value;
+                  prompt.onConfirm(val);
+                  setPrompt(null);
+                }}
+                className="flex-1 py-4 text-sm font-bold border-l border-gray-100 dark:border-gray-800 text-[var(--color-primary)] hover:opacity-90 transition-colors"
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppContext.Provider>
   );
 };

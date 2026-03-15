@@ -19,10 +19,12 @@ export default function ClientesScreen() {
   const [observacoes, setObservacoes] = useState('');
 
   const [activeActionId, setActiveActionId] = useState<string | null>(null);
-  const { handleImportContacts, ddiList } = useAppContext();
+  const { handleImportContacts, ddiList, showNotification, confirmAction } = useAppContext();
 
   useEffect(() => {
     loadClientes();
+    window.addEventListener('storage-sync', loadClientes);
+    return () => window.removeEventListener('storage-sync', loadClientes);
   }, []);
 
   const loadClientes = async () => {
@@ -32,7 +34,7 @@ export default function ClientesScreen() {
 
   const handleSave = async () => {
     if (!nome.trim()) {
-      alert('Nome é obrigatório');
+      showNotification('Nome é obrigatório', 'error');
       return;
     }
 
@@ -56,14 +58,15 @@ export default function ClientesScreen() {
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm('Deseja realmente excluir este cliente?')) {
+    confirmAction('Deseja realmente excluir este cliente?', async () => {
       const storage = await AsyncStorage.getItem(StorageKeys.CLIENTES);
       const dados = JSON.parse(storage || '[]') || [];
       const filtrados = dados.filter((item: Cliente) => String(item.id) !== String(id));
       await AsyncStorage.setItem(StorageKeys.CLIENTES, JSON.stringify(filtrados));
       setClientes(filtrados); // Atualização forçada da interface
       setActiveActionId(null);
-    }
+      closeModal();
+    }, { isDanger: true });
   };
 
   const openModal = (cliente?: Cliente) => {
@@ -114,12 +117,12 @@ export default function ClientesScreen() {
           }
           await loadClientes();
           closeModal();
-          alert(`${imported.length} contatos importados com sucesso!`);
+          showNotification(`${imported.length} contatos importados com sucesso!`, 'success');
         }
       }
     } catch (error) {
       console.error('Erro na importação:', error);
-      alert("Não foi possível acessar seus contatos. Esta funcionalidade pode não estar disponível neste navegador. Tente importar via CSV.");
+      showNotification("Não foi possível acessar seus contatos. Esta funcionalidade pode não estar disponível neste navegador. Tente importar via CSV.", 'error');
     }
   };
 

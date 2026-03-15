@@ -3,8 +3,10 @@ import { Save, Trash2, GripVertical, Plus, PackageOpen, CheckCircle, ChevronLeft
 import { StorageService, StorageKeys } from '../services/StorageService';
 import { Cliente, Terapia, Pacote, ItemPacote, PagamentoInfo, Agendamento } from '../types';
 import { AsyncStorage } from '../utils/storage';
+import { useAppContext } from '../AppContext';
 
 export default function PacotesScreen() {
+  const { showNotification, confirmAction } = useAppContext();
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [terapias, setTerapias] = useState<Terapia[]>([]);
   const [pacotes, setPacotes] = useState<Pacote[]>([]);
@@ -33,6 +35,8 @@ export default function PacotesScreen() {
 
   useEffect(() => {
     loadData();
+    window.addEventListener('storage-sync', loadData);
+    return () => window.removeEventListener('storage-sync', loadData);
   }, [refreshTrigger]);
 
   const loadData = async () => {
@@ -77,10 +81,24 @@ export default function PacotesScreen() {
 
   const handleDeleteTotal = async (pacoteId: string) => {
     console.log("Botão Excluir Clicado para o ID:", pacoteId);
-    if (!window.confirm('Deseja realmente excluir este pacote totalmente?')) return;
-    
-    const removeAgendamentos = window.confirm('Deseja também remover os próximos agendamentos vinculados a este pacote?');
-    
+    confirmAction('Deseja realmente excluir este pacote totalmente?', () => {
+      confirmAction('Deseja também remover os próximos agendamentos vinculados a este pacote?', 
+        async () => {
+          await performDelete(pacoteId, true);
+        }, 
+        { 
+          title: 'Remover Agendamentos?', 
+          confirmText: 'Sim, remover', 
+          cancelText: 'Não, manter agendamentos',
+          onCancel: async () => {
+            await performDelete(pacoteId, false);
+          }
+        }
+      );
+    }, { isDanger: true });
+  };
+
+  const performDelete = async (pacoteId: string, removeAgendamentos: boolean) => {
     try {
       // 1. Remover Agendamentos se solicitado
       if (removeAgendamentos) {
@@ -100,7 +118,7 @@ export default function PacotesScreen() {
       setPacotes(prev => prev.filter(p => String(p.id) !== String(pacoteId)));
       setRefreshTrigger(prev => prev + 1);
       
-      // 5. Resetar formulário e estado de edição para garantir limpeza da interface
+      // 5. Resetar formulário
       setEditingPacoteId(null);
       setClienteId('');
       setItensPacote([]);
@@ -108,34 +126,31 @@ export default function PacotesScreen() {
       setTipoCobranca('Por Atendimento');
       setHistoricoPagamento({ status: 'Pendente', valor: 0 });
       
-      console.log('DEBUG: Pacote removido com sucesso.');
-      alert('Pacote excluído com sucesso!');
-      
-      // Forçar volta para a lista se estiver no formulário
+      showNotification('Pacote excluído com sucesso!', 'success');
       setViewMode('list');
     } catch (error: any) {
       console.error('Erro ao excluir pacote:', error);
-      alert('Erro ao excluir pacote: ' + error.message);
+      showNotification('Erro ao excluir pacote: ' + error.message, 'error');
     }
   };
 
   const handleSave = async () => {
     if (!clienteId) {
-      alert('Selecione um cliente.');
+      showNotification('Selecione um cliente.', 'error');
       return;
     }
 
     // Lógica de Pacote Vazio = Exclusão
     if (itensPacote.length === 0) {
       if (editingPacoteId) {
-        if (window.confirm('O pacote está vazio. Deseja excluí-lo?')) {
+        confirmAction('O pacote está vazio. Deseja excluí-lo?', async () => {
           await StorageService.deleteItem(StorageKeys.PACOTES, editingPacoteId);
-          alert('Pacote removido com sucesso!');
+          showNotification('Pacote removido com sucesso!', 'success');
           setViewMode('list');
           loadData();
-        }
+        }, { isDanger: true });
       } else {
-        alert('Adicione pelo menos uma terapia ao pacote.');
+        showNotification('Adicione pelo menos uma terapia ao pacote.', 'error');
       }
       return;
     }
@@ -190,7 +205,7 @@ export default function PacotesScreen() {
     
     await AsyncStorage.setItem(StorageKeys.PACOTES, JSON.stringify(novaLista));
     
-    alert('Pacote salvo com sucesso!');
+    showNotification('Pacote salvo com sucesso!', 'success');
     setViewMode('list');
     loadData();
   };
@@ -220,7 +235,7 @@ export default function PacotesScreen() {
 
   const addTerapiaToPacote = (terapiaId: string) => {
     if (itensPacote.some(item => item.terapiaId === terapiaId)) {
-      alert('Esta terapia já faz parte do pacote atual');
+      showNotification('Esta terapia já faz parte do pacote atual', 'info');
       return;
     }
     const newItem: ItemPacote = {
@@ -524,7 +539,7 @@ export default function PacotesScreen() {
                           onChange={(e) => {
                             const novoSaldo = parseInt(e.target.value) || 0;
                             if (novoSaldo > item.quantidade) {
-                              alert("O saldo restante não pode exceder o total contratado");
+                              showNotification("O saldo restante não pode exceder o total contratado", "error");
                               return;
                             }
                             updateItem(item.id, 'quantidadeRestante', novoSaldo);

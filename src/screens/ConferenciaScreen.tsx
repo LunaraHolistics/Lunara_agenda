@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { ChevronLeft, CheckCircle, AlertTriangle, DollarSign, Calendar, User, Activity } from 'lucide-react';
 import { StorageService, StorageKeys } from '../services/StorageService';
 import { Agendamento, Cliente, Terapia } from '../types';
+import { useAppContext } from '../AppContext';
 
 interface ConferenciaScreenProps {
   onBack: () => void;
 }
 
 export default function ConferenciaScreen({ onBack }: ConferenciaScreenProps) {
+  const { showNotification, confirmAction, promptAction } = useAppContext();
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [terapias, setTerapias] = useState<Terapia[]>([]);
@@ -45,11 +47,11 @@ export default function ConferenciaScreen({ onBack }: ConferenciaScreenProps) {
     const pendentes = agendamentos.filter(ag => ag.statusPagamento === 'Pendente' && ag.statusAtendimento === 'Realizado');
     
     if (pendentes.length === 0) {
-      alert('Não existem atendimentos realizados pendentes de pagamento nos últimos 7 dias.');
+      showNotification('Não existem atendimentos realizados pendentes de pagamento nos últimos 7 dias.', 'info');
       return;
     }
 
-    if (window.confirm(`Deseja confirmar o pagamento de ${pendentes.length} atendimentos em lote? (Será definido como PIX na data de hoje)`)) {
+    confirmAction(`Deseja confirmar o pagamento de ${pendentes.length} atendimentos em lote? (Será definido como PIX na data de hoje)`, async () => {
       const today = new Date().toISOString().split('T')[0];
       
       for (const ag of pendentes) {
@@ -63,22 +65,24 @@ export default function ConferenciaScreen({ onBack }: ConferenciaScreenProps) {
       }
       
       loadData();
-      alert('Pagamentos confirmados com sucesso!');
-    }
+      showNotification('Pagamentos confirmados com sucesso!', 'success');
+    });
   };
 
   const handleConfirmPaid = async (ag: Agendamento) => {
-    const forma = window.prompt('Forma de Pagamento (PIX, Crédito, Débito, Transferência, Dinheiro):', 'PIX');
-    if (forma) {
-      const updatedAg: Agendamento = {
-        ...ag,
-        statusPagamento: 'Pago',
-        dataPagamento: new Date().toISOString().split('T')[0],
-        formaPagamento: forma
-      };
-      await StorageService.updateItem(StorageKeys.AGENDAMENTOS, updatedAg);
-      loadData();
-    }
+    promptAction('Forma de Pagamento (PIX, Crédito, Débito, Transferência, Dinheiro):', 'PIX', async (forma) => {
+      if (forma) {
+        const updatedAg: Agendamento = {
+          ...ag,
+          statusPagamento: 'Pago',
+          dataPagamento: new Date().toISOString().split('T')[0],
+          formaPagamento: forma
+        };
+        await StorageService.updateItem(StorageKeys.AGENDAMENTOS, updatedAg);
+        loadData();
+        showNotification('Pagamento registrado com sucesso!', 'success');
+      }
+    }, { title: 'Registrar Pagamento', placeholder: 'PIX, Dinheiro, etc.' });
   };
 
   const getClienteNome = (id: string) => clientes.find(c => c.id === id)?.nome || 'Desconhecido';

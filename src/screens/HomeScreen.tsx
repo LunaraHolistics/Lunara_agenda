@@ -6,8 +6,10 @@ import FinanceiroScreen from './FinanceiroScreen';
 import ConfiguracoesScreen from './ConfiguracoesScreen';
 import ContasAReceberScreen from './ContasAReceberScreen';
 import ConferenciaScreen from './ConferenciaScreen';
+import { useAppContext } from '../AppContext';
 
 export default function HomeScreen() {
+  const { showNotification, confirmAction } = useAppContext();
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [terapias, setTerapias] = useState<Terapia[]>([]);
@@ -19,6 +21,9 @@ export default function HomeScreen() {
 
   useEffect(() => {
     loadData();
+    
+    window.addEventListener('storage-sync', loadData);
+    return () => window.removeEventListener('storage-sync', loadData);
   }, [showFinanceiro, showConfiguracoes, showContasAReceber, showConferencia]); // Reload when returning from other screens
 
   const loadData = async () => {
@@ -106,7 +111,7 @@ export default function HomeScreen() {
 
   const handleExcluir = async (agendamento: Agendamento) => {
     if (agendamento.pacoteId && agendamento.itemPacoteId) {
-      if (window.confirm('Deseja excluir este agendamento e devolver a sessão ao pacote do cliente?')) {
+      confirmAction('Deseja excluir este agendamento e devolver a sessão ao pacote do cliente?', async () => {
         const pacotes = await StorageService.getItems<Pacote>(StorageKeys.PACOTES);
         const pacote = pacotes.find(p => p.id === agendamento.pacoteId);
         if (pacote) {
@@ -121,12 +126,14 @@ export default function HomeScreen() {
         }
         await StorageService.deleteItem(StorageKeys.AGENDAMENTOS, agendamento.id);
         setAgendamentos(prev => prev.filter(a => a.id !== agendamento.id));
-      }
+        showNotification('Agendamento excluído e sessão devolvida ao pacote.', 'success');
+      }, { isDanger: true });
     } else {
-      if (window.confirm('Deseja realmente excluir este agendamento?')) {
+      confirmAction('Deseja realmente excluir este agendamento?', async () => {
         await StorageService.deleteItem(StorageKeys.AGENDAMENTOS, agendamento.id);
         setAgendamentos(prev => prev.filter(a => a.id !== agendamento.id));
-      }
+        showNotification('Agendamento excluído com sucesso.', 'success');
+      }, { isDanger: true });
     }
   };
 
@@ -339,7 +346,7 @@ export default function HomeScreen() {
 
       {/* FAB - Novo Atendimento Rápido */}
       <button 
-        onClick={() => alert('Para agendar, acesse a aba Agenda e arraste um cliente para o calendário.')}
+        onClick={() => showNotification('Para agendar, acesse a aba Agenda e arraste um cliente para o calendário.', 'info')}
         className="absolute bottom-6 right-6 h-14 px-6 bg-[var(--color-primary)] text-white rounded-full flex items-center justify-center shadow-lg hover:opacity-90 transition-opacity z-20 gap-2 font-medium"
       >
         <Plus size={24} />

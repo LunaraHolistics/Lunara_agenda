@@ -143,8 +143,8 @@ export default function ClientesScreen() {
   };
 
   const filteredClientes = clientes.filter(c => 
-    c.nome.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    c.telefone.includes(searchQuery)
+    (c.nome?.toLowerCase() || '').includes(searchQuery.toLowerCase()) || 
+    (c.telefone || '').includes(searchQuery)
   );
 
   // Long press logic

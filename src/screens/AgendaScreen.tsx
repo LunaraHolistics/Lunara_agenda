@@ -111,8 +111,9 @@ export default function AgendaScreen() {
         const index = agends.findIndex(a => String(a.id) === String(agendamentoId));
         if (index !== -1) {
           const ag = agends[index];
-          const timePart = ag.dataHora.split('T')[1];
-          ag.dataHora = `${dateStr}T${timePart}`;
+          const timePart = ag.time;
+          ag.date = dateStr;
+          ag.time = timePart;
           await StorageService.updateItem(StorageKeys.AGENDAMENTOS, ag);
           loadData();
         }
@@ -162,9 +163,9 @@ export default function AgendaScreen() {
     }
 
     // Check Agendamentos
-    const agendsOnDate = agendamentos.filter(a => a.dataHora.startsWith(dateStr) && a.statusAtendimento !== 'Cancelado');
+    const agendsOnDate = agendamentos.filter(a => a.date?.startsWith(dateStr) && a.statusAtendimento !== 'Cancelado');
     for (let a of agendsOnDate) {
-      const aDate = new Date(a.dataHora);
+      const aDate = new Date(`${a.date}T${a.time}:00`);
       const aStart = aDate.getHours() * 60 + aDate.getMinutes();
       
       let aDuracao = 60;
@@ -238,7 +239,8 @@ export default function AgendaScreen() {
         clienteId: formClienteId,
         terapiaId: formTerapiaIds[0],
         terapiaIds: formTerapiaIds,
-        dataHora: `${d}T${formHora}:00`,
+          date: d,
+          time: formHora,
         valorCobrado: formValor,
         desconto: 0,
         statusPagamento: formStatusPagamento,
@@ -428,7 +430,7 @@ export default function AgendaScreen() {
   }
 
   if (isDayAgendaOpen && selectedDate) {
-    const agendsOfDay = agendamentos.filter(a => a.dataHora.startsWith(selectedDate)).sort((a, b) => new Date(a.dataHora).getTime() - new Date(b.dataHora).getTime());
+    const agendsOfDay = agendamentos.filter(a => a.date?.startsWith(selectedDate)).sort((a, b) => new Date(`${a.date}T${a.time}:00`).getTime() - new Date(`${b.date}T${b.time}:00`).getTime());
     const blocksOfDay = bloqueios.filter(b => b.data === selectedDate);
 
     return (
@@ -472,11 +474,11 @@ export default function AgendaScreen() {
                   ? ag.terapiaIds.map(tid => terapias.find(t => t.id === tid)?.nome).filter(Boolean).join(' + ')
                   : (terapias.find(t => t.id === ag.terapiaId)?.nome || 'Desconhecida');
                 
-                const time = new Date(ag.dataHora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                const time = new Date(`${ag.date}T${ag.time}:00`).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
                 
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
-                const agDate = new Date(ag.dataHora);
+                const agDate = new Date(`${ag.date}T${ag.time}:00`);
                 agDate.setHours(0, 0, 0, 0);
                 const isPast = agDate < today;
                 
@@ -498,7 +500,7 @@ export default function AgendaScreen() {
                             </span>
                           )}
                         </div>
-                        <h4 className="font-medium text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] mt-1">{cliente?.nome || 'Desconhecido'}</h4>
+                        <h4 className="font-medium text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] mt-1">{cliente ? cliente.nome : 'Cliente não encontrado'}</h4>
                         <p className="text-sm text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)]">{therapyNames}</p>
                       </div>
                       <div className="flex flex-col items-end gap-2">
@@ -684,8 +686,8 @@ export default function AgendaScreen() {
                     
                     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                     const dayAgendamentos = agendamentos
-                      .filter(a => a.dataHora.startsWith(dateStr) && a.statusAtendimento !== 'Cancelado')
-                      .sort((a, b) => new Date(a.dataHora).getTime() - new Date(b.dataHora).getTime());
+                      .filter(a => a.date?.startsWith(dateStr) && a.statusAtendimento !== 'Cancelado')
+                      .sort((a, b) => new Date(`${a.date}T${a.time}:00`).getTime() - new Date(`${b.date}T${b.time}:00`).getTime());
                     const hasBloqueio = bloqueios.some(b => b.data === dateStr);
                     const isToday = new Date().toISOString().startsWith(dateStr);
 
@@ -736,7 +738,7 @@ export default function AgendaScreen() {
                                   }`}
                                 >
                                   <div className="flex justify-between items-center">
-                                    <span className="font-bold truncate">{new Date(ag.dataHora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                                    <span className="font-bold truncate">{new Date(`${ag.date}T${ag.time}:00`).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
                                     {isRealizado && <CheckCircle2 size={8} />}
                                   </div>
                                   <div className="truncate font-medium">{cliente?.nome}</div>

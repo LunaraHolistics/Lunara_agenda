@@ -18,6 +18,94 @@ const tableMap: Record<string, string> = {
   [StorageKeys.BLOQUEIOS]: 'bloqueios',
 };
 
+// Explicit field mappings (App camelCase -> DB English snake_case)
+export const fieldMappings: Record<string, Record<string, string>> = {
+  clientes: {
+    nome: 'name',
+    telefone: 'phone',
+    observacoes: 'notes',
+    status: 'status',
+    ddi: 'ddi',
+    id: 'id'
+  },
+  terapias: {
+    nome: 'name',
+    valor: 'price',
+    duracao: 'duration',
+    id: 'id'
+  },
+  pacotes: {
+    clienteId: 'client_id',
+    mesReferencia: 'reference_month',
+    itens: 'items',
+    valorBruto: 'gross_value',
+    valorDescontoTotal: 'total_discount_value',
+    valorFinal: 'final_value',
+    dataCriacao: 'created_at',
+    tipoCobranca: 'billing_type',
+    tipoPacote: 'package_type',
+    historicoPagamento: 'payment_history',
+    observacoes: 'notes',
+    id: 'id'
+  },
+  agendamentos: {
+    clienteId: 'client_id',
+    terapiaId: 'therapy_id',
+    terapiaIds: 'therapy_ids',
+    date: 'date',
+    time: 'time',
+    valorCobrado: 'charged_value',
+    desconto: 'discount',
+    statusPagamento: 'payment_status',
+    statusAtendimento: 'appointment_status',
+    pacoteId: 'package_id',
+    itemPacoteId: 'package_item_id',
+    tipoAtendimento: 'appointment_type',
+    formaPagamento: 'payment_method',
+    bancoPagamento: 'payment_bank',
+    dataPagamento: 'payment_date',
+    id: 'id'
+  },
+  bloqueios: {
+    data: 'date',
+    horaInicio: 'start_time',
+    horaFim: 'end_time',
+    motivo: 'reason',
+    id: 'id'
+  }
+};
+
+// Reverse mapping helper
+export const getReverseMapping = (table: string) => {
+  const mapping = fieldMappings[table];
+  if (!mapping) return {};
+  const reverse: Record<string, string> = {};
+  for (const [k, v] of Object.entries(mapping)) {
+    reverse[v] = k;
+  }
+  return reverse;
+};
+
+export const mapToSnakeCase = (table: string, item: any) => {
+  const mapping = fieldMappings[table] || {};
+  const dbItem: any = {};
+  for (const [k, v] of Object.entries(item)) {
+    const dbKey = mapping[k] || k.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+    dbItem[dbKey] = v;
+  }
+  return dbItem;
+};
+
+export const mapFromSnakeCase = (table: string, item: any) => {
+  const reverseMapping = getReverseMapping(table);
+  const newItem: any = {};
+  for (const [k, v] of Object.entries(item)) {
+    const appKey = reverseMapping[k] || k.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
+    newItem[appKey] = v;
+  }
+  return newItem;
+};
+
 export const StorageService = {
   /**
    * Syncs local data with Supabase.
@@ -31,12 +119,13 @@ export const StorageService = {
       const { data, error } = await supabase.from(table).select('*');
       
       if (!error && data) {
-        // Convert snake_case from DB to camelCase for App
+        const reverseMapping = getReverseMapping(table);
+        // Convert DB English snake_case to App camelCase
         const camelData = data.map(item => {
           const newItem: any = {};
           for (const [k, v] of Object.entries(item)) {
-            const camelK = k.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
-            newItem[camelK] = v;
+            const appKey = reverseMapping[k] || k.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
+            newItem[appKey] = v;
           }
           return newItem;
         });
@@ -60,13 +149,20 @@ export const StorageService = {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         const table = tableMap[key];
-        // Convert camelCase to snake_case for DB
-        const snakeItem: any = { user_id: user.id };
+        const mapping = fieldMappings[table] || {};
+        
+        // Convert App camelCase to DB English snake_case
+        const dbItem: any = { user_id: user.id };
         for (const [k, v] of Object.entries(item)) {
-          const snakeK = k.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
-          snakeItem[snakeK] = v;
+          const dbKey = mapping[k] || k.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+          dbItem[dbKey] = v;
         }
-        await supabase.from(table).insert(snakeItem);
+        
+        const { error } = await supabase.from(table).insert(dbItem);
+        if (error) {
+          console.error(`Erro Supabase Insert (${table}):`, error);
+          throw error;
+        }
       }
     } catch (error) {
       console.error(`Erro ao salvar item na chave ${key}:`, error);
@@ -103,12 +199,19 @@ export const StorageService = {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           const table = tableMap[key];
-          const snakeItem: any = {};
+          const mapping = fieldMappings[table] || {};
+          
+          const dbItem: any = {};
           for (const [k, v] of Object.entries(updatedItem)) {
-            const snakeK = k.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
-            snakeItem[snakeK] = v;
+            const dbKey = mapping[k] || k.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+            dbItem[dbKey] = v;
           }
-          await supabase.from(table).update(snakeItem).eq('id', updatedItem.id);
+          
+          const { error } = await supabase.from(table).update(dbItem).eq('id', updatedItem.id);
+          if (error) {
+            console.error(`Erro Supabase Update (${table}):`, error);
+            throw error;
+          }
         }
       } else {
         throw new Error('Item não encontrado para atualização.');
@@ -171,23 +274,24 @@ export const StorageService = {
         // Cloud Save (Delete existing and insert new)
         if (user) {
           const table = tableMap[key];
+          const mapping = fieldMappings[table] || {};
           
           // Delete all current user data for this table
           await supabase.from(table).delete().eq('user_id', user.id);
           
           if (items.length > 0) {
-            // Convert camelCase to snake_case for DB
-            const snakeItems = items.map(item => {
-              const snakeItem: any = { user_id: user.id };
+            // Convert App camelCase to DB English snake_case
+            const dbItems = items.map(item => {
+              const dbItem: any = { user_id: user.id };
               for (const [k, v] of Object.entries(item)) {
-                const snakeK = k.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
-                snakeItem[snakeK] = v;
+                const dbKey = mapping[k] || k.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+                dbItem[dbKey] = v;
               }
-              return snakeItem;
+              return dbItem;
             });
 
-            // Supabase insert in chunks if needed, but for now assuming reasonable size
-            const { error } = await supabase.from(table).insert(snakeItems);
+            // Supabase insert
+            const { error } = await supabase.from(table).insert(dbItems);
             if (error) console.error(`Erro ao restaurar nuvem para ${table}:`, error);
           }
         }

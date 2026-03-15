@@ -1,6 +1,7 @@
 import React, { createContext, useContext, ReactNode, useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import { Agendamento, Cliente, Terapia, Pacote, Bloqueio } from './types';
+import { mapFromSnakeCase, mapToSnakeCase } from './services/StorageService';
 
 export interface ImportedContact {
   nome: string;
@@ -125,18 +126,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     try {
       const [clis, agends, ters, pacs, blks] = await Promise.all([
-        supabase.from('clientes').select('*').order('nome'),
-        supabase.from('agendamentos').select('*').order('data_hora', { ascending: false }),
-        supabase.from('terapias').select('*').order('nome'),
-        supabase.from('pacotes').select('*').order('data_criacao', { ascending: false }),
-        supabase.from('bloqueios').select('*').order('data'),
+        supabase.from('clientes').select('*').order('name'),
+        supabase.from('agendamentos').select('*').order('date_time', { ascending: false }),
+        supabase.from('terapias').select('*').order('name'),
+        supabase.from('pacotes').select('*').order('created_at', { ascending: false }),
+        supabase.from('bloqueios').select('*').order('date'),
       ]);
 
-      if (clis.data) setClientes(clis.data.map(mapFromSnakeCase));
-      if (agends.data) setAgendamentos(agends.data.map(mapFromSnakeCase));
-      if (ters.data) setTerapias(ters.data.map(mapFromSnakeCase));
-      if (pacs.data) setPacotes(pacs.data.map(mapFromSnakeCase));
-      if (blks.data) setBloqueios(blks.data.map(mapFromSnakeCase));
+      if (clis.data) setClientes(clis.data.map(item => mapFromSnakeCase('clientes', item)));
+      if (agends.data) setAgendamentos(agends.data.map(item => mapFromSnakeCase('agendamentos', item)));
+      if (ters.data) setTerapias(ters.data.map(item => mapFromSnakeCase('terapias', item)));
+      if (pacs.data) setPacotes(pacs.data.map(item => mapFromSnakeCase('pacotes', item)));
+      if (blks.data) setBloqueios(blks.data.map(item => mapFromSnakeCase('bloqueios', item)));
     } catch (error) {
       console.error('Erro ao buscar dados:', error);
     }
@@ -159,15 +160,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       channels.forEach(channel => supabase.removeChannel(channel));
     };
   }, [session]);
-
-  const mapFromSnakeCase = (item: any) => {
-    const newItem: any = {};
-    for (const [k, v] of Object.entries(item)) {
-      const camelK = k.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
-      newItem[camelK] = v;
-    }
-    return newItem;
-  };
 
   useEffect(() => {
     const checkPendingAppointments = async () => {
@@ -278,7 +270,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       const { error } = await supabase
         .from('agendamentos')
-        .update({ status_atendimento: 'Realizado' })
+        .update({ appointment_status: 'Realizado' })
         .eq('id', agendamentoId);
       
       if (error) throw error;
@@ -288,20 +280,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  const mapToSnakeCase = (item: any) => {
-    const newItem: any = {};
-    for (const [k, v] of Object.entries(item)) {
-      const snakeK = k.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
-      newItem[snakeK] = v;
-    }
-    return newItem;
-  };
-
   const addCliente = async (cliente: Omit<Cliente, 'id'>) => {
     try {
       const { error } = await supabase
         .from('clientes')
-        .insert([{ ...mapToSnakeCase(cliente), user_id: session.user.id }]);
+        .insert([{ ...mapToSnakeCase('clientes', cliente), user_id: session.user.id }]);
       if (error) throw error;
       fetchData();
     } catch (error) {
@@ -313,7 +296,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       const { error } = await supabase
         .from('clientes')
-        .update(mapToSnakeCase(cliente))
+        .update(mapToSnakeCase('clientes', cliente))
         .eq('id', cliente.id);
       if (error) throw error;
       fetchData();
@@ -339,7 +322,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       const { error } = await supabase
         .from('agendamentos')
-        .insert([{ ...mapToSnakeCase(agendamento), user_id: session.user.id }]);
+        .insert([{ ...mapToSnakeCase('agendamentos', agendamento), user_id: session.user.id }]);
       if (error) throw error;
       fetchData();
     } catch (error) {
@@ -351,7 +334,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       const { error } = await supabase
         .from('agendamentos')
-        .update(mapToSnakeCase(agendamento))
+        .update(mapToSnakeCase('agendamentos', agendamento))
         .eq('id', agendamento.id);
       if (error) throw error;
       fetchData();
@@ -377,7 +360,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       const { error } = await supabase
         .from('terapias')
-        .insert([{ ...mapToSnakeCase(terapia), user_id: session.user.id }]);
+        .insert([{ ...mapToSnakeCase('terapias', terapia), user_id: session.user.id }]);
       if (error) throw error;
       fetchData();
     } catch (error) {
@@ -389,7 +372,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       const { error } = await supabase
         .from('terapias')
-        .update(mapToSnakeCase(terapia))
+        .update(mapToSnakeCase('terapias', terapia))
         .eq('id', terapia.id);
       if (error) throw error;
       fetchData();
@@ -415,7 +398,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       const { error } = await supabase
         .from('pacotes')
-        .insert([{ ...mapToSnakeCase(pacote), user_id: session.user.id }]);
+        .insert([{ ...mapToSnakeCase('pacotes', pacote), user_id: session.user.id }]);
       if (error) throw error;
       fetchData();
     } catch (error) {
@@ -427,7 +410,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       const { error } = await supabase
         .from('pacotes')
-        .update(mapToSnakeCase(pacote))
+        .update(mapToSnakeCase('pacotes', pacote))
         .eq('id', pacote.id);
       if (error) throw error;
       fetchData();
@@ -453,7 +436,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       const { error } = await supabase
         .from('bloqueios')
-        .insert([{ ...mapToSnakeCase(bloqueio), user_id: session.user.id }]);
+        .insert([{ ...mapToSnakeCase('bloqueios', bloqueio), user_id: session.user.id }]);
       if (error) throw error;
       fetchData();
     } catch (error) {

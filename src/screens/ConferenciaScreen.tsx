@@ -33,9 +33,9 @@ export default function ConferenciaScreen({ onBack }: ConferenciaScreenProps) {
     sevenDaysAgo.setHours(0, 0, 0, 0);
 
     const filtered = agends.filter(ag => {
-      const agDate = new Date(ag.dataHora);
+      const agDate = new Date(`${ag.date}T${ag.time}:00`);
       return agDate >= sevenDaysAgo && agDate <= new Date() && ag.statusAtendimento !== 'Cancelado';
-    }).sort((a, b) => new Date(b.dataHora).getTime() - new Date(a.dataHora).getTime());
+    }).sort((a, b) => new Date(`${b.date}T${b.time}:00`).getTime() - new Date(`${a.date}T${a.time}:00`).getTime());
 
     setAgendamentos(filtered);
     setClientes(clis);

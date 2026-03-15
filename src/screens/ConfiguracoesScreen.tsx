@@ -7,7 +7,7 @@ interface ConfiguracoesProps {
 }
 
 type StatusType = {
-  type: 'success' | 'error' | 'none';
+  type: 'success' | 'error' | 'loading' | 'none';
   message: string;
 };
 
@@ -15,6 +15,7 @@ export default function ConfiguracoesScreen({ onBack }: ConfiguracoesProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<StatusType>({ type: 'none', message: '' });
   const [showConfirmReset, setShowConfirmReset] = useState(false);
+  const [confirmText, setConfirmText] = useState('');
 
   const showStatus = (type: StatusType['type'], message: string) => {
     setStatus({ type, message });
@@ -119,6 +120,7 @@ export default function ConfiguracoesScreen({ onBack }: ConfiguracoesProps) {
         }
 
         // Proceeding with restoration automatically as requested
+        showStatus('loading', 'Importando dados, por favor aguarde...');
         await StorageService.bulkRestore(normalizedData);
 
         const totalClientes = normalizedData.clientes.length;
@@ -165,9 +167,11 @@ export default function ConfiguracoesScreen({ onBack }: ConfiguracoesProps) {
           <div className={`mb-6 p-4 rounded-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300 ${
             status.type === 'success' 
               ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400' 
+              : status.type === 'loading'
+              ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400'
               : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400'
           }`}>
-            {status.type === 'success' ? <CheckCircle2 size={20} /> : <XCircle size={20} />}
+            {status.type === 'success' ? <CheckCircle2 size={20} /> : status.type === 'loading' ? <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-current" /> : <XCircle size={20} />}
             <p className="text-sm font-medium">{status.message}</p>
           </div>
         )}
@@ -264,7 +268,10 @@ export default function ConfiguracoesScreen({ onBack }: ConfiguracoesProps) {
               
               {!showConfirmReset ? (
                 <button 
-                  onClick={() => setShowConfirmReset(true)}
+                  onClick={() => {
+                    setShowConfirmReset(true);
+                    setConfirmText('');
+                  }}
                   className="w-full py-2 bg-transparent border border-red-600 text-red-600 text-xs font-bold rounded-lg hover:bg-red-600/5 transition-colors"
                 >
                   Apagar Todos os Dados
@@ -274,15 +281,29 @@ export default function ConfiguracoesScreen({ onBack }: ConfiguracoesProps) {
                   <p className="text-xs font-bold text-red-700 dark:text-red-400 text-center">
                     TEM CERTEZA ABSOLUTA?
                   </p>
+                  <input 
+                    type="text" 
+                    placeholder="Digite EXCLUIR para confirmar"
+                    value={confirmText}
+                    onChange={(e) => setConfirmText(e.target.value)}
+                    className="w-full p-2 text-xs border border-red-200 rounded-lg text-center outline-none focus:border-red-500"
+                  />
+                  <p className="text-[10px] text-red-600 dark:text-red-400 text-center">
+                    Atenção: Esta ação apagará permanentemente os dados da sua conta Supabase e de todos os dispositivos conectados.
+                  </p>
                   <div className="flex gap-2">
                     <button 
-                      onClick={() => setShowConfirmReset(false)}
+                      onClick={() => {
+                        setShowConfirmReset(false);
+                        setConfirmText('');
+                      }}
                       className="flex-1 py-2 bg-gray-200 dark:bg-zinc-800 text-gray-800 dark:text-gray-200 text-xs font-bold rounded-lg"
                     >
                       Cancelar
                     </button>
                     <button 
                       onClick={async () => {
+                        if (confirmText !== 'EXCLUIR') return;
                         try {
                           await StorageService.resetSistemaTotal();
                           showStatus('success', 'Sistema resetado com sucesso!');
@@ -290,9 +311,11 @@ export default function ConfiguracoesScreen({ onBack }: ConfiguracoesProps) {
                         } catch (err) {
                           showStatus('error', 'Erro ao resetar sistema.');
                           setShowConfirmReset(false);
+                          setConfirmText('');
                         }
                       }}
-                      className="flex-1 py-2 bg-red-600 text-white text-xs font-bold rounded-lg"
+                      disabled={confirmText !== 'EXCLUIR'}
+                      className={`flex-1 py-2 text-white text-xs font-bold rounded-lg ${confirmText === 'EXCLUIR' ? 'bg-red-600' : 'bg-red-300 cursor-not-allowed'}`}
                     >
                       Sim, Apagar Tudo
                     </button>

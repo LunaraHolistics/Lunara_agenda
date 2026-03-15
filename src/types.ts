@@ -30,7 +30,8 @@ export interface Agendamento {
   clienteId: string;
   terapiaId: string; // Mantido para compatibilidade, será o ID da primeira terapia
   terapiaIds?: string[]; // Lista de IDs de terapias para agendamentos múltiplos
-  dataHora: string; // ISO string
+  date: string; // YYYY-MM-DD
+  time: string; // HH:mm
   valorCobrado: number;
   desconto: number;
   statusPagamento: 'Pago' | 'Pendente';

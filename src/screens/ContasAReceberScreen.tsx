@@ -82,7 +82,7 @@ export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenPro
             clienteNome: cliente?.nome || 'Desconhecido',
             descricao: therapyNames,
             valor: ag.valorCobrado,
-            dataOriginal: ag.dataHora,
+            dataOriginal: `${ag.date}T${ag.time}:00`,
             originalItem: ag
           });
         }
@@ -159,8 +159,8 @@ export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenPro
   };
 
   const filteredPendencias = pendencias.filter(p => 
-    p.clienteNome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.descricao.toLowerCase().includes(searchTerm.toLowerCase())
+    (p.clienteNome?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+    (p.descricao?.toLowerCase() || '').includes(searchTerm.toLowerCase())
   );
 
   const formatCurrency = (value: number) => {

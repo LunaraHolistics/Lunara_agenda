@@ -13,7 +13,7 @@ export default function ClientesScreen() {
   
   // Form states
   const [name, setName] = useState('');
-  const [ddi, setDdi] = useState('+55'); // Novo estado para DDI
+  const [ddi, setDdi] = useState('+55');
   const [phone, setPhone] = useState('');
   const [status, setStatus] = useState(true);
   const [notes, setNotes] = useState('');
@@ -38,8 +38,9 @@ export default function ClientesScreen() {
       return;
     }
 
-    // Combina DDI com o telefone para salvar
-    const fullPhone = phone ? `${ddi}${phone}` : '';
+    // Salva o DDI + Telefone (removendo caracteres da máscara para o banco)
+    const cleanPhone = phone.replace(/\D/g, '');
+    const fullPhone = cleanPhone ? `${ddi}${cleanPhone}` : '';
 
     const clienteData: Cliente = {
       id: editingCliente ? editingCliente.id : Date.now().toString(),
@@ -70,15 +71,17 @@ export default function ClientesScreen() {
       setEditingCliente(cliente);
       setName(cliente.name || (cliente as any).nome || '');
       
-      // Lógica para separar DDI do telefone ao editar
       if (cliente.phone && cliente.phone.startsWith('+')) {
-        const ddiPart = cliente.phone.substring(0, 3);
-        const phonePart = cliente.phone.substring(3);
+        // Extrai o DDI (assume-se 2 ou 3 dígitos após o +)
+        const ddiMatch = cliente.phone.match(/^\+\d{2,3}/);
+        const ddiPart = ddiMatch ? ddiMatch[0] : '+55';
+        const phonePart = cliente.phone.replace(ddiPart, '');
+        
         setDdi(ddiPart);
-        handlePhoneChange(phonePart);
+        applyPhoneMask(phonePart, ddiPart);
       } else {
         setDdi('+55');
-        handlePhoneChange(cliente.phone || '');
+        applyPhoneMask(cliente.phone || '', '+55');
       }
       
       setNotes(cliente.notes || '');
@@ -105,7 +108,7 @@ export default function ClientesScreen() {
       if (imported && imported.length > 0) {
         if (imported.length === 1) {
           setName(imported[0].nome);
-          handlePhoneChange(imported[0].telefone);
+          applyPhoneMask(imported[0].telefone, ddi);
         } else {
           for (const contact of imported) {
             const newCliente: Cliente = {
@@ -119,23 +122,31 @@ export default function ClientesScreen() {
           }
           await loadClientes();
           closeModal();
-          showNotification(`${imported.length} contatos importados com sucesso!`, 'success');
+          showNotification(`${imported.length} contatos importados!`, 'success');
         }
       }
     } catch (error) {
-      console.error('Erro na importação:', error);
-      showNotification("Não foi possível acessar seus contatos.", 'error');
+      showNotification("Erro na importação.", 'error');
     }
   };
 
-  const handlePhoneChange = (value: string) => {
+  // Lógica de Máscara Condicional
+  const applyPhoneMask = (value: string, currentDdi: string) => {
     const digits = value.replace(/\D/g, '');
-    let masked = digits;
-    if (digits.length <= 11) {
-      masked = digits.replace(/^(\d{2})(\d)/g, '($1) $2');
-      masked = masked.replace(/(\d{5})(\d)/, '$1-$2');
+    
+    if (currentDdi === '+55') {
+      // Máscara Brasileira: (00) 00000-0000
+      let masked = digits;
+      if (digits.length <= 11) {
+        masked = digits.replace(/^(\d{2})(\d)/g, '($1) $2');
+        masked = masked.replace(/(\d{5})(\d)/, '$1-$2');
+      }
+      setPhone(masked.substring(0, 15));
+    } else {
+      // Outros países: Apenas números com espaços a cada 4 dígitos para legibilidade (estilo internacional)
+      const internationalMask = digits.replace(/(\d{4})(?=\d)/g, '$1 ');
+      setPhone(internationalMask.substring(0, 20));
     }
-    setPhone(masked.substring(0, 15));
   };
 
   const filteredClientes = clientes.filter(c => 
@@ -144,13 +155,13 @@ export default function ClientesScreen() {
   );
 
   return (
-    <div className="h-[calc(100vh-80px)] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 pb-10 [webkit-overflow-scrolling:touch]">
+    <div className="h-[calc(100vh-80px)] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 pb-10">
       <div className="p-4 bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] sticky top-0 z-10">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-sec-light)]" size={20} />
           <input 
             type="text"
-            placeholder="Buscar por nome ou telefone..."
+            placeholder="Buscar cliente..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)] transition-all"
@@ -160,9 +171,7 @@ export default function ClientesScreen() {
 
       <div className="px-4 pb-24">
         {filteredClientes.length === 0 ? (
-          <div className="text-center text-[var(--color-text-sec-light)] mt-10">
-            Nenhum cliente encontrado.
-          </div>
+          <div className="text-center text-[var(--color-text-sec-light)] mt-10">Nenhum cliente.</div>
         ) : (
           <div className="space-y-3">
             {filteredClientes.map(cliente => (
@@ -171,28 +180,18 @@ export default function ClientesScreen() {
                   <h3 className="font-medium text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] text-lg truncate">
                     {cliente.name || (cliente as any).nome || "Sem Nome"}
                   </h3>
-                  {cliente.phone && (
-                    <p className="text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] text-sm mb-1">
-                      {cliente.phone}
-                    </p>
-                  )}
+                  {cliente.phone && <p className="text-[var(--color-text-sec-light)] text-sm">{cliente.phone}</p>}
                 </div>
-                <div className="flex items-center gap-2 ml-4">
-                  <button onClick={() => openModal(cliente)} className="p-2 text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 rounded-full transition-colors">
-                    <Edit2 size={20} />
-                  </button>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => openModal(cliente)} className="p-2 text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 rounded-full"><Edit2 size={20} /></button>
                   <button 
                     onClick={() => {
-                      if (confirmDeleteId === cliente.id) {
-                        handleDelete(cliente.id);
-                      } else {
-                        setConfirmDeleteId(cliente.id);
-                        setTimeout(() => setConfirmDeleteId(null), 3000);
-                      }
+                      if (confirmDeleteId === cliente.id) handleDelete(cliente.id);
+                      else { setConfirmDeleteId(cliente.id); setTimeout(() => setConfirmDeleteId(null), 3000); }
                     }}
-                    className={`p-2 rounded-full transition-colors ${confirmDeleteId === cliente.id ? 'bg-[var(--color-error)] text-white' : 'text-[var(--color-error)] hover:bg-[var(--color-error)]/10'}`}
+                    className={`p-2 rounded-full transition-colors ${confirmDeleteId === cliente.id ? 'bg-[var(--color-error)] text-white' : 'text-[var(--color-error)]'}`}
                   >
-                    {confirmDeleteId === cliente.id ? 'Confirmar?' : <Trash2 size={20} />}
+                    {confirmDeleteId === cliente.id ? '?' : <Trash2 size={20} />}
                   </button>
                 </div>
               </div>
@@ -201,66 +200,64 @@ export default function ClientesScreen() {
         )}
       </div>
 
-      <button onClick={() => openModal()} className="fixed bottom-6 right-6 w-14 h-14 bg-[var(--color-primary)] text-white rounded-full flex items-center justify-center shadow-lg hover:opacity-90 transition-opacity z-20">
+      <button onClick={() => openModal()} className="fixed bottom-6 right-6 w-14 h-14 bg-[var(--color-primary)] text-white rounded-full flex items-center justify-center shadow-lg z-20">
         <Plus size={28} />
       </button>
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200">
+          <div className="bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom-full duration-200">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-semibold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">
-                {editingCliente ? 'Editar Cliente' : 'Novo Cliente'}
-              </h2>
-              <button onClick={closeModal} className="text-[var(--color-text-sec-light)] p-1">
-                <X size={24} />
-              </button>
+              <h2 className="text-xl font-semibold">{editingCliente ? 'Editar Cliente' : 'Novo Cliente'}</h2>
+              <button onClick={closeModal} className="text-gray-400"><X size={24} /></button>
             </div>
 
             <div className="space-y-4">
               {!editingCliente && (
-                <button onClick={onImport} className="w-full flex items-center justify-center gap-2 py-3 bg-[var(--color-primary)]/10 text-[var(--color-primary)] rounded-xl font-bold border border-dashed border-[var(--color-primary)]/30 active:opacity-50 transition-opacity">
-                  <Smartphone size={20} />
-                  <span>Importar Contatos</span>
+                <button onClick={onImport} className="w-full flex items-center justify-center gap-2 py-3 bg-[var(--color-primary)]/10 text-[var(--color-primary)] rounded-xl font-bold border border-dashed border-[var(--color-primary)]/30">
+                  <Smartphone size={20} /> <span>Importar da Agenda</span>
                 </button>
               )}
 
               <div>
-                <label className="block text-sm font-medium text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] mb-1">Nome *</label>
-                <input type="text" value={name} onChange={(e) => setName(e.target.value)} className="w-full px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" placeholder="Nome do cliente" />
+                <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Nome *</label>
+                <input type="text" value={name} onChange={(e) => setName(e.target.value)} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] mb-1">Telefone</label>
+                <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Telefone Internacional</label>
                 <div className="flex gap-2">
                   <select 
                     value={ddi} 
-                    onChange={(e) => setDdi(e.target.value)}
-                    className="w-24 px-2 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)] font-medium"
+                    onChange={(e) => {
+                      const newDdi = e.target.value;
+                      setDdi(newDdi);
+                      applyPhoneMask(phone, newDdi); // Re-aplica a máscara ao trocar DDI
+                    }}
+                    className="w-24 px-2 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)] font-bold"
                   >
-                    <option value="+55">+55</option>
-                    <option value="+351">+351</option>
-                    <option value="+1">+1</option>
-                    <option value="+44">+44</option>
+                    <option value="+55">🇧🇷 +55</option>
+                    <option value="+44">🇬🇧 +44</option>
+                    <option value="+351">🇵🇹 +351</option>
+                    <option value="+1">🇺🇸 +1</option>
                   </select>
-                  <input type="tel" value={phone} onChange={(e) => handlePhoneChange(e.target.value)} className="flex-1 px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" placeholder="(00) 00000-0000" />
+                  <input 
+                    type="tel" 
+                    value={phone} 
+                    onChange={(e) => applyPhoneMask(e.target.value, ddi)} 
+                    className="flex-1 px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" 
+                    placeholder={ddi === '+55' ? '(00) 00000-0000' : 'Número completo'} 
+                  />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] mb-1">Observações</label>
-                <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)] min-h-[100px] resize-none" placeholder="Detalhes adicionais..." />
+                <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Observações</label>
+                <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none min-h-[80px] resize-none" />
               </div>
 
-              <div className="flex items-center justify-between py-2">
-                <span className="text-sm font-medium text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">Status do Cliente</span>
-                <button onClick={() => setStatus(!status)} className={`w-12 h-6 rounded-full transition-colors relative ${status ? 'bg-[var(--color-success)]' : 'bg-gray-300 dark:bg-gray-600'}`}>
-                  <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${status ? 'translate-x-6' : 'translate-x-0.5'}`} />
-                </button>
-              </div>
-
-              <button onClick={handleSave} className="w-full py-3.5 mt-4 bg-[var(--color-primary)] text-white font-medium rounded-xl shadow-md hover:opacity-90 transition-opacity active:opacity-50">
-                {editingCliente ? 'Atualizar Cliente' : 'Salvar Cliente'}
+              <button onClick={handleSave} className="w-full py-4 mt-2 bg-[var(--color-primary)] text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform">
+                {editingCliente ? 'Atualizar' : 'Salvar Cliente'}
               </button>
             </div>
           </div>

@@ -11,11 +11,9 @@ export default function TerapiasScreen() {
   const [editingTerapia, setEditingTerapia] = useState<Terapia | null>(null);
   
   // Form states
-  const [nome, setNome] = useState('');
-  const [valor, setValor] = useState('');
-  const [duracao, setDuracao] = useState('');
-
-  const [activeActionId, setActiveActionId] = useState<string | null>(null);
+  const [name, setName] = useState('');
+  const [price, setPrice] = useState('');
+  const [duration, setDuration] = useState('');
 
   useEffect(() => {
     loadTerapias();
@@ -29,16 +27,17 @@ export default function TerapiasScreen() {
   };
 
   const handleSave = async () => {
-    if (!nome.trim() || !valor || !duracao) {
+    if (!name.trim() || !price || !duration) {
       showNotification('Preencha todos os campos corretamente.', 'error');
       return;
     }
 
     const terapiaData: Terapia = {
       id: editingTerapia ? editingTerapia.id : Date.now().toString(),
-      nome,
-      valor: parseFloat(valor.replace(',', '.')),
-      duracao: parseInt(duracao, 10),
+      userId: editingTerapia?.userId || '', // Garante userId se existir
+      name,
+      price: parseFloat(price.replace(',', '.')),
+      duration: parseInt(duration, 10),
     };
 
     if (editingTerapia) {
@@ -51,49 +50,33 @@ export default function TerapiasScreen() {
     loadTerapias();
   };
 
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
   const handleDelete = async (id: string) => {
-    confirmAction('Deseja realmente excluir esta terapia?', async () => {
-      await StorageService.deleteItem(StorageKeys.TERAPIAS, id);
-      loadTerapias();
-      setActiveActionId(null);
-      closeModal();
-    }, { isDanger: true });
+    await StorageService.deleteItem(StorageKeys.TERAPIAS, id);
+    setConfirmDeleteId(null);
+    loadTerapias();
   };
 
   const openModal = (terapia?: Terapia) => {
     if (terapia) {
       setEditingTerapia(terapia);
-      setNome(terapia.nome);
-      setValor(terapia.valor.toString());
-      setDuracao(terapia.duracao.toString());
+      setName(terapia.name);
+      setPrice(String(terapia.price || 0));
+      setDuration(String(terapia.duration || 0));
     } else {
       setEditingTerapia(null);
-      setNome('');
-      setValor('');
-      setDuracao('');
+      setName('');
+      setPrice('');
+      setDuration('');
     }
     setIsModalOpen(true);
-    setActiveActionId(null);
   };
 
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingTerapia(null);
-  };
-
-  // Long press logic
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-
-  const handlePointerDown = (id: string) => {
-    timerRef.current = setTimeout(() => {
-      setActiveActionId(id);
-    }, 500); // 500ms long press
-  };
-
-  const handlePointerUp = () => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-    }
+    setConfirmDeleteId(null);
   };
 
   const formatCurrency = (value: number) => {
@@ -126,48 +109,42 @@ export default function TerapiasScreen() {
             {terapias.map(terapia => (
               <div 
                 key={terapia.id}
-                onPointerDown={() => handlePointerDown(terapia.id)}
-                onPointerUp={handlePointerUp}
-                onPointerLeave={handlePointerUp}
-                className="bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] p-4 rounded-2xl shadow-sm relative overflow-hidden select-none flex justify-between items-center"
+                className="bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] p-4 rounded-2xl shadow-sm flex items-center justify-between"
               >
                 <div>
                   <h3 className="font-medium text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] text-lg">
-                    {terapia.nome}
+                    {terapia.name || terapia.nome || (terapia as any).therapy_name || "Sem nome"}
                   </h3>
                   <p className="text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] text-sm mt-1">
-                    {terapia.duracao} minutos
+                    {terapia.duration} minutos
                   </p>
                 </div>
-                <div className="text-right">
+                <div className="flex items-center gap-4">
                   <span className="font-semibold text-[var(--color-primary)] text-lg">
-                    {formatCurrency(terapia.valor)}
+                    {formatCurrency(terapia.price)}
                   </span>
-                </div>
-
-                {/* Actions Overlay (shown on long press) */}
-                {activeActionId === terapia.id && (
-                  <div className="absolute inset-0 bg-[var(--color-surface-light)]/90 dark:bg-[var(--color-surface-dark)]/90 backdrop-blur-sm flex items-center justify-center gap-4">
+                  <div className="flex items-center gap-2">
                     <button 
                       onClick={() => openModal(terapia)}
-                      className="p-3 bg-[var(--color-primary)] text-white rounded-full shadow-md"
+                      className="p-2 text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 rounded-full transition-colors"
                     >
                       <Edit2 size={20} />
                     </button>
                     <button 
-                      onClick={() => handleDelete(terapia.id)}
-                      className="p-3 bg-[var(--color-error)] text-white rounded-full shadow-md"
+                      onClick={() => {
+                        if (confirmDeleteId === terapia.id) {
+                          handleDelete(terapia.id);
+                        } else {
+                          setConfirmDeleteId(terapia.id);
+                          setTimeout(() => setConfirmDeleteId(null), 3000);
+                        }
+                      }}
+                      className={`p-2 rounded-full transition-colors ${confirmDeleteId === terapia.id ? 'bg-[var(--color-error)] text-white' : 'text-[var(--color-error)] hover:bg-[var(--color-error)]/10'}`}
                     >
-                      <Trash2 size={20} />
-                    </button>
-                    <button 
-                      onClick={() => setActiveActionId(null)}
-                      className="p-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-full shadow-md"
-                    >
-                      <X size={20} />
+                      {confirmDeleteId === terapia.id ? 'Excluir?' : <Trash2 size={20} />}
                     </button>
                   </div>
-                )}
+                </div>
               </div>
             ))}
           </div>
@@ -202,8 +179,8 @@ export default function TerapiasScreen() {
                 </label>
                 <input 
                   type="text"
-                  value={nome}
-                  onChange={(e) => setNome(e.target.value)}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
                   className="w-full px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                   placeholder="Ex: Massagem Relaxante"
                 />
@@ -217,8 +194,8 @@ export default function TerapiasScreen() {
                   <input 
                     type="number"
                     step="0.01"
-                    value={valor}
-                    onChange={(e) => setValor(e.target.value)}
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
                     className="w-full px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                     placeholder="0.00"
                   />
@@ -230,8 +207,8 @@ export default function TerapiasScreen() {
                   </label>
                   <input 
                     type="number"
-                    value={duracao}
-                    onChange={(e) => setDuracao(e.target.value)}
+                    value={duration}
+                    onChange={(e) => setDuration(e.target.value)}
                     className="w-full px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                     placeholder="60"
                   />

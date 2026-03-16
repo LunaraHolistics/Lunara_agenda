@@ -6,6 +6,7 @@ import TerapiasScreen from './screens/TerapiasScreen';
 import PacotesScreen from './screens/PacotesScreen';
 import AgendaScreen from './screens/AgendaScreen';
 import FinanceiroScreen from './screens/FinanceiroScreen';
+import RelatoriosScreen from './screens/RelatoriosScreen';
 import ConferenciaScreen from './screens/ConferenciaScreen';
 import ConfiguracoesScreen from './screens/ConfiguracoesScreen';
 import Login from './screens/Login';
@@ -46,7 +47,7 @@ function AppContent() {
       case 'pacotes': return <PacotesScreen />;
       case 'agenda': return <AgendaScreen />;
       case 'financeiro': return <FinanceiroScreen onBack={() => setActiveTab('home')} />;
-      case 'relatorios': return <ConferenciaScreen onBack={() => setActiveTab('home')} />;
+      case 'relatorios': return <RelatoriosScreen onBack={() => setActiveTab('home')} />;
       case 'configuracoes': return <ConfiguracoesScreen onBack={() => setActiveTab('home')} />;
       default: return <HomeScreen />;
     }

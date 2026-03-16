@@ -8,7 +8,7 @@ interface LoginProps {
 }
 
 export default function Login({ onLoginSuccess }: LoginProps) {
-  const { showNotification } = useAppContext();
+  const { showNotification, setStatusMsg } = useAppContext();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -19,6 +19,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setStatusMsg(null);
 
     try {
       if (isSignUp) {
@@ -33,6 +34,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       }
     } catch (err: any) {
       setError(err.message);
+      setStatusMsg("Falha no login: " + err.message);
     } finally {
       setLoading(false);
     }

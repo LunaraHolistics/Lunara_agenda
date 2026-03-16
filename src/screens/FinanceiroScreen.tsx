@@ -2,19 +2,21 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Filter } from 'lucide-react';
 import { StorageService, StorageKeys } from '../services/StorageService';
 import { Agendamento, Cliente, Terapia } from '../types';
+import { useAppContext } from '../AppContext';
 
 interface FinanceiroProps {
   onBack: () => void;
 }
 
 export default function FinanceiroScreen({ onBack }: FinanceiroProps) {
+  const { safeDate } = useAppContext();
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [terapias, setTerapias] = useState<Terapia[]>([]);
   
   // Filtros
-  const [filtroMes, setFiltroMes] = useState(new Date().getMonth().toString());
-  const [filtroAno, setFiltroAno] = useState(new Date().getFullYear().toString());
+  const [filtroMes, setFiltroMes] = useState(String(new Date().getMonth()));
+  const [filtroAno, setFiltroAno] = useState(String(new Date().getFullYear()));
   const [filtroCliente, setFiltroCliente] = useState('todos');
 
   useEffect(() => {
@@ -32,41 +34,47 @@ export default function FinanceiroScreen({ onBack }: FinanceiroProps) {
     setTerapias(ters);
   };
 
-  const getClienteNome = (id: string) => clientes.find(c => c.id === id)?.nome || 'Desconhecido';
-  const getTerapiaNome = (id: string) => terapias.find(t => t.id === id)?.nome || 'Desconhecida';
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+  const getClienteNome = (id: string) => {
+    const cli = clientes.find(c => String(c.id) === String(id));
+    return cli?.name || cli?.nome || 'Desconhecido';
+  };
+  const getTerapiaNome = (ag: Agendamento) => {
+    const terapia = terapias.find(t => String(t.id) === String(ag.therapy_item_id));
+    return terapia?.name || terapia?.nome || ag.therapy_name || 'Sem nome';
   };
 
-  const formatDate = (isoString: string) => {
-    const date = new Date(isoString);
+  const formatCurrency = (value: any) => {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value) || 0);
+  };
+
+  const formatDate = (date: string, time: string) => {
+    const d = safeDate(`${date}T${time}:00`);
     return new Intl.DateTimeFormat('pt-BR', { 
       day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' 
-    }).format(date);
+    }).format(d);
   };
 
   // Aplicação dos filtros
   const filteredAgendamentos = agendamentos.filter(ag => {
-    const date = new Date(ag.dataHora);
-    const matchMes = date.getMonth().toString() === filtroMes;
-    const matchAno = date.getFullYear().toString() === filtroAno;
-    const matchCliente = filtroCliente === 'todos' || ag.clienteId === filtroCliente;
+    const date = safeDate(ag.date);
+    const matchMes = String(date.getMonth()) === filtroMes;
+    const matchAno = String(date.getFullYear()) === filtroAno;
+    const matchCliente = filtroCliente === 'todos' || ag.client_id === filtroCliente;
     
     // Consideramos apenas atendimentos não cancelados para o financeiro
     const matchStatus = ag.statusAtendimento !== 'Cancelado';
 
     return matchMes && matchAno && matchCliente && matchStatus;
-  }).sort((a, b) => new Date(b.dataHora).getTime() - new Date(a.dataHora).getTime());
+  }).sort((a, b) => safeDate(`${b.date}T${b.time}:00`).getTime() - safeDate(`${a.date}T${a.time}:00`).getTime());
 
   // Cálculos de Totais
   const totalRecebido = filteredAgendamentos
     .filter(ag => ag.statusPagamento === 'Pago')
-    .reduce((acc, ag) => acc + ag.valorCobrado, 0);
+    .reduce((acc, ag) => acc + (Number(ag.valorCobrado) || 0), 0);
 
   const totalPendente = filteredAgendamentos
     .filter(ag => ag.statusPagamento === 'Pendente')
-    .reduce((acc, ag) => acc + ag.valorCobrado, 0);
+    .reduce((acc, ag) => acc + (Number(ag.valorCobrado) || 0), 0);
 
   const totalBruto = totalRecebido + totalPendente;
 
@@ -123,8 +131,8 @@ export default function FinanceiroScreen({ onBack }: FinanceiroProps) {
           className="w-full bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)]"
         >
           <option value="todos">Todos os Clientes</option>
-          {clientes.filter(c => c.status).map(c => (
-            <option key={c.id} value={c.id}>{c.nome}</option>
+          {clientes.map(c => (
+            <option key={c.id} value={c.id}>{c.name || c.nome || "Sem Nome"}</option>
           ))}
         </select>
       </div>
@@ -142,10 +150,10 @@ export default function FinanceiroScreen({ onBack }: FinanceiroProps) {
                 <div className="flex justify-between items-start mb-2">
                   <div>
                     <h3 className="font-medium text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">
-                      {getClienteNome(ag.clienteId)}
+                      {getClienteNome(ag.client_id)}
                     </h3>
                     <p className="text-xs text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)]">
-                      {formatDate(ag.dataHora)} • {ag.terapiaIds ? ag.terapiaIds.map(tid => getTerapiaNome(tid)).filter(Boolean).join(' + ') : getTerapiaNome(ag.terapiaId)}
+                      {formatDate(ag.date, ag.time)} • {getTerapiaNome(ag)}
                     </p>
                   </div>
                   <span className={`text-xs font-medium px-2 py-1 rounded-md ${

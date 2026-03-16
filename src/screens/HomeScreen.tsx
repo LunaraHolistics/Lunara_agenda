@@ -9,7 +9,7 @@ import ConferenciaScreen from './ConferenciaScreen';
 import { useAppContext } from '../AppContext';
 
 export default function HomeScreen() {
-  const { showNotification, confirmAction } = useAppContext();
+  const { showNotification, confirmAction, safeDate } = useAppContext();
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [terapias, setTerapias] = useState<Terapia[]>([]);
@@ -44,7 +44,7 @@ export default function HomeScreen() {
 
   // Filtra agendamentos do mês atual (não cancelados)
   const agendamentosMes = agendamentos.filter(ag => {
-    const date = new Date(ag.dataHora);
+    const date = safeDate(`${ag.date}T${ag.time}`);
     return date.getMonth() === currentMonth && 
            date.getFullYear() === currentYear &&
            ag.statusAtendimento !== 'Cancelado';
@@ -55,41 +55,67 @@ export default function HomeScreen() {
   
   // Receita de Pacotes Fixos
   const receitaPacotesFixosTotal = pacotesMes
-    .filter(p => p.tipoPacote === 'Mensal Fixo' && p.tipoCobranca === 'Total' && p.historicoPagamento?.status === 'Pago')
-    .reduce((acc, p) => acc + (p.historicoPagamento?.valor || 0), 0);
+    .filter(p => p.tipoPacote === 'Mensal Fixo' && p.historicoPagamento)
+    .reduce((acc, p) => {
+      let hist = p.historicoPagamento;
+      if (typeof hist === 'string') {
+        try { hist = JSON.parse(hist); } catch (e) { hist = {}; }
+      }
+      if (hist?.status === 'Pago') {
+        return acc + (Number(hist?.valor) || Number(p.valorFinal) || 0);
+      }
+      return acc;
+    }, 0);
   
   const receitaPacotesFixosAtendimento = agendamentosMes
     .filter(ag => ag.statusPagamento === 'Pago' && ag.tipoAtendimento === 'Mensal Fixo')
-    .reduce((acc, ag) => acc + ag.valorCobrado, 0);
+    .reduce((acc, ag) => acc + (Number(ag.valorCobrado) || 0), 0);
   
   const totalRecebidoFixo = receitaPacotesFixosTotal + receitaPacotesFixosAtendimento;
 
   // Receita de Atendimentos Avulsos
   const receitaPacotesAvulsosTotal = pacotesMes
-    .filter(p => p.tipoPacote === 'Avulso' && p.tipoCobranca === 'Total' && p.historicoPagamento?.status === 'Pago')
-    .reduce((acc, p) => acc + (p.historicoPagamento?.valor || 0), 0);
+    .filter(p => p.tipoPacote === 'Avulso' && p.historicoPagamento)
+    .reduce((acc, p) => {
+      let hist = p.historicoPagamento;
+      if (typeof hist === 'string') {
+        try { hist = JSON.parse(hist); } catch (e) { hist = {}; }
+      }
+      if (hist?.status === 'Pago') {
+        return acc + (Number(hist?.valor) || Number(p.valorFinal) || 0);
+      }
+      return acc;
+    }, 0);
   
   const receitaAtendimentosAvulsos = agendamentosMes
     .filter(ag => ag.statusPagamento === 'Pago' && (ag.tipoAtendimento === 'Avulso' || !ag.tipoAtendimento))
-    .reduce((acc, ag) => acc + ag.valorCobrado, 0);
+    .reduce((acc, ag) => acc + (Number(ag.valorCobrado) || 0), 0);
   
   const totalRecebidoAvulso = receitaPacotesAvulsosTotal + receitaAtendimentosAvulsos;
 
   const totalRecebido = totalRecebidoFixo + totalRecebidoAvulso;
 
   const totalPendentePacotes = pacotesMes
-    .filter(p => p.tipoCobranca === 'Total' && p.historicoPagamento?.status === 'Pendente')
-    .reduce((acc, p) => acc + (p.historicoPagamento?.valor || 0), 0);
+    .reduce((acc, p) => {
+      let hist = p.historicoPagamento;
+      if (typeof hist === 'string') {
+        try { hist = JSON.parse(hist); } catch (e) { hist = {}; }
+      }
+      if (hist?.status === 'Pendente') {
+        return acc + (Number(hist?.valor) || Number(p.valorFinal) || 0);
+      }
+      return acc;
+    }, 0);
 
   const totalPendenteSessoes = agendamentosMes
-    .filter(ag => ag.statusPagamento === 'Pendente' && (!ag.pacoteId || pacotes.find(p => p.id === ag.pacoteId)?.tipoCobranca === 'Por Atendimento'))
-    .reduce((acc, ag) => acc + ag.valorCobrado, 0);
+    .filter(ag => ag.statusPagamento === 'Pendente' && (!ag.package_id || pacotes.find(p => p.id === ag.package_id)?.tipoPacote === 'Avulso'))
+    .reduce((acc, ag) => acc + (Number(ag.valorCobrado) || 0), 0);
 
   const totalPendente = totalPendentePacotes + totalPendenteSessoes;
 
   const totalDesconto = agendamentosMes
-    .reduce((acc, ag) => acc + (ag.desconto || 0), 0) + 
-    pacotesMes.reduce((acc, p) => acc + p.valorDescontoTotal, 0);
+    .reduce((acc, ag) => acc + (Number(ag.desconto) || 0), 0) + 
+    pacotesMes.reduce((acc, p) => acc + (Number(p.valorDescontoTotal) || 0), 0);
 
   // Próximos Atendimentos (Futuros e do dia atual)
   const todayStart = new Date();
@@ -97,10 +123,10 @@ export default function HomeScreen() {
   
   const proximosAtendimentos = agendamentos
     .filter(ag => {
-      const agDate = new Date(ag.dataHora);
+      const agDate = safeDate(`${ag.date}T${ag.time}`);
       return agDate.getTime() >= todayStart.getTime() && ag.statusAtendimento === 'Agendado';
     })
-    .sort((a, b) => new Date(a.dataHora).getTime() - new Date(b.dataHora).getTime())
+    .sort((a, b) => safeDate(`${a.date}T${a.time}`).getTime() - safeDate(`${b.date}T${b.time}`).getTime())
     .slice(0, 5);
 
   const handleConcluir = async (agendamento: Agendamento) => {
@@ -110,14 +136,18 @@ export default function HomeScreen() {
   };
 
   const handleExcluir = async (agendamento: Agendamento) => {
-    if (agendamento.pacoteId && agendamento.itemPacoteId) {
+    if (agendamento.package_id && agendamento.therapy_item_id) {
       confirmAction('Deseja excluir este agendamento e devolver a sessão ao pacote do cliente?', async () => {
         const pacotes = await StorageService.getItems<Pacote>(StorageKeys.PACOTES);
-        const pacote = pacotes.find(p => p.id === agendamento.pacoteId);
+        const pacote = pacotes.find(p => p.id === agendamento.package_id);
         if (pacote) {
-          const updatedItens = pacote.itens.map(item => {
-            if (item.id === agendamento.itemPacoteId) {
-              return { ...item, quantidadeRestante: item.quantidadeRestante + 1 };
+          let itens = pacote.itens;
+          if (typeof itens === 'string') {
+            try { itens = JSON.parse(itens); } catch (e) { itens = []; }
+          }
+          const updatedItens = (Array.isArray(itens) ? itens : []).map(item => {
+            if (item.id === agendamento.therapy_item_id) {
+              return { ...item, quantidadeRestante: (Number(item.quantidadeRestante) || 0) + 1 };
             }
             return item;
           });
@@ -141,16 +171,23 @@ export default function HomeScreen() {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   };
 
-  const formatTime = (isoString: string) => {
-    return new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(new Date(isoString));
+  const formatTime = (date: string, time: string) => {
+    return time;
   };
 
-  const formatDate = (isoString: string) => {
-    return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' }).format(new Date(isoString));
+  const formatDate = (date: string) => {
+    const [year, month, day] = date.split('-');
+    return `${day}/${month}`;
   };
 
-  const getClienteNome = (id: string) => clientes.find(c => c.id === id)?.nome || 'Desconhecido';
-  const getTerapiaNome = (id: string) => terapias.find(t => t.id === id)?.nome || 'Desconhecida';
+  const getClienteNome = (id: string) => {
+    const cli = clientes.find(c => String(c.id) === String(id));
+    return cli?.name || cli?.nome || 'Desconhecido';
+  };
+  const getTerapiaNome = (ag: Agendamento) => {
+    const terapia = terapias.find(t => String(t.id) === String(ag.therapy_item_id));
+    return terapia?.name || terapia?.nome || ag.therapy_name || 'Sem nome';
+  };
 
   if (showFinanceiro) {
     return <FinanceiroScreen onBack={() => setShowFinanceiro(false)} />;
@@ -171,7 +208,7 @@ export default function HomeScreen() {
   const pastPendingCount = agendamentos.filter(ag => 
     ag.statusAtendimento === 'Realizado' && 
     ag.statusPagamento === 'Pendente' &&
-    new Date(ag.dataHora) < new Date()
+    safeDate(`${ag.date}T${ag.time}`) < new Date()
   ).length;
 
   return (
@@ -305,9 +342,9 @@ export default function HomeScreen() {
               {proximosAtendimentos.map(ag => (
                 <div key={ag.id} className={`bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] p-4 rounded-2xl shadow-sm flex items-center gap-4 border-l-4 ${ag.statusPagamento === 'Pago' ? 'border-[var(--color-success)]' : 'border-[var(--color-warning)]'}`}>
                   <div className={`flex flex-col items-center justify-center w-14 h-14 rounded-xl relative ${ag.statusPagamento === 'Pago' ? 'bg-[var(--color-success)]/10 text-[var(--color-success)]' : 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]'}`}>
-                    <span className="text-sm font-bold">{formatDate(ag.dataHora)}</span>
-                    <span className="text-xs font-medium">{formatTime(ag.dataHora)}</span>
-                    {new Date(ag.dataHora) < new Date() && (
+                    <span className="text-sm font-bold">{formatDate(ag.date)}</span>
+                    <span className="text-xs font-medium">{formatTime(ag.date, ag.time)}</span>
+                    {new Date(`${ag.date}T${ag.time}`) < new Date() && (
                       <div className="absolute -top-1 -right-1 bg-gray-400 text-white rounded-full p-0.5 shadow-sm">
                         <Clock size={10} />
                       </div>
@@ -315,10 +352,10 @@ export default function HomeScreen() {
                   </div>
                   <div className="flex-1">
                     <h4 className="font-medium text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">
-                      {getClienteNome(ag.clienteId)}
+                      {getClienteNome(ag.client_id)}
                     </h4>
                     <p className="text-xs text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] mt-0.5">
-                      {getTerapiaNome(ag.terapiaId)}
+                      {getTerapiaNome(ag)}
                     </p>
                   </div>
                   <div className="flex gap-2">

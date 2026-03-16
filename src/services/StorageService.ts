@@ -7,75 +7,73 @@ export const StorageKeys = {
   PACOTES: 'pacotes',
   AGENDAMENTOS: 'agendamentos',
   BLOQUEIOS: 'bloqueios',
+  FINANCAS: 'financas',
 };
 
-// Helper to map JS keys to Supabase table names
+// Mapeamento de chaves do App para nomes de tabelas no Supabase
 const tableMap: Record<string, string> = {
   [StorageKeys.CLIENTES]: 'clientes',
   [StorageKeys.TERAPIAS]: 'terapias',
   [StorageKeys.PACOTES]: 'pacotes',
   [StorageKeys.AGENDAMENTOS]: 'agendamentos',
   [StorageKeys.BLOQUEIOS]: 'bloqueios',
+  [StorageKeys.FINANCAS]: 'financeiro', // CORRIGIDO: Nome exato conforme sua imagem
 };
 
-// Explicit field mappings (App camelCase -> DB English snake_case)
+// Mapeamento explícito de campos (App camelCase -> DB snake_case)
 export const fieldMappings: Record<string, Record<string, string>> = {
   clientes: {
-    nome: 'name',
-    telefone: 'phone',
-    observacoes: 'notes',
-    status: 'status',
-    ddi: 'ddi',
-    id: 'id'
+    id: 'id',
+    name: 'name',
+    phone: 'phone',
+    notes: 'notes'
   },
   terapias: {
-    nome: 'name',
-    valor: 'price',
-    duracao: 'duration',
-    id: 'id'
+    id: 'id',
+    name: 'name',
+    price: 'price',
+    duration: 'duration'
   },
   pacotes: {
+    id: 'id',
     clienteId: 'client_id',
-    mesReferencia: 'reference_month',
-    itens: 'items',
-    valorBruto: 'gross_value',
-    valorDescontoTotal: 'total_discount_value',
-    valorFinal: 'final_value',
-    dataCriacao: 'created_at',
-    tipoCobranca: 'billing_type',
-    tipoPacote: 'package_type',
-    historicoPagamento: 'payment_history',
-    observacoes: 'notes',
-    id: 'id'
+    mesReferencia: 'month',
+    tipoPacote: 'type',
+    valorFinal: 'price',
+    historicoPagamento: 'status',
+    formaPagamento: 'payment_method',
+    dataPagamento: 'payment_date',
+    bancoPagamento: 'bank',
+    observacoes: 'observations',
+    itens: 'therapies'
   },
   agendamentos: {
-    clienteId: 'client_id',
-    terapiaId: 'therapy_id',
-    terapiaIds: 'therapy_ids',
+    id: 'id',
+    client_id: 'client_id',
     date: 'date',
     time: 'time',
-    valorCobrado: 'charged_value',
-    desconto: 'discount',
-    statusPagamento: 'payment_status',
-    statusAtendimento: 'appointment_status',
-    pacoteId: 'package_id',
-    itemPacoteId: 'package_item_id',
-    tipoAtendimento: 'appointment_type',
-    formaPagamento: 'payment_method',
-    bancoPagamento: 'payment_bank',
-    dataPagamento: 'payment_date',
-    id: 'id'
+    package_id: 'package_id',
+    therapy_item_id: 'therapy_item_id',
+    therapy_name: 'therapy_name'
   },
   bloqueios: {
+    id: 'id',
+    data: 'data',
+    horaInicio: 'hora_inicio',
+    horaFim: 'hora_fim',
+    motivo: 'motivo'
+  },
+  financas: {
+    id: 'id',
+    descricao: 'description',
+    valor: 'amount',
     data: 'date',
-    horaInicio: 'start_time',
-    horaFim: 'end_time',
-    motivo: 'reason',
-    id: 'id'
+    tipo: 'type',
+    categoria: 'category',
+    status: 'status'
   }
 };
 
-// Reverse mapping helper
 export const getReverseMapping = (table: string) => {
   const mapping = fieldMappings[table];
   if (!mapping) return {};
@@ -107,62 +105,40 @@ export const mapFromSnakeCase = (table: string, item: any) => {
 };
 
 export const StorageService = {
-  /**
-   * Syncs local data with Supabase.
-   */
   async syncWithCloud(): Promise<void> {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-    for (const key of Object.values(StorageKeys)) {
-      const table = tableMap[key];
-      const { data, error } = await supabase.from(table).select('*');
-      
-      if (!error && data) {
-        const reverseMapping = getReverseMapping(table);
-        // Convert DB English snake_case to App camelCase
-        const camelData = data.map(item => {
-          const newItem: any = {};
-          for (const [k, v] of Object.entries(item)) {
-            const appKey = reverseMapping[k] || k.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
-            newItem[appKey] = v;
-          }
-          return newItem;
-        });
-        await AsyncStorage.setItem(key, JSON.stringify(camelData));
+      for (const key of Object.values(StorageKeys)) {
+        const table = tableMap[key];
+        const { data, error } = await supabase.from(table).select('*').eq('user_id', user.id);
+        
+        if (!error && data) {
+          const camelData = data.map(item => mapFromSnakeCase(table, item));
+          await AsyncStorage.setItem(key, JSON.stringify(camelData));
+        }
       }
+      window.dispatchEvent(new Event('storage-sync'));
+    } catch (error) {
+      console.error("Erro na sincronização:", error);
     }
-    window.dispatchEvent(new Event('storage-sync'));
   },
 
-  /**
-   * Salva um novo item na lista correspondente à chave e sincroniza com Supabase.
-   */
   async saveItem<T extends { id: string }>(key: string, item: T): Promise<void> {
     try {
-      // Local Save
       const existing = await StorageService.getItems<T>(key);
       existing.push(item);
       await AsyncStorage.setItem(key, JSON.stringify(existing));
 
-      // Cloud Save
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         const table = tableMap[key];
-        const mapping = fieldMappings[table] || {};
-        
-        // Convert App camelCase to DB English snake_case
-        const dbItem: any = { user_id: user.id };
-        for (const [k, v] of Object.entries(item)) {
-          const dbKey = mapping[k] || k.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
-          dbItem[dbKey] = v;
-        }
+        const dbItem = mapToSnakeCase(table, item);
+        dbItem.user_id = user.id;
         
         const { error } = await supabase.from(table).insert(dbItem);
-        if (error) {
-          console.error(`Erro Supabase Insert (${table}):`, error);
-          throw error;
-        }
+        if (error) throw error;
       }
     } catch (error) {
       console.error(`Erro ao salvar item na chave ${key}:`, error);
@@ -170,9 +146,6 @@ export const StorageService = {
     }
   },
 
-  /**
-   * Busca todos os itens de uma chave (Cache first).
-   */
   async getItems<T>(key: string): Promise<T[]> {
     try {
       const data = await AsyncStorage.getItem(key);
@@ -183,38 +156,22 @@ export const StorageService = {
     }
   },
 
-  /**
-   * Atualiza um item existente e sincroniza com Supabase.
-   */
   async updateItem<T extends { id: string }>(key: string, updatedItem: T): Promise<void> {
     try {
-      // Local Update
       const existing = await StorageService.getItems<T>(key);
-      const index = existing.findIndex((item) => item.id.toString() === updatedItem.id.toString());
+      const index = existing.findIndex((item) => item && item.id && String(item.id) === String(updatedItem?.id));
+      
       if (index !== -1) {
         existing[index] = updatedItem;
         await AsyncStorage.setItem(key, JSON.stringify(existing));
 
-        // Cloud Update
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           const table = tableMap[key];
-          const mapping = fieldMappings[table] || {};
-          
-          const dbItem: any = {};
-          for (const [k, v] of Object.entries(updatedItem)) {
-            const dbKey = mapping[k] || k.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
-            dbItem[dbKey] = v;
-          }
-          
-          const { error } = await supabase.from(table).update(dbItem).eq('id', updatedItem.id);
-          if (error) {
-            console.error(`Erro Supabase Update (${table}):`, error);
-            throw error;
-          }
+          const dbItem = mapToSnakeCase(table, updatedItem);
+          const { error } = await supabase.from(table).update(dbItem).eq('id', String(updatedItem.id));
+          if (error) throw error;
         }
-      } else {
-        throw new Error('Item não encontrado para atualização.');
       }
     } catch (error) {
       console.error(`Erro ao atualizar item na chave ${key}:`, error);
@@ -222,21 +179,28 @@ export const StorageService = {
     }
   },
 
-  /**
-   * Deleta um item e sincroniza com Supabase.
-   */
   async deleteItem<T extends { id: string }>(key: string, id: string): Promise<void> {
     try {
-      // Local Delete
+      const { data: { user } } = await supabase.auth.getUser();
+      const idStr = String(id);
+
+      if (key === StorageKeys.PACOTES && user) {
+        await supabase.from('agendamentos').delete().eq('package_id', idStr);
+        const localAgendamentos = await StorageService.getItems<any>(StorageKeys.AGENDAMENTOS);
+        const filteredAgendamentos = localAgendamentos.filter(a => 
+          String(a.packageId || a.package_id) !== idStr
+        );
+        await AsyncStorage.setItem(StorageKeys.AGENDAMENTOS, JSON.stringify(filteredAgendamentos));
+      }
+
       const existing = await StorageService.getItems<T>(key);
-      const filtered = existing.filter((item) => item.id.toString() !== id.toString());
+      const filtered = existing.filter((item) => item && item.id && String(item.id) !== idStr);
       await AsyncStorage.setItem(key, JSON.stringify(filtered));
 
-      // Cloud Delete
-      const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         const table = tableMap[key];
-        await supabase.from(table).delete().eq('id', id);
+        const { error } = await supabase.from(table).delete().eq('id', idStr);
+        if (error) throw error;
       }
     } catch (error) {
       console.error(`Erro ao deletar item na chave ${key}:`, error);
@@ -244,9 +208,6 @@ export const StorageService = {
     }
   },
 
-  /**
-   * Limpa todos os dados do sistema.
-   */
   async resetSistemaTotal(): Promise<void> {
     try {
       await AsyncStorage.clear();
@@ -258,46 +219,67 @@ export const StorageService = {
     }
   },
 
-  /**
-   * Restaura dados em massa (Backup).
-   */
   async bulkRestore(data: Record<string, any[]>): Promise<void> {
     try {
       const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
       
       for (const key of Object.values(StorageKeys)) {
         const items = data[key] || [];
-        
-        // Local Save
         await AsyncStorage.setItem(key, JSON.stringify(items));
 
-        // Cloud Save (Delete existing and insert new)
-        if (user) {
-          const table = tableMap[key];
-          const mapping = fieldMappings[table] || {};
-          
-          // Delete all current user data for this table
-          await supabase.from(table).delete().eq('user_id', user.id);
-          
-          if (items.length > 0) {
-            // Convert App camelCase to DB English snake_case
-            const dbItems = items.map(item => {
-              const dbItem: any = { user_id: user.id };
-              for (const [k, v] of Object.entries(item)) {
-                const dbKey = mapping[k] || k.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
-                dbItem[dbKey] = v;
-              }
-              return dbItem;
-            });
-
-            // Supabase insert
-            const { error } = await supabase.from(table).insert(dbItems);
-            if (error) console.error(`Erro ao restaurar nuvem para ${table}:`, error);
-          }
+        const table = tableMap[key];
+        await supabase.from(table).delete().eq('user_id', user.id);
+        
+        if (items.length > 0) {
+          const dbItems = items.map(item => {
+            const dbItem = mapToSnakeCase(table, item);
+            dbItem.user_id = user.id;
+            return dbItem;
+          });
+          const { error } = await supabase.from(table).insert(dbItems);
+          if (error) console.error(`Erro ao restaurar nuvem para ${table}:`, error);
         }
       }
+      window.dispatchEvent(new Event('storage-sync'));
     } catch (error) {
       console.error("Erro no bulkRestore:", error);
+      throw error;
+    }
+  },
+
+  async repairDatabase(): Promise<void> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Usuário não autenticado.");
+
+      for (const key of Object.values(StorageKeys)) {
+        let items = await StorageService.getItems<any>(key);
+        items = items.filter(item => item && item.id).map(item => {
+          const newItem = { ...item, id: String(item.id) };
+          if (!newItem.userId) newItem.userId = user.id;
+          if (key === StorageKeys.AGENDAMENTOS && newItem.date?.includes('/')) {
+            const [d, m, y] = newItem.date.split('/');
+            newItem.date = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+          }
+          return newItem;
+        });
+
+        await AsyncStorage.setItem(key, JSON.stringify(items));
+        const table = tableMap[key];
+        await supabase.from(table).delete().eq('user_id', user.id);
+        if (items.length > 0) {
+          const dbItems = items.map(item => {
+            const dbItem = mapToSnakeCase(table, item);
+            dbItem.user_id = user.id;
+            return dbItem;
+          });
+          await supabase.from(table).insert(dbItems);
+        }
+      }
+      window.dispatchEvent(new Event('storage-sync'));
+    } catch (error) {
+      console.error("Erro ao reparar banco:", error);
       throw error;
     }
   }

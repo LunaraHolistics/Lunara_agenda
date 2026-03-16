@@ -1,12 +1,7 @@
 import React, { createContext, useContext, ReactNode, useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
-import { Agendamento, Cliente, Terapia, Pacote, Bloqueio } from './types';
+import { Agendamento, Cliente, Terapia, Pacote, Bloqueio, ImportedContact } from './types';
 import { mapFromSnakeCase, mapToSnakeCase } from './services/StorageService';
-
-export interface ImportedContact {
-  nome: string;
-  telefone: string;
-}
 
 export interface CountryDDI {
   code: string;
@@ -35,6 +30,8 @@ interface AppContextType {
   completeAppointment: (agendamentoId: string) => Promise<void>;
   session: any;
   loading: boolean;
+  statusMsg: string | null;
+  setStatusMsg: (msg: string | null) => void;
   clientes: Cliente[];
   agendamentos: Agendamento[];
   terapias: Terapia[];
@@ -58,6 +55,7 @@ interface AppContextType {
   showNotification: (message: string, type?: 'success' | 'error' | 'info') => void;
   confirmAction: (message: string, onConfirm: () => void, options?: { title?: string; confirmText?: string; cancelText?: string; isDanger?: boolean; onCancel?: () => void }) => void;
   promptAction: (message: string, defaultValue: string, onConfirm: (value: string) => void, options?: { title?: string; placeholder?: string }) => void;
+  safeDate: (d: any) => Date;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -66,6 +64,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const ddiList = DDI_LIST;
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [notifiedAppointments, setNotifiedAppointments] = useState<Set<string>>(new Set());
 
   // Data states
@@ -96,11 +95,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setPrompt({ message, defaultValue, onConfirm, ...options });
   };
 
+  const safeDate = (d: any): Date => {
+    if (!d) return new Date();
+    const parsed = new Date(d);
+    return isNaN(parsed.getTime()) ? new Date() : parsed;
+  };
+
   useEffect(() => {
     // Check current session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setLoading(false);
+      if (session) {
+        fetchData();
+      }
     });
 
     // Listen for auth changes
@@ -122,25 +130,85 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, []);
 
   const fetchData = async () => {
-    if (!session?.user) return;
+    if (!session?.user && !(await supabase.auth.getSession()).data.session?.user) return;
+    const user = session?.user || (await supabase.auth.getSession()).data.session?.user;
+    if (!user) return;
 
     try {
       const [clis, agends, ters, pacs, blks] = await Promise.all([
-        supabase.from('clientes').select('*').order('name'),
-        supabase.from('agendamentos').select('*').order('date_time', { ascending: false }),
-        supabase.from('terapias').select('*').order('name'),
-        supabase.from('pacotes').select('*').order('created_at', { ascending: false }),
-        supabase.from('bloqueios').select('*').order('date'),
+        supabase.from('clientes').select('*').eq('user_id', user.id).order('name'),
+        supabase.from('agendamentos').select('*').eq('user_id', user.id).order('date', { ascending: true }).order('time', { ascending: true }),
+        supabase.from('terapias').select('*').eq('user_id', user.id).order('name'),
+        supabase.from('pacotes').select('*').eq('user_id', user.id).order('month', { ascending: false }),
+        supabase.from('bloqueios').select('*').eq('user_id', user.id).order('data'),
       ]);
 
-      if (clis.data) setClientes(clis.data.map(item => mapFromSnakeCase('clientes', item)));
-      if (agends.data) setAgendamentos(agends.data.map(item => mapFromSnakeCase('agendamentos', item)));
-      if (ters.data) setTerapias(ters.data.map(item => mapFromSnakeCase('terapias', item)));
-      if (pacs.data) setPacotes(pacs.data.map(item => mapFromSnakeCase('pacotes', item)));
-      if (blks.data) setBloqueios(blks.data.map(item => mapFromSnakeCase('bloqueios', item)));
+      console.log("Carregando clientes...", clis.data);
+      console.log("Carregando agendamentos...", agends.data);
+      console.log("Carregando terapias...", ters.data);
+      console.log("Carregando pacotes...", pacs.data);
+      console.log("Carregando bloqueios...", blks.data);
+
+      if (clis.error) console.error("Erro clientes:", clis.error);
+      if (agends.error) console.error("Erro agendamentos:", agends.error);
+      if (ters.error) console.error("Erro terapias:", ters.error);
+      if (pacs.error) console.error("Erro pacotes:", pacs.error);
+      if (blks.error) console.error("Erro bloqueios:", blks.error);
+
+      if (clis.data) setClientes(silentRepair('clientes', clis.data.map(item => mapFromSnakeCase('clientes', item))));
+      if (agends.data) setAgendamentos(silentRepair('agendamentos', agends.data.map(item => mapFromSnakeCase('agendamentos', item))));
+      if (ters.data) setTerapias(silentRepair('terapias', ters.data.map(item => mapFromSnakeCase('terapias', item))));
+      if (pacs.data) setPacotes(silentRepair('pacotes', pacs.data.map(item => mapFromSnakeCase('pacotes', item))));
+      if (blks.data) setBloqueios(silentRepair('bloqueios', blks.data.map(item => mapFromSnakeCase('bloqueios', item))));
     } catch (error) {
       console.error('Erro ao buscar dados:', error);
     }
+  };
+
+  const silentRepair = (key: string, items: any[]): any[] => {
+    let correctedCount = 0;
+    const repaired = items.filter(item => {
+      if (!item || !item.id || String(item.id) === "undefined" || String(item.id) === "null") {
+        correctedCount++;
+        return false;
+      }
+      return true;
+    }).map(item => {
+      const newItem = { ...item };
+      let changed = false;
+
+      // Normalize IDs
+      if (typeof newItem.id !== 'string') {
+        newItem.id = String(newItem.id);
+        changed = true;
+      }
+      if (newItem.clienteId && typeof newItem.clienteId !== 'string') {
+        newItem.clienteId = String(newItem.clienteId);
+        changed = true;
+      }
+      if (newItem.client_id && typeof newItem.client_id !== 'string') {
+        newItem.client_id = String(newItem.client_id);
+        changed = true;
+      }
+
+      // Normalize Dates
+      if (key === 'agendamentos' && newItem.date && newItem.date.includes('/')) {
+        const parts = newItem.date.split('/');
+        if (parts.length === 3) {
+          const [d, m, y] = parts;
+          newItem.date = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+          changed = true;
+        }
+      }
+
+      if (changed) correctedCount++;
+      return newItem;
+    });
+
+    if (correctedCount > 0) {
+      console.log(`Sincronização: ${correctedCount} registros de data/nome/ID corrigidos para compatibilidade em ${key}.`);
+    }
+    return repaired;
   };
 
   // Real-time subscription
@@ -168,7 +236,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const today = now.toISOString().split('T')[0];
 
         const pending = agendamentos.filter(ag => {
-          const agDate = new Date(ag.dataHora);
+          const agDate = new Date(`${ag.date}T${ag.time}`);
+          if (isNaN(agDate.getTime())) return false; // Ignore malformed dates
+
           const agDay = agDate.toISOString().split('T')[0];
           
           if (agDay === today && ag.statusAtendimento === 'Agendado') {
@@ -464,6 +534,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       completeAppointment, 
       session, 
       loading,
+      statusMsg,
+      setStatusMsg,
       clientes,
       agendamentos,
       terapias,
@@ -486,7 +558,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       deleteBloqueio,
       showNotification,
       confirmAction,
-      promptAction
+      promptAction,
+      safeDate
     }}>
       {children}
 

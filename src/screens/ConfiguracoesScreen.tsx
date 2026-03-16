@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
-import { ArrowLeft, Download, Upload, AlertTriangle, Settings as SettingsIcon, CheckCircle2, XCircle } from 'lucide-react';
+import { ArrowLeft, Download, Upload, AlertTriangle, Settings as SettingsIcon, CheckCircle2, XCircle, ShieldCheck } from 'lucide-react';
 import { StorageService, StorageKeys } from '../services/StorageService';
+import { useAppContext } from '../AppContext';
 
 interface ConfiguracoesProps {
   onBack: () => void;
@@ -16,6 +17,7 @@ export default function ConfiguracoesScreen({ onBack }: ConfiguracoesProps) {
   const [status, setStatus] = useState<StatusType>({ type: 'none', message: '' });
   const [showConfirmReset, setShowConfirmReset] = useState(false);
   const [confirmText, setConfirmText] = useState('');
+  const { confirmAction } = useAppContext();
 
   const showStatus = (type: StatusType['type'], message: string) => {
     setStatus({ type, message });
@@ -148,6 +150,29 @@ export default function ConfiguracoesScreen({ onBack }: ConfiguracoesProps) {
     reader.readAsText(file);
   };
 
+  const handleRepairDatabase = async () => {
+    confirmAction(
+      'Deseja realmente reparar o banco de dados? Por segurança, faremos um backup automático antes de iniciar. Esta ação converterá formatos de data antigos, removerá registros inválidos e garantirá a integridade dos dados.',
+      async () => {
+        showStatus('loading', 'Fazendo backup de segurança...');
+        try {
+          // 1. Fazer Backup primeiro
+          await handleBackup();
+          
+          showStatus('loading', 'Reparando banco de dados, por favor aguarde...');
+          // 2. Executar Reparo
+          await StorageService.repairDatabase();
+          
+          showStatus('success', 'Banco de dados reparado com sucesso!');
+          setTimeout(() => window.location.reload(), 2000);
+        } catch (error: any) {
+          console.error('Erro ao reparar banco:', error);
+          showStatus('error', 'Erro ao reparar banco: ' + error.message);
+        }
+      }
+    );
+  };
+
   return (
     <div className="flex flex-col h-full bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)]">
       {/* Header */}
@@ -259,6 +284,27 @@ export default function ConfiguracoesScreen({ onBack }: ConfiguracoesProps) {
                 className="w-full py-2.5 bg-transparent border-2 border-red-600 dark:border-red-500 text-red-600 dark:text-red-500 font-medium rounded-xl hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors"
               >
                 Selecionar Arquivo de Backup
+              </button>
+            </div>
+
+            {/* Botão de Reparo */}
+            <div className="bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] p-4 rounded-2xl border border-amber-200 dark:border-amber-900/30 shadow-sm">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="p-2 bg-amber-100 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 rounded-lg">
+                  <ShieldCheck size={24} />
+                </div>
+                <div>
+                  <h3 className="font-medium text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">Reparar Banco de Dados</h3>
+                  <p className="text-xs text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] mt-1">
+                    Corrige datas e remove registros corrompidos.
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={handleRepairDatabase}
+                className="w-full py-2.5 bg-amber-500 text-white font-medium rounded-xl hover:opacity-90 transition-opacity"
+              >
+                Executar Reparo
               </button>
             </div>
 

@@ -47,18 +47,25 @@ export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenPro
 
     const list: Pendencia[] = [];
 
-    // Pacotes Pendentes (Tipo Total)
+    // Pacotes Pendentes (Tipo Pacote)
     pacs.forEach(p => {
-      if (p.tipoCobranca === 'Total' && p.historicoPagamento?.status === 'Pendente') {
-        const cliente = clis.find(c => c.id === p.clienteId);
+      // No novo schema, tipoCobranca não existe mais, usamos tipoPacote
+      // historicoPagamento é JSON, precisamos garantir que p.historicoPagamento.status exista
+      let hist: any = p.historicoPagamento;
+      if (typeof hist === 'string') {
+        try { hist = JSON.parse(hist); } catch (e) { hist = {}; }
+      }
+
+      if (hist?.status === 'Pendente') {
+        const cliente = clis.find(c => String(c.id) === String(p.clienteId));
         list.push({
           id: p.id,
           tipo: 'pacote',
           clienteId: p.clienteId,
-          clienteNome: cliente?.nome || 'Desconhecido',
+          clienteNome: cliente?.name || cliente?.nome || 'Desconhecido',
           descricao: `Pacote - ${p.mesReferencia}`,
-          valor: p.historicoPagamento?.valor || p.valorFinal,
-          dataOriginal: p.dataCriacao,
+          valor: Number(hist?.valor || p.valorFinal) || 0,
+          dataOriginal: new Date().toISOString(), // Pacotes não tem dataCriacao no schema atual, usando data atual como fallback
           originalItem: p
         });
       }
@@ -67,21 +74,19 @@ export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenPro
     // Agendamentos Pendentes
     agends.forEach(ag => {
       if (ag.statusPagamento === 'Pendente') {
-        // Só conta se não for de um pacote "Total"
-        const isFromTotalPackage = ag.pacoteId && pacs.find(p => p.id === ag.pacoteId)?.tipoCobranca === 'Total';
+        // Só conta se não for de um pacote "Total" (Mensal Fixo no novo schema)
+        const isFromTotalPackage = ag.package_id && pacs.find(p => String(p.id) === String(ag.package_id))?.tipoPacote === 'Mensal Fixo';
         if (!isFromTotalPackage) {
-          const cliente = clis.find(c => c.id === ag.clienteId);
-          const therapyNames = ag.terapiaIds 
-            ? ag.terapiaIds.map(tid => ters.find(t => t.id === tid)?.nome).filter(Boolean).join(' + ')
-            : (ters.find(t => t.id === ag.terapiaId)?.nome || 'Atendimento');
+          const cliente = clis.find(c => String(c.id) === String(ag.client_id));
+          const therapyNames = ag.therapy_name || 'Atendimento';
             
           list.push({
             id: ag.id,
             tipo: 'agendamento',
-            clienteId: ag.clienteId,
-            clienteNome: cliente?.nome || 'Desconhecido',
+            clienteId: ag.client_id,
+            clienteNome: cliente?.name || cliente?.nome || 'Desconhecido',
             descricao: therapyNames,
-            valor: ag.valorCobrado,
+            valor: Number(ag.valorCobrado) || 0,
             dataOriginal: `${ag.date}T${ag.time}:00`,
             originalItem: ag
           });

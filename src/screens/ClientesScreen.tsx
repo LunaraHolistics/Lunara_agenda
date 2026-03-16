@@ -12,14 +12,13 @@ export default function ClientesScreen() {
   const [editingCliente, setEditingCliente] = useState<Cliente | null>(null);
   
   // Form states
-  const [nome, setNome] = useState('');
-  const [ddi, setDdi] = useState('+55');
-  const [telefone, setTelefone] = useState('');
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
   const [status, setStatus] = useState(true);
-  const [observacoes, setObservacoes] = useState('');
+  const [notes, setNotes] = useState('');
 
-  const [activeActionId, setActiveActionId] = useState<string | null>(null);
-  const { handleImportContacts, ddiList, showNotification, confirmAction } = useAppContext();
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const { showNotification, handleImportContacts } = useAppContext();
 
   useEffect(() => {
     loadClientes();
@@ -33,18 +32,17 @@ export default function ClientesScreen() {
   };
 
   const handleSave = async () => {
-    if (!nome.trim()) {
+    if (!name.trim()) {
       showNotification('Nome é obrigatório', 'error');
       return;
     }
 
     const clienteData: Cliente = {
       id: editingCliente ? editingCliente.id : Date.now().toString(),
-      nome,
-      ddi,
-      telefone,
-      status,
-      observacoes,
+      userId: editingCliente?.userId || '', // Garante userId se existir
+      name,
+      phone,
+      notes,
     };
 
     if (editingCliente) {
@@ -58,40 +56,31 @@ export default function ClientesScreen() {
   };
 
   const handleDelete = async (id: string) => {
-    confirmAction('Deseja realmente excluir este cliente?', async () => {
-      const storage = await AsyncStorage.getItem(StorageKeys.CLIENTES);
-      const dados = JSON.parse(storage || '[]') || [];
-      const filtrados = dados.filter((item: Cliente) => String(item.id) !== String(id));
-      await AsyncStorage.setItem(StorageKeys.CLIENTES, JSON.stringify(filtrados));
-      setClientes(filtrados); // Atualização forçada da interface
-      setActiveActionId(null);
-      closeModal();
-    }, { isDanger: true });
+    await StorageService.deleteItem(StorageKeys.CLIENTES, id);
+    setConfirmDeleteId(null);
+    loadClientes();
   };
 
   const openModal = (cliente?: Cliente) => {
     if (cliente) {
       setEditingCliente(cliente);
-      setNome(cliente.nome);
-      setDdi(cliente.ddi || '+55');
-      setTelefone(cliente.telefone);
-      setStatus(cliente.status);
-      setObservacoes(cliente.observacoes);
+      setName(cliente.name);
+      setPhone(cliente.phone);
+      setNotes(cliente.notes);
     } else {
       setEditingCliente(null);
-      setNome('');
-      setDdi('+55');
-      setTelefone('');
+      setName('');
+      setPhone('');
       setStatus(true);
-      setObservacoes('');
+      setNotes('');
     }
     setIsModalOpen(true);
-    setActiveActionId(null);
   };
 
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingCliente(null);
+    setConfirmDeleteId(null);
   };
 
   const onImport = async () => {
@@ -99,19 +88,16 @@ export default function ClientesScreen() {
       const imported = await handleImportContacts();
       if (imported && imported.length > 0) {
         if (imported.length === 1) {
-          // Preencher automaticamente os campos de entrada no formulário
-          setNome(imported[0].nome);
+          setName(imported[0].nome); // ImportedContact still has 'nome' in its own interface
           handlePhoneChange(imported[0].telefone);
         } else {
-          // Criar vários clientes de uma vez
           for (const contact of imported) {
             const newCliente: Cliente = {
               id: Date.now().toString() + Math.random().toString(36).substring(7),
-              nome: contact.nome,
-              ddi: '+55', // Default for batch import
-              telefone: contact.telefone,
-              status: true,
-              observacoes: 'Importado da agenda',
+              userId: '', // Adicionar userId se necessário
+              name: contact.nome,
+              phone: contact.telefone,
+              notes: 'Importado da agenda',
             };
             await StorageService.saveItem(StorageKeys.CLIENTES, newCliente);
           }
@@ -127,43 +113,24 @@ export default function ClientesScreen() {
   };
 
   const handlePhoneChange = (value: string) => {
-    // Remove non-digits
     const digits = value.replace(/\D/g, '');
     
     let masked = digits;
-    if (ddi === '+55') {
-      if (digits.length <= 11) {
-        // (XX) XXXXX-XXXX
-        masked = digits.replace(/^(\d{2})(\d)/g, '($1) $2');
-        masked = masked.replace(/(\d{5})(\d)/, '$1-$2');
-      }
+    if (digits.length <= 11) {
+      masked = digits.replace(/^(\d{2})(\d)/g, '($1) $2');
+      masked = masked.replace(/(\d{5})(\d)/, '$1-$2');
     }
     
-    setTelefone(masked.substring(0, 15));
+    setPhone(masked.substring(0, 15));
   };
 
   const filteredClientes = clientes.filter(c => 
-    (c.nome?.toLowerCase() || '').includes(searchQuery.toLowerCase()) || 
-    (c.telefone || '').includes(searchQuery)
+    (c.name?.toLowerCase() || '').includes(searchQuery.toLowerCase()) || 
+    (c.phone || '').includes(searchQuery)
   );
 
-  // Long press logic
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-
-  const handlePointerDown = (id: string) => {
-    timerRef.current = setTimeout(() => {
-      setActiveActionId(id);
-    }, 500); // 500ms long press
-  };
-
-  const handlePointerUp = () => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-    }
-  };
-
   return (
-    <div className="flex flex-col h-full relative">
+    <div className="h-[calc(100vh-80px)] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 pb-10 [webkit-overflow-scrolling:touch]">
       {/* Search Bar */}
       <div className="p-4 bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] sticky top-0 z-10">
         <div className="relative">
@@ -179,7 +146,7 @@ export default function ClientesScreen() {
       </div>
 
       {/* List */}
-      <div className="flex-1 overflow-y-auto px-4 pb-24">
+      <div className="px-4 pb-24">
         {filteredClientes.length === 0 ? (
           <div className="text-center text-[var(--color-text-sec-light)] mt-10">
             Nenhum cliente encontrado.
@@ -189,53 +156,42 @@ export default function ClientesScreen() {
             {filteredClientes.map(cliente => (
               <div 
                 key={cliente.id}
-                onPointerDown={() => handlePointerDown(cliente.id)}
-                onPointerUp={handlePointerUp}
-                onPointerLeave={handlePointerUp}
-                className="bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] p-4 rounded-2xl shadow-sm relative overflow-hidden select-none"
+                className="bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] p-4 rounded-2xl shadow-sm flex items-center justify-between"
               >
-                <div className="flex justify-between items-start mb-1">
-                  <h3 className="font-medium text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] text-lg">
-                    {cliente.nome}
-                  </h3>
-                  <span className={`text-xs font-medium px-2 py-1 rounded-full ${cliente.status ? 'bg-[var(--color-success)]/10 text-[var(--color-success)]' : 'bg-[var(--color-error)]/10 text-[var(--color-error)]'}`}>
-                    {cliente.status ? 'Ativo' : 'Inativo'}
-                  </span>
-                </div>
-                {cliente.telefone && (
-                  <p className="text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] text-sm mb-1">
-                    {cliente.ddi || '+55'} {cliente.telefone}
-                  </p>
-                )}
-                {cliente.observacoes && (
-                  <p className="text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] text-xs mt-2 line-clamp-2">
-                    {cliente.observacoes}
-                  </p>
-                )}
-
-                {/* Actions Overlay (shown on long press) */}
-                {activeActionId === cliente.id && (
-                  <div className="absolute inset-0 z-50 bg-[var(--color-surface-light)]/90 dark:bg-[var(--color-surface-dark)]/90 backdrop-blur-sm flex items-center justify-center gap-4">
-                    <button 
-                      onClick={() => openModal(cliente)}
-                      className="p-3 bg-[var(--color-primary)] text-white rounded-full shadow-md"
-                    >
-                      <Edit2 size={20} />
-                    </button>
-                    <button 
-                      onClick={() => handleDelete(cliente.id)}
-                      className="p-3 bg-[var(--color-error)] text-white rounded-full shadow-md"
-                    >
-                      <Trash2 size={20} />
-                    </button>
-                    <button 
-                      onClick={() => setActiveActionId(null)}
-                      className="p-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-full shadow-md"
-                    >
-                      <X size={20} />
-                    </button>
+                <div className="flex-1 min-w-0">
+                  <div className="flex justify-between items-start mb-1">
+                    <h3 className="font-medium text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] text-lg truncate">
+                      {cliente.name || cliente.nome || "Sem Nome"}
+                    </h3>
                   </div>
-                )}
+                  {cliente.phone && (
+                    <p className="text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] text-sm mb-1">
+                      {cliente.phone}
+                    </p>
+                  )}
+                </div>
+                
+                <div className="flex items-center gap-2 ml-4">
+                  <button 
+                    onClick={() => openModal(cliente)}
+                    className="p-2 text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 rounded-full transition-colors"
+                  >
+                    <Edit2 size={20} />
+                  </button>
+                  <button 
+                    onClick={() => {
+                      if (confirmDeleteId === cliente.id) {
+                        handleDelete(cliente.id);
+                      } else {
+                        setConfirmDeleteId(cliente.id);
+                        setTimeout(() => setConfirmDeleteId(null), 3000); // Cancela após 3 segundos
+                      }
+                    }}
+                    className={`p-2 rounded-full transition-colors ${confirmDeleteId === cliente.id ? 'bg-[var(--color-error)] text-white' : 'text-[var(--color-error)] hover:bg-[var(--color-error)]/10'}`}
+                  >
+                    {confirmDeleteId === cliente.id ? 'Confirmar?' : <Trash2 size={20} />}
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -245,14 +201,14 @@ export default function ClientesScreen() {
       {/* FAB */}
       <button 
         onClick={() => openModal()}
-        className="absolute bottom-6 right-6 w-14 h-14 bg-[var(--color-primary)] text-white rounded-full flex items-center justify-center shadow-lg hover:opacity-90 transition-opacity z-20"
+        className="fixed bottom-6 right-6 w-14 h-14 bg-[var(--color-primary)] text-white rounded-full flex items-center justify-center shadow-lg hover:opacity-90 transition-opacity z-20"
       >
         <Plus size={28} />
       </button>
 
       {/* Modal */}
       {isModalOpen && (
-        <div className="absolute inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-semibold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">
@@ -280,8 +236,8 @@ export default function ClientesScreen() {
                 </label>
                 <input 
                   type="text"
-                  value={nome}
-                  onChange={(e) => setNome(e.target.value)}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
                   className="w-full px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                   placeholder="Nome do cliente"
                 />
@@ -292,25 +248,9 @@ export default function ClientesScreen() {
                   Telefone
                 </label>
                 <div className="flex gap-2">
-                  <div className="relative w-28 shrink-0">
-                    <select 
-                      value={ddi}
-                      onChange={(e) => setDdi(e.target.value)}
-                      className="w-full pl-3 pr-8 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)] appearance-none cursor-pointer"
-                    >
-                      {ddiList.map(item => (
-                        <option key={item.code + item.name} value={item.code}>
-                          {item.flag} {item.code}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--color-text-sec-light)]">
-                      <ChevronDown size={16} />
-                    </div>
-                  </div>
                   <input 
                     type="tel"
-                    value={telefone}
+                    value={phone}
                     onChange={(e) => handlePhoneChange(e.target.value)}
                     className="flex-1 px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                     placeholder="(00) 00000-0000"
@@ -323,8 +263,8 @@ export default function ClientesScreen() {
                   Observações
                 </label>
                 <textarea 
-                  value={observacoes}
-                  onChange={(e) => setObservacoes(e.target.value)}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
                   className="w-full px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)] min-h-[100px] resize-none"
                   placeholder="Detalhes adicionais..."
                 />

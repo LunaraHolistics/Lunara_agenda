@@ -9,7 +9,7 @@ interface ConferenciaScreenProps {
 }
 
 export default function ConferenciaScreen({ onBack }: ConferenciaScreenProps) {
-  const { showNotification, confirmAction, promptAction } = useAppContext();
+  const { showNotification, confirmAction, promptAction, safeDate } = useAppContext();
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [terapias, setTerapias] = useState<Terapia[]>([]);
@@ -33,9 +33,9 @@ export default function ConferenciaScreen({ onBack }: ConferenciaScreenProps) {
     sevenDaysAgo.setHours(0, 0, 0, 0);
 
     const filtered = agends.filter(ag => {
-      const agDate = new Date(`${ag.date}T${ag.time}:00`);
+      const agDate = safeDate(`${ag.date}T${ag.time}:00`);
       return agDate >= sevenDaysAgo && agDate <= new Date() && ag.statusAtendimento !== 'Cancelado';
-    }).sort((a, b) => new Date(`${b.date}T${b.time}:00`).getTime() - new Date(`${a.date}T${a.time}:00`).getTime());
+    }).sort((a, b) => safeDate(`${b.date}T${b.time}:00`).getTime() - safeDate(`${a.date}T${a.time}:00`).getTime());
 
     setAgendamentos(filtered);
     setClientes(clis);
@@ -85,15 +85,21 @@ export default function ConferenciaScreen({ onBack }: ConferenciaScreenProps) {
     }, { title: 'Registrar Pagamento', placeholder: 'PIX, Dinheiro, etc.' });
   };
 
-  const getClienteNome = (id: string) => clientes.find(c => c.id === id)?.nome || 'Desconhecido';
-  const getTerapiaNome = (id: string) => terapias.find(t => t.id === id)?.nome || 'Desconhecida';
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+  const getClienteNome = (id: string) => {
+    const cli = clientes.find(c => String(c.id) === String(id));
+    return cli?.name || cli?.nome || 'Desconhecido';
+  };
+  const getTerapiaNome = (ag: Agendamento) => {
+    const terapia = terapias.find(t => String(t.id) === String(ag.therapy_item_id));
+    return terapia?.name || terapia?.nome || ag.therapy_name || 'Sem nome';
   };
 
-  const formatDate = (isoString: string) => {
-    return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(isoString));
+  const formatCurrency = (value: any) => {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value) || 0);
+  };
+
+  const formatDate = (date: string, time: string) => {
+    return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(safeDate(`${date}T${time}:00`));
   };
 
   const pendentesCount = agendamentos.filter(ag => ag.statusPagamento === 'Pendente' && ag.statusAtendimento === 'Realizado').length;
@@ -157,7 +163,7 @@ export default function ConferenciaScreen({ onBack }: ConferenciaScreenProps) {
                         <Calendar size={16} />
                       </div>
                       <span className="text-xs font-bold text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)]">
-                        {formatDate(ag.dataHora)}
+                        {formatDate(ag.date, ag.time)}
                       </span>
                     </div>
                     {isPendenteRealizado && (
@@ -174,11 +180,11 @@ export default function ConferenciaScreen({ onBack }: ConferenciaScreenProps) {
                     </div>
                     <div className="flex-1">
                       <h4 className="font-bold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">
-                        {getClienteNome(ag.clienteId)}
+                        {getClienteNome(ag.client_id)}
                       </h4>
                       <div className="flex items-center gap-1 text-xs text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)]">
                         <Activity size={12} />
-                        <span>{getTerapiaNome(ag.terapiaId)}</span>
+                        <span>{getTerapiaNome(ag)}</span>
                       </div>
                     </div>
                     <div className="text-right">

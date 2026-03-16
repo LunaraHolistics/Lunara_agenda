@@ -1,86 +1,86 @@
-export interface Cliente {
-  id: string;
-  nome: string;
-  telefone: string;
-  ddi?: string;
-  status: boolean;
-  observacoes: string;
-}
-
 export interface ImportedContact {
   nome: string;
   telefone: string;
 }
 
-export interface CountryDDI {
-  code: string;
-  flag: string;
+export interface Cliente {
+  id: string;
+  userId: string;
   name: string;
+  nome?: string; // Legacy
+  phone: string;
+  notes: string;
 }
 
 export interface Terapia {
   id: string;
-  nome: string;
-  valor: number;
-  duracao: number;
+  userId: string;
+  name: string;
+  nome?: string; // Legacy
+  price: number;
+  valor?: number; // Legacy
+  duration: number;
+  duracao?: number; // Legacy
 }
 
 export interface Agendamento {
   id: string;
-  clienteId: string;
-  terapiaId: string; // Mantido para compatibilidade, será o ID da primeira terapia
-  terapiaIds?: string[]; // Lista de IDs de terapias para agendamentos múltiplos
-  date: string; // YYYY-MM-DD
-  time: string; // HH:mm
-  valorCobrado: number;
-  desconto: number;
-  statusPagamento: 'Pago' | 'Pendente';
-  statusAtendimento: 'Agendado' | 'Realizado' | 'Cancelado';
-  pacoteId?: string; // Vincula o agendamento a um pacote
-  itemPacoteId?: string; // Vincula o agendamento a um item específico do pacote
+  userId: string;
+  client_id: string;
+  date: string;
+  time: string;
+  package_id?: string;
+  therapy_item_id?: string;
+  therapy_name?: string;
+  statusPagamento?: 'Pendente' | 'Pago';
+  statusAtendimento?: 'Agendado' | 'Realizado' | 'Cancelado';
   tipoAtendimento?: 'Mensal Fixo' | 'Avulso';
+  valorCobrado?: number;
+  desconto?: number;
+  dataPagamento?: string;
   formaPagamento?: string;
   bancoPagamento?: string;
-  dataPagamento?: string;
 }
 
 export interface ItemPacote {
-  id: string; // ID único do item no pacote
+  id: string;
   terapiaId: string;
-  quantidade: number;
-  quantidadeRestante: number; // Saldo de sessões
-  tipoDesconto: 'fixo' | 'porcentagem';
-  valorDesconto: number;
+  quantidadeTotal: number;
+  quantidadeRestante: number;
+  valorSessao: number;
+  valorDesconto?: number;
 }
 
 export interface PagamentoInfo {
   status: 'Pendente' | 'Pago';
-  valor: number;
   data?: string;
-  forma?: string; // 'PIX' | 'Crédito' | 'Débito' | 'Transferência' | 'Dinheiro'
+  forma?: string;
   banco?: string;
+  valor: number;
 }
 
 export interface Pacote {
   id: string;
+  userId: string;
   clienteId: string;
-  mesReferencia: string; // Formato YYYY-MM
-  itens: ItemPacote[];
-  valorBruto: number;
-  valorDescontoTotal: number;
-  valorFinal: number;
-  dataCriacao: string; // ISO string
-  tipoCobranca?: 'Por Atendimento' | 'Total';
+  mesReferencia: string;
   tipoPacote: 'Mensal Fixo' | 'Avulso';
-  historicoPagamento?: PagamentoInfo;
+  valorFinal: number;
+  valorDescontoTotal?: number;
+  historicoPagamento: PagamentoInfo | string; // JSON
+  formaPagamento?: string;
+  dataPagamento?: string;
+  bancoPagamento?: string;
   observacoes?: string;
+  itens: ItemPacote[] | string; // JSON
 }
 
 export interface Bloqueio {
   id: string;
-  data: string; // YYYY-MM-DD
-  horaInicio: string; // HH:mm
-  horaFim: string; // HH:mm
+  userId: string;
+  data: string;
+  hora_inicio: string;
+  hora_fim: string;
   motivo: string;
 }
 

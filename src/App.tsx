@@ -23,6 +23,17 @@ function AppContent() {
         Notification.requestPermission();
       }
     }
+    
+    // Script de Expurgue na Inicialização
+    const limparFantasma = () => {
+      const financeiro = JSON.parse(localStorage.getItem('@lunara_financeiro') || '[]');
+      const filtrado = financeiro.filter((t: any) => t.id !== '8735119b-5202-4639-9fae-175ddfec430f');
+      if (financeiro.length !== filtrado.length) {
+        localStorage.setItem('@lunara_financeiro', JSON.stringify(filtrado));
+        window.location.reload();
+      }
+    };
+    limparFantasma();
   }, []);
 
   const renderScreen = () => {

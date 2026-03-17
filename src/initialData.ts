@@ -57,21 +57,6 @@ export const INITIAL_PACOTES: Pacote[] = [
     ]
   },
   {
-    id: "1773410735962",
-    clienteId: "1773409119145",
-    mesReferencia: "2026-03",
-    tipoPacote: "Fixo",
-    valorFinal: 110,
-    status: "Ativo",
-    statusPagamento: "Pago",
-    dataPagamento: "2026-03-13",
-    formaPagamento: "PIX",
-    bancoPagamento: "Banco do Brasil",
-    itens: [
-      {id: "1773410734496", terapiaId: "1773410607847", quantidadeTotal: 1, quantidadeRestante: 0}
-    ]
-  },
-  {
     id: "1773410833714",
     clienteId: "1773408796451",
     mesReferencia: "2026-03",
@@ -192,8 +177,7 @@ export const INITIAL_AGENDAMENTOS: Agendamento[] = [
   {id: "1773411803749", clienteId: "1773408796451", pacoteId: "1773410833714", terapiaId: "1773410782282", data: "2026-03-14", hora: "19:10", statusAtendimento: 'Agendado', statusPagamento: 'Pago', valorCobrado: 70},
   {id: "1773411816165", clienteId: "1773408936330", pacoteId: "1773410662985", terapiaId: "1773410592031", data: "2026-03-14", hora: "09:00", statusAtendimento: 'Agendado', statusPagamento: 'Pago', valorCobrado: 70},
   {id: "1773411824326", clienteId: "1773408936330", pacoteId: "1773410662985", terapiaId: "1773410592031", data: "2026-03-26", hora: "19:10", statusAtendimento: 'Agendado', statusPagamento: 'Pago', valorCobrado: 70},
-  {id: "1773411835206", clienteId: "1773408936330", pacoteId: "1773410662985", terapiaId: "1773410607847", data: "2026-03-03", hora: "21:00", statusAtendimento: 'Agendado', statusPagamento: 'Pago', valorCobrado: 120},
-  {id: "1773411861158", clienteId: "1773409119145", pacoteId: "1773410735962", terapiaId: "1773410607847", data: "2026-03-04", hora: "20:00", statusAtendimento: 'Agendado', statusPagamento: 'Pago', valorCobrado: 120}
+  {id: "1773411835206", clienteId: "1773408936330", pacoteId: "1773410662985", terapiaId: "1773410607847", data: "2026-03-03", hora: "21:00", statusAtendimento: 'Agendado', statusPagamento: 'Pago', valorCobrado: 120}
 ];
 
 export const INITIAL_TRANSACOES: Transacao[] = [

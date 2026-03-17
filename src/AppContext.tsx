@@ -220,12 +220,30 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const importarBackup = (json: any) => {
     try {
-      if (json.clientes) setClientes(json.clientes);
-      if (json.agendamentos) setAgendamentos(json.agendamentos);
-      if (json.terapias) setTerapias(json.terapias);
-      if (json.pacotes) setPacotes(json.pacotes);
-      if (json.bloqueios) setBloqueios(json.bloqueios);
-      if (json.transacoes) setTransacoes(json.transacoes);
+      if (json.clientes) {
+        setClientes(json.clientes);
+        StorageService.saveData(StorageKeys.CLIENTES, json.clientes);
+      }
+      if (json.agendamentos) {
+        setAgendamentos(json.agendamentos);
+        StorageService.saveData(StorageKeys.AGENDAMENTOS, json.agendamentos);
+      }
+      if (json.terapias) {
+        setTerapias(json.terapias);
+        StorageService.saveData(StorageKeys.TERAPIAS, json.terapias);
+      }
+      if (json.pacotes) {
+        setPacotes(json.pacotes);
+        StorageService.saveData(StorageKeys.PACOTES, json.pacotes);
+      }
+      if (json.bloqueios) {
+        setBloqueios(json.bloqueios);
+        StorageService.saveData(StorageKeys.BLOQUEIOS, json.bloqueios);
+      }
+      if (json.transacoes) {
+        setTransacoes(json.transacoes);
+        StorageService.saveData(StorageKeys.TRANSACOES, json.transacoes);
+      }
       showNotification("Dados restaurados!", "success");
     } catch (e) {
       showNotification("Erro na importação", "error");

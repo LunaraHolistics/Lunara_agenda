@@ -145,6 +145,14 @@ export default function AgendaScreen() {
     showNotification("Sessão devolvida ao pacote do cliente", "info");
   };
 
+  useEffect(() => {
+    const total = formTerapiaIds.reduce((sum, tid) => {
+      const terapia = terapias.find(t => t.id === tid);
+      return sum + (terapia?.valor || 0);
+    }, 0);
+    setFormValor(total);
+  }, [formTerapiaIds, terapias]);
+
   const handleDrop = (e: React.DragEvent, day: number) => {
     e.preventDefault();
     e.stopPropagation();
@@ -180,11 +188,9 @@ export default function AgendaScreen() {
     if (clienteId && terapiaId) {
       setFormClienteId(clienteId);
       setFormData(dateStr);
-      setFormTerapiaIds([terapiaId]);
+      setFormTerapiaIds(prev => [...prev, terapiaId]);
       setFormPacoteId(pacoteId || undefined);
       setFormItemPacoteId(itemPacoteId || undefined);
-      const terapia = terapias.find(t => t.id === terapiaId);
-      setFormValor(terapia?.valor || 0);
       setFormHora('09:00');
       setIsModalOpen(true);
     }
@@ -214,19 +220,21 @@ export default function AgendaScreen() {
       const newAgendamentos: Agendamento[] = [];
 
       for (let d of datesToSchedule) {
-        const agendamentoId = crypto.randomUUID();
-        const newAgendamento: Agendamento = {
-          id: agendamentoId,
-          clienteId: formClienteId,
-          terapiaId: formTerapiaIds[0],
-          data: d,
-          hora: formHora,
-          pacoteId: formPacoteId,
-          statusPagamento: formStatusPagamento,
-          statusAtendimento: 'Agendado',
-          valorCobrado: Number(formValor)
-        };
-        newAgendamentos.push(newAgendamento);
+        for (let tid of formTerapiaIds) {
+          const agendamentoId = crypto.randomUUID();
+          const newAgendamento: Agendamento = {
+            id: agendamentoId,
+            clienteId: formClienteId,
+            terapiaId: tid,
+            data: d,
+            hora: formHora,
+            pacoteId: formPacoteId,
+            statusPagamento: formStatusPagamento,
+            statusAtendimento: 'Agendado',
+            valorCobrado: Number(terapias.find(t => t.id === tid)?.valor || 0)
+          };
+          newAgendamentos.push(newAgendamento);
+        }
       }
 
       // Handle package updates if applicable
@@ -235,7 +243,7 @@ export default function AgendaScreen() {
           if (p.id === formPacoteId) {
             const updatedItens = p.itens.map((item) => {
               if (item.id === formItemPacoteId) {
-                return { ...item, quantidadeRestante: Math.max(0, Number(item.quantidadeRestante || 0) - datesToSchedule.length) };
+                return { ...item, quantidadeRestante: Math.max(0, Number(item.quantidadeRestante || 0) - formTerapiaIds.length * datesToSchedule.length) };
               }
               return item;
             });
@@ -261,6 +269,7 @@ export default function AgendaScreen() {
       }
 
       setIsModalOpen(false);
+      setFormTerapiaIds([]); // Reset therapy IDs
       showNotification('Agendado com sucesso!', 'success');
     };
 

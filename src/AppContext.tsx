@@ -1,18 +1,14 @@
 import React, { createContext, useContext, ReactNode, useState, useEffect } from 'react';
 import { Agendamento, Cliente, Terapia, Pacote, Bloqueio, ImportedContact, Transacao } from './types';
 import { StorageService, StorageKeys } from './services/StorageService';
-
-const SEED_CLIENTES: Cliente[] = [{"id":"1773673732157","nome":"Ana Paula","telefone":"+447541648981","observacoes":"Ana Paula Alessandro\nDN 21/06/1969\nLondres/Inglaterra"},{"id":"1773673767714","nome":"Ivone","telefone":"+447541648981","observacoes":"Ivone Fernandes Alves\nDN 08/07/1948"},{"id":"1773674041075","nome":"Anne","telefone":"+447752188938","observacoes":"Anne Caroline Lins Bezerra\nDN 24/07/1994\nLondres/Inglaterra"},{"id":"1773674123806","nome":"Meire (Rosemeire Lancelotti)","telefone":"+5516994149085","observacoes":"Rosemeire Rodrigues dos Santos Lancelotti\nDN 16/01/1984\nSão Carlos/SP"},{"id":"1773674192083","nome":"Fabrício (esposo Meire)","telefone":"","observacoes":"Fabricio Lancelotti\nDN 07/06/1979\nSão Carlos"},{"id":"1773674220989","nome":"Bruno (filho Meire)","telefone":"","observacoes":"Bruno Lucas Lancelotti\nDN 10/09/2001"},{"id":"1773674244964","nome":"Fernanda (nora Meire)","telefone":"","observacoes":"Fernanda Gabrielli Genari\nDN 23/01/1999"},{"id":"1773674336022","nome":"Márcia (tia Deza)","telefone":"+5511983883879","observacoes":"Márcia Eloísa Silva Monteiro\nDN 24/11/1972\nGuararema/SP"},{"id":"1773674409197","nome":"Amanda","telefone":"+5514998229743","observacoes":"Amanda Letícia Bento Dias\nDN 05/03/1994\nOurinhos/SP"},{"id":"1773674472133","nome":"Andreza (Deza)","telefone":"+5516999637420","observacoes":"Andreza Gregório\nDN 24/02/1994\nAraraquara/SP"},{"id":"1773674555334","nome":"Maria Aparecida","telefone":"+5514997066353","observacoes":"Maria Aparecida da Silva\nDN 31/08/1979\nOurinhos/SP"},{"id":"1773674629767","nome":"Isabel (tia Deza)","telefone":"+5516997445647","observacoes":"Isabel Cristina Silva Nepomuceno\nDN 11/10/1969\nAraraquara/SP"}];
-
-const SEED_TERAPIAS: Terapia[] = [{"id":"1773674706071","nome":"Alinhamento Chakras","valor":60,"duracao":15},{"id":"1773674722479","nome":"Cartomancia","valor":130,"duracao":50},{"id":"1773674738183","nome":"Biomagnetismo","valor":80,"duracao":30},{"id":"1773674750071","nome":"Ativação de gráficos","valor":80,"duracao":15},{"id":"1773674769303","nome":"Pesquisa radiestésica","valor":20,"duracao":20},{"id":"1773674786679","nome":"Limpeza/Banimento","valor":80,"duracao":20},{"id":"1773674801551","nome":"Chakras/Bio Pets","valor":80,"duracao":20},{"id":"1773674831591","nome":"Bioressonância","valor":190,"duracao":30}];
-
-const SEED_TRANSACOES: Transacao[] = [{"id":"8735119b-5202-4639-9fae-175ddfec430f","descricao":"Pacote - Isabel (tia Deza)","valor":110,"data":"2026-03-17","metodo":"PIX","categoria":"Terapias","status":"Pendente","pacoteId":null, "tipo": "Receita"}];
+import { INITIAL_CLIENTES, INITIAL_TERAPIAS, INITIAL_PACOTES, INITIAL_AGENDAMENTOS, INITIAL_TRANSACOES } from './initialData';
 
 export interface CountryDDI {
   code: string;
   flag: string;
   name: string;
 }
+// ... (rest of the file)
 
 export const DDI_LIST: CountryDDI[] = [
   { code: '+55', flag: '🇧🇷', name: 'Brasil' },
@@ -77,12 +73,12 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [clientes, setClientes] = useState<Cliente[]>(() => StorageService.getData(StorageKeys.CLIENTES) || SEED_CLIENTES);
-  const [agendamentos, setAgendamentos] = useState<Agendamento[]>(() => StorageService.getData(StorageKeys.AGENDAMENTOS) || []);
-  const [terapias, setTerapias] = useState<Terapia[]>(() => StorageService.getData(StorageKeys.TERAPIAS) || SEED_TERAPIAS);
-  const [pacotes, setPacotes] = useState<Pacote[]>(() => StorageService.getData(StorageKeys.PACOTES) || []);
+  const [clientes, setClientes] = useState<Cliente[]>(() => StorageService.getData(StorageKeys.CLIENTES) || INITIAL_CLIENTES);
+  const [agendamentos, setAgendamentos] = useState<Agendamento[]>(() => StorageService.getData(StorageKeys.AGENDAMENTOS) || INITIAL_AGENDAMENTOS);
+  const [terapias, setTerapias] = useState<Terapia[]>(() => StorageService.getData(StorageKeys.TERAPIAS) || INITIAL_TERAPIAS);
+  const [pacotes, setPacotes] = useState<Pacote[]>(() => StorageService.getData(StorageKeys.PACOTES) || INITIAL_PACOTES);
   const [bloqueios, setBloqueios] = useState<Bloqueio[]>(() => StorageService.getData(StorageKeys.BLOQUEIOS) || []);
-  const [transacoes, setTransacoes] = useState<Transacao[]>(() => StorageService.getData(StorageKeys.TRANSACOES) || SEED_TRANSACOES);
+  const [transacoes, setTransacoes] = useState<Transacao[]>(() => StorageService.getData(StorageKeys.TRANSACOES) || INITIAL_TRANSACOES);
 
   useEffect(() => StorageService.saveData(StorageKeys.CLIENTES, clientes), [clientes]);
   useEffect(() => StorageService.saveData(StorageKeys.AGENDAMENTOS, agendamentos), [agendamentos]);

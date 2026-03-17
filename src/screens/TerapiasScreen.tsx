@@ -1,74 +1,57 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Edit2, Trash2, X } from 'lucide-react';
-import { StorageService, StorageKeys } from '../services/StorageService';
 import { Terapia } from '../types';
 import { useAppContext } from '../AppContext';
 
 export default function TerapiasScreen() {
-  const { showNotification, confirmAction } = useAppContext();
-  const [terapias, setTerapias] = useState<Terapia[]>([]);
+  const { showNotification, confirmAction, addTerapia, updateTerapia, deleteTerapia, terapias } = useAppContext();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTerapia, setEditingTerapia] = useState<Terapia | null>(null);
   
   // Form states
-  const [name, setName] = useState('');
-  const [price, setPrice] = useState('');
-  const [duration, setDuration] = useState('');
-
-  useEffect(() => {
-    loadTerapias();
-    window.addEventListener('storage-sync', loadTerapias);
-    return () => window.removeEventListener('storage-sync', loadTerapias);
-  }, []);
-
-  const loadTerapias = async () => {
-    const data = await StorageService.getItems<Terapia>(StorageKeys.TERAPIAS);
-    setTerapias(data);
-  };
+  const [nome, setNome] = useState('');
+  const [valor, setValor] = useState('');
+  const [duracao, setDuracao] = useState('');
 
   const handleSave = async () => {
-    if (!name.trim() || !price || !duration) {
+    if (!nome.trim() || !valor || !duracao) {
       showNotification('Preencha todos os campos corretamente.', 'error');
       return;
     }
 
-    const terapiaData: Terapia = {
-      id: editingTerapia ? editingTerapia.id : Date.now().toString(),
-      userId: editingTerapia?.userId || '', // Garante userId se existir
-      name,
-      price: parseFloat(price.replace(',', '.')),
-      duration: parseInt(duration, 10),
+    const terapiaData: Omit<Terapia, 'id'> = {
+      nome,
+      valor: parseFloat(valor.replace(',', '.')),
+      duracao: parseInt(duracao, 10),
     };
 
     if (editingTerapia) {
-      await StorageService.updateItem(StorageKeys.TERAPIAS, terapiaData);
+      updateTerapia({ ...editingTerapia, ...terapiaData });
     } else {
-      await StorageService.saveItem(StorageKeys.TERAPIAS, terapiaData);
+      addTerapia(terapiaData);
     }
 
     closeModal();
-    loadTerapias();
   };
 
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const handleDelete = async (id: string) => {
-    await StorageService.deleteItem(StorageKeys.TERAPIAS, id);
+    deleteTerapia(id);
     setConfirmDeleteId(null);
-    loadTerapias();
   };
 
   const openModal = (terapia?: Terapia) => {
     if (terapia) {
       setEditingTerapia(terapia);
-      setName(terapia.name);
-      setPrice(String(terapia.price || 0));
-      setDuration(String(terapia.duration || 0));
+      setNome(terapia.nome);
+      setValor(String(terapia.valor || 0));
+      setDuracao(String(terapia.duracao || 0));
     } else {
       setEditingTerapia(null);
-      setName('');
-      setPrice('');
-      setDuration('');
+      setNome('');
+      setValor('');
+      setDuracao('');
     }
     setIsModalOpen(true);
   };
@@ -113,15 +96,15 @@ export default function TerapiasScreen() {
               >
                 <div>
                   <h3 className="font-medium text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] text-lg">
-                    {terapia.name || terapia.nome || (terapia as any).therapy_name || "Sem nome"}
+                    {terapia.nome || "Sem nome"}
                   </h3>
                   <p className="text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] text-sm mt-1">
-                    {terapia.duration} minutos
+                    {terapia.duracao} minutos
                   </p>
                 </div>
                 <div className="flex items-center gap-4">
                   <span className="font-semibold text-[var(--color-primary)] text-lg">
-                    {formatCurrency(terapia.price)}
+                    {formatCurrency(terapia.valor)}
                   </span>
                   <div className="flex items-center gap-2">
                     <button 
@@ -161,8 +144,8 @@ export default function TerapiasScreen() {
 
       {/* Modal */}
       {isModalOpen && (
-        <div className="absolute inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] w-full max-w-md rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-semibold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">
                 {editingTerapia ? 'Editar Terapia' : 'Nova Terapia'}
@@ -179,8 +162,8 @@ export default function TerapiasScreen() {
                 </label>
                 <input 
                   type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  value={nome}
+                  onChange={(e) => setNome(e.target.value)}
                   className="w-full px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                   placeholder="Ex: Massagem Relaxante"
                 />
@@ -194,8 +177,8 @@ export default function TerapiasScreen() {
                   <input 
                     type="number"
                     step="0.01"
-                    value={price}
-                    onChange={(e) => setPrice(e.target.value)}
+                    value={valor}
+                    onChange={(e) => setValor(e.target.value)}
                     className="w-full px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                     placeholder="0.00"
                   />
@@ -207,8 +190,8 @@ export default function TerapiasScreen() {
                   </label>
                   <input 
                     type="number"
-                    value={duration}
-                    onChange={(e) => setDuration(e.target.value)}
+                    value={duracao}
+                    onChange={(e) => setDuracao(e.target.value)}
                     className="w-full px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                     placeholder="60"
                   />

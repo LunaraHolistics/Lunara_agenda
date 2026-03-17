@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { ChevronLeft, CheckCircle, AlertTriangle, DollarSign, Calendar, User, Activity } from 'lucide-react';
-import { StorageService, StorageKeys } from '../services/StorageService';
-import { Agendamento, Cliente, Terapia } from '../types';
+import { Agendamento } from '../types';
 import { useAppContext } from '../AppContext';
 
 interface ConferenciaScreenProps {
@@ -9,89 +8,75 @@ interface ConferenciaScreenProps {
 }
 
 export default function ConferenciaScreen({ onBack }: ConferenciaScreenProps) {
-  const { showNotification, confirmAction, promptAction, safeDate } = useAppContext();
-  const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
-  const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [terapias, setTerapias] = useState<Terapia[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { 
+    showNotification, 
+    confirmAction, 
+    promptAction, 
+    safeDate, 
+    agendamentos: allAgendamentos, 
+    clientes, 
+    terapias,
+    updateAgendamento
+  } = useAppContext();
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
-    setLoading(true);
-    const [agends, clis, ters] = await Promise.all([
-      StorageService.getItems<Agendamento>(StorageKeys.AGENDAMENTOS),
-      StorageService.getItems<Cliente>(StorageKeys.CLIENTES),
-      StorageService.getItems<Terapia>(StorageKeys.TERAPIAS),
-    ]);
-
-    // Filtra atendimentos dos últimos 7 dias
+  // Filtra atendimentos dos últimos 7 dias
+  const agendamentosFiltrados = useMemo(() => {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     sevenDaysAgo.setHours(0, 0, 0, 0);
 
-    const filtered = agends.filter(ag => {
-      const agDate = safeDate(`${ag.date}T${ag.time}:00`);
-      return agDate >= sevenDaysAgo && agDate <= new Date() && ag.status_atendimento !== 'Cancelado';
-    }).sort((a, b) => safeDate(`${b.date}T${b.time}:00`).getTime() - safeDate(`${a.date}T${a.time}:00`).getTime());
+    return allAgendamentos.filter(ag => {
+      const agDate = safeDate(`${ag.data}T${ag.hora}:00`);
+      return agDate >= sevenDaysAgo && agDate <= new Date() && ag.statusAtendimento !== 'Cancelado';
+    }).sort((a, b) => safeDate(`${b.data}T${b.hora}:00`).getTime() - safeDate(`${a.data}T${a.hora}:00`).getTime());
+  }, [allAgendamentos, safeDate]);
 
-    setAgendamentos(filtered);
-    setClientes(clis);
-    setTerapias(ters);
-    setLoading(false);
-  };
-
-  const handleConfirmAllPaid = async () => {
-    const pendentes = agendamentos.filter(ag => ag.status_pagamento === 'Pendente' && ag.status_atendimento === 'Realizado');
+  const handleConfirmAllPaid = () => {
+    const pendentes = agendamentosFiltrados.filter(ag => ag.statusPagamento === 'Pendente' && ag.statusAtendimento === 'Realizado');
     
     if (pendentes.length === 0) {
       showNotification('Não existem atendimentos realizados pendentes de pagamento nos últimos 7 dias.', 'info');
       return;
     }
 
-    confirmAction(`Deseja confirmar o pagamento de ${pendentes.length} atendimentos em lote? (Será definido como PIX na data de hoje)`, async () => {
+    confirmAction(`Deseja confirmar o pagamento de ${pendentes.length} atendimentos em lote? (Será definido como PIX na data de hoje)`, () => {
       const today = new Date().toISOString().split('T')[0];
       
-      for (const ag of pendentes) {
-        const updatedAg: Agendamento = {
+      pendentes.forEach(ag => {
+        updateAgendamento({
           ...ag,
-          status_pagamento: 'Pago',
+          statusPagamento: 'Pago',
           dataPagamento: today,
           formaPagamento: 'PIX'
-        };
-        await StorageService.updateItem(StorageKeys.AGENDAMENTOS, updatedAg);
-      }
+        });
+      });
       
-      loadData();
       showNotification('Pagamentos confirmados com sucesso!', 'success');
     });
   };
 
-  const handleConfirmPaid = async (ag: Agendamento) => {
-    promptAction('Forma de Pagamento (PIX, Crédito, Débito, Transferência, Dinheiro):', 'PIX', async (forma) => {
+  const handleConfirmPaid = (ag: Agendamento) => {
+    promptAction('Forma de Pagamento (PIX, Crédito, Débito, Transferência, Dinheiro):', 'PIX', (forma) => {
       if (forma) {
-        const updatedAg: Agendamento = {
+        updateAgendamento({
           ...ag,
-          status_pagamento: 'Pago',
+          statusPagamento: 'Pago',
           dataPagamento: new Date().toISOString().split('T')[0],
           formaPagamento: forma
-        };
-        await StorageService.updateItem(StorageKeys.AGENDAMENTOS, updatedAg);
-        loadData();
+        });
         showNotification('Pagamento registrado com sucesso!', 'success');
       }
     }, { title: 'Registrar Pagamento', placeholder: 'PIX, Dinheiro, etc.' });
   };
 
   const getClienteNome = (id: string) => {
-    const cli = clientes.find(c => String(c.id) === String(id));
-    return cli?.name || cli?.nome || 'Desconhecido';
+    const cli = clientes.find(c => c.id === id);
+    return cli?.nome || 'Desconhecido';
   };
+
   const getTerapiaNome = (ag: Agendamento) => {
-    const terapia = terapias.find(t => String(t.id) === String(ag.therapy_item_id));
-    return terapia?.name || terapia?.nome || ag.therapy_name || 'Sem nome';
+    const terapia = terapias.find(t => t.id === ag.terapiaId);
+    return terapia?.nome || 'Sem nome';
   };
 
   const formatCurrency = (value: any) => {
@@ -102,7 +87,7 @@ export default function ConferenciaScreen({ onBack }: ConferenciaScreenProps) {
     return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(safeDate(`${date}T${time}:00`));
   };
 
-  const pendentesCount = agendamentos.filter(ag => ag.status_pagamento === 'Pendente' && ag.status_atendimento === 'Realizado').length;
+  const pendentesCount = agendamentosFiltrados.filter(ag => ag.statusPagamento === 'Pendente' && ag.statusAtendimento === 'Realizado').length;
 
   return (
     <div className="flex flex-col h-full bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)]">
@@ -140,14 +125,12 @@ export default function ConferenciaScreen({ onBack }: ConferenciaScreenProps) {
             Atendimentos Recentes
           </h3>
 
-          {loading ? (
-            <div className="py-10 text-center text-[var(--color-text-sec-light)]">Carregando...</div>
-          ) : agendamentos.length === 0 ? (
+          {agendamentosFiltrados.length === 0 ? (
             <div className="py-10 text-center text-[var(--color-text-sec-light)] bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] rounded-2xl border border-dashed border-gray-300 dark:border-gray-700">
               Nenhum atendimento nos últimos 7 dias.
             </div>
           ) : (
-            agendamentos.map(ag => {
+            agendamentosFiltrados.map(ag => {
               const isPendenteRealizado = ag.statusPagamento === 'Pendente' && ag.statusAtendimento === 'Realizado';
               
               return (
@@ -163,7 +146,7 @@ export default function ConferenciaScreen({ onBack }: ConferenciaScreenProps) {
                         <Calendar size={16} />
                       </div>
                       <span className="text-xs font-bold text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)]">
-                        {formatDate(ag.date, ag.time)}
+                        {formatDate(ag.data, ag.hora)}
                       </span>
                     </div>
                     {isPendenteRealizado && (
@@ -180,7 +163,7 @@ export default function ConferenciaScreen({ onBack }: ConferenciaScreenProps) {
                     </div>
                     <div className="flex-1">
                       <h4 className="font-bold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">
-                        {getClienteNome(ag.clientId)}
+                        {getClienteNome(ag.clienteId)}
                       </h4>
                       <div className="flex items-center gap-1 text-xs text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)]">
                         <Activity size={12} />
@@ -192,9 +175,9 @@ export default function ConferenciaScreen({ onBack }: ConferenciaScreenProps) {
                         {formatCurrency(ag.valorCobrado)}
                       </p>
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                        ag.status_pagamento === 'Pago' ? 'bg-[var(--color-success)]/10 text-[var(--color-success)]' : 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]'
+                        ag.statusPagamento === 'Pago' ? 'bg-[var(--color-success)]/10 text-[var(--color-success)]' : 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]'
                       }`}>
-                        {ag.status_pagamento}
+                        {ag.statusPagamento}
                       </span>
                     </div>
                   </div>

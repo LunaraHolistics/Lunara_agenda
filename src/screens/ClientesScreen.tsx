@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, Plus, Edit2, Trash2, X, Smartphone, ChevronDown } from 'lucide-react';
-import { StorageService, StorageKeys } from '../services/StorageService';
-import { AsyncStorage } from '../utils/storage';
+import { StorageService } from '../utils/storage';
 import { Cliente, ImportedContact } from '../types';
 import { useAppContext } from '../AppContext';
 
@@ -12,86 +11,71 @@ export default function ClientesScreen() {
   const [editingCliente, setEditingCliente] = useState<Cliente | null>(null);
   
   // Form states
-  const [name, setName] = useState('');
+  const [nome, setNome] = useState('');
   const [ddi, setDdi] = useState('+55');
-  const [phone, setPhone] = useState('');
+  const [telefone, setTelefone] = useState('');
   const [status, setStatus] = useState(true);
-  const [notes, setNotes] = useState('');
+  const [observacoes, setObservacoes] = useState('');
 
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const { showNotification, handleImportContacts } = useAppContext();
-
-  useEffect(() => {
-    loadClientes();
-    window.addEventListener('storage-sync', loadClientes);
-    return () => window.removeEventListener('storage-sync', loadClientes);
-  }, []);
-
-  const loadClientes = async () => {
-    const data = await StorageService.getItems<Cliente>(StorageKeys.CLIENTES);
-    setClientes(data || []);
-  };
+  const { showNotification, handleImportContacts, addCliente, updateCliente, deleteCliente, clientes: contextClientes } = useAppContext();
 
   const handleSave = async () => {
-    if (!name.trim()) {
+    if (!nome.trim()) {
       showNotification('Nome é obrigatório', 'error');
       return;
     }
 
     // Salva o DDI + Telefone (removendo caracteres da máscara para o banco)
-    const cleanPhone = phone.replace(/\D/g, '');
+    const cleanPhone = telefone.replace(/\D/g, '');
     const fullPhone = cleanPhone ? `${ddi}${cleanPhone}` : '';
 
-    const clienteData: Cliente = {
-      id: editingCliente ? editingCliente.id : Date.now().toString(),
-      userId: editingCliente?.userId || '',
-      name,
-      phone: fullPhone,
-      notes,
+    const clienteData: Omit<Cliente, 'id'> = {
+      nome,
+      telefone: fullPhone,
+      observacoes,
     };
 
     if (editingCliente) {
-      await StorageService.updateItem(StorageKeys.CLIENTES, clienteData);
+      updateCliente({ ...editingCliente, ...clienteData });
     } else {
-      await StorageService.saveItem(StorageKeys.CLIENTES, clienteData);
+      addCliente(clienteData);
     }
 
     closeModal();
-    loadClientes();
   };
 
   const handleDelete = async (id: string) => {
-    await StorageService.deleteItem(StorageKeys.CLIENTES, id);
+    deleteCliente(id);
     setConfirmDeleteId(null);
-    loadClientes();
   };
 
   const openModal = (cliente?: Cliente) => {
     if (cliente) {
       setEditingCliente(cliente);
-      setName(cliente.name || (cliente as any).nome || '');
+      setNome(cliente.nome || '');
       
-      if (cliente.phone && cliente.phone.startsWith('+')) {
+      if (cliente.telefone && cliente.telefone.startsWith('+')) {
         // Extrai o DDI (assume-se 2 ou 3 dígitos após o +)
-        const ddiMatch = cliente.phone.match(/^\+\d{2,3}/);
+        const ddiMatch = cliente.telefone.match(/^\+\d{2,3}/);
         const ddiPart = ddiMatch ? ddiMatch[0] : '+55';
-        const phonePart = cliente.phone.replace(ddiPart, '');
+        const phonePart = cliente.telefone.replace(ddiPart, '');
         
         setDdi(ddiPart);
         applyPhoneMask(phonePart, ddiPart);
       } else {
         setDdi('+55');
-        applyPhoneMask(cliente.phone || '', '+55');
+        applyPhoneMask(cliente.telefone || '', '+55');
       }
       
-      setNotes(cliente.notes || '');
+      setObservacoes(cliente.observacoes || '');
     } else {
       setEditingCliente(null);
-      setName('');
+      setNome('');
       setDdi('+55');
-      setPhone('');
+      setTelefone('');
       setStatus(true);
-      setNotes('');
+      setObservacoes('');
     }
     setIsModalOpen(true);
   };
@@ -107,20 +91,16 @@ export default function ClientesScreen() {
       const imported = await handleImportContacts();
       if (imported && imported.length > 0) {
         if (imported.length === 1) {
-          setName(imported[0].nome);
+          setNome(imported[0].nome);
           applyPhoneMask(imported[0].telefone, ddi);
         } else {
           for (const contact of imported) {
-            const newCliente: Cliente = {
-              id: Date.now().toString() + Math.random().toString(36).substring(7),
-              userId: '',
-              name: contact.nome,
-              phone: contact.telefone,
-              notes: 'Importado da agenda',
-            };
-            await StorageService.saveItem(StorageKeys.CLIENTES, newCliente);
+            addCliente({
+              nome: contact.nome,
+              telefone: contact.telefone,
+              observacoes: 'Importado da agenda',
+            });
           }
-          await loadClientes();
           closeModal();
           showNotification(`${imported.length} contatos importados!`, 'success');
         }
@@ -141,17 +121,17 @@ export default function ClientesScreen() {
         masked = digits.replace(/^(\d{2})(\d)/g, '($1) $2');
         masked = masked.replace(/(\d{5})(\d)/, '$1-$2');
       }
-      setPhone(masked.substring(0, 15));
+      setTelefone(masked.substring(0, 15));
     } else {
       // Outros países: Apenas números com espaços a cada 4 dígitos para legibilidade (estilo internacional)
       const internationalMask = digits.replace(/(\d{4})(?=\d)/g, '$1 ');
-      setPhone(internationalMask.substring(0, 20));
+      setTelefone(internationalMask.substring(0, 20));
     }
   };
 
-  const filteredClientes = clientes.filter(c => 
-    (c.name?.toLowerCase() || (c as any).nome?.toLowerCase() || '').includes(searchQuery.toLowerCase()) || 
-    (c.phone || '').includes(searchQuery)
+  const filteredClientes = contextClientes.filter(c => 
+    (c.nome?.toLowerCase() || '').includes(searchQuery.toLowerCase()) || 
+    (c.telefone || '').includes(searchQuery)
   );
 
   return (
@@ -178,9 +158,9 @@ export default function ClientesScreen() {
               <div key={cliente.id} className="bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] p-4 rounded-2xl shadow-sm flex items-center justify-between">
                 <div className="flex-1 min-w-0">
                   <h3 className="font-medium text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] text-lg truncate">
-                    {cliente.name || (cliente as any).nome || "Sem Nome"}
+                    {cliente.nome || "Sem Nome"}
                   </h3>
-                  {cliente.phone && <p className="text-[var(--color-text-sec-light)] text-sm">{cliente.phone}</p>}
+                  {cliente.telefone && <p className="text-[var(--color-text-sec-light)] text-sm">{cliente.telefone}</p>}
                 </div>
                 <div className="flex items-center gap-2">
                   <button onClick={() => openModal(cliente)} className="p-2 text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 rounded-full"><Edit2 size={20} /></button>
@@ -206,7 +186,7 @@ export default function ClientesScreen() {
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom-full duration-200">
+          <div className="bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] w-full max-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom-full duration-200">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-semibold">{editingCliente ? 'Editar Cliente' : 'Novo Cliente'}</h2>
               <button onClick={closeModal} className="text-gray-400"><X size={24} /></button>
@@ -221,7 +201,7 @@ export default function ClientesScreen() {
 
               <div>
                 <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Nome *</label>
-                <input type="text" value={name} onChange={(e) => setName(e.target.value)} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
+                <input type="text" value={nome} onChange={(e) => setNome(e.target.value)} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
               </div>
 
               <div>
@@ -232,7 +212,7 @@ export default function ClientesScreen() {
                     onChange={(e) => {
                       const newDdi = e.target.value;
                       setDdi(newDdi);
-                      applyPhoneMask(phone, newDdi); // Re-aplica a máscara ao trocar DDI
+                      applyPhoneMask(telefone, newDdi); // Re-aplica a máscara ao trocar DDI
                     }}
                     className="w-24 px-2 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)] font-bold"
                   >
@@ -243,7 +223,7 @@ export default function ClientesScreen() {
                   </select>
                   <input 
                     type="tel" 
-                    value={phone} 
+                    value={telefone} 
                     onChange={(e) => applyPhoneMask(e.target.value, ddi)} 
                     className="flex-1 px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" 
                     placeholder={ddi === '+55' ? '(00) 00000-0000' : 'Número completo'} 
@@ -253,7 +233,7 @@ export default function ClientesScreen() {
 
               <div>
                 <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Observações</label>
-                <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none min-h-[80px] resize-none" />
+                <textarea value={observacoes} onChange={(e) => setObservacoes(e.target.value)} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none min-h-[80px] resize-none" />
               </div>
 
               <button onClick={handleSave} className="w-full py-4 mt-2 bg-[var(--color-primary)] text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform">

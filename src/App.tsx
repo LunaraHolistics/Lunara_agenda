@@ -11,13 +11,11 @@ import ConferenciaScreen from './screens/ConferenciaScreen';
 import ConfiguracoesScreen from './screens/ConfiguracoesScreen';
 import Login from './screens/Login';
 import { AppProvider, useAppContext } from './AppContext';
-import { supabase } from './supabaseClient';
 
 type Tab = 'home' | 'clientes' | 'terapias' | 'pacotes' | 'agenda' | 'financeiro' | 'relatorios' | 'configuracoes';
 
 function AppContent() {
   const [activeTab, setActiveTab] = useState<Tab>('home');
-  const { session, loading } = useAppContext();
 
   useEffect(() => {
     if ('Notification' in window) {
@@ -26,18 +24,6 @@ function AppContent() {
       }
     }
   }, []);
-
-  if (loading) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-black">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#006699]"></div>
-      </div>
-    );
-  }
-
-  if (!session) {
-    return <Login onLoginSuccess={() => {}} />;
-  }
 
   const renderScreen = () => {
     switch (activeTab) {
@@ -94,13 +80,9 @@ function AppContent() {
             );
           })}
           <div className="mt-auto p-4 border-t border-gray-200 dark:border-zinc-800">
-            <button
-              onClick={() => supabase.auth.signOut()}
-              className="w-full flex items-center gap-3 px-2 py-3 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-xl transition-colors"
-            >
-              <LogOut size={20} />
-              <span className="font-medium">Sair</span>
-            </button>
+            <div className="px-2 py-3 text-gray-400 text-xs text-center italic">
+              Lunara Agenda v3 - Local First
+            </div>
           </div>
         </nav>
       </aside>

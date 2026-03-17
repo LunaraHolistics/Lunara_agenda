@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon, ShieldAlert, X, GripVertical, Clock, AlertCircle, CheckCircle2, Calendar } from 'lucide-react';
-import { StorageService, StorageKeys } from '../services/StorageService';
 import { Cliente, Terapia, Agendamento, Bloqueio, Pacote } from '../types';
-import { AsyncStorage } from '../utils/storage';
+import { StorageService } from '../utils/storage';
 import { useAppContext } from '../AppContext';
+import { DropZoneRetorno } from '../components/DropZoneRetorno';
 
 export default function AgendaScreen() {
   const { 
@@ -12,7 +12,6 @@ export default function AgendaScreen() {
     confirmAction, 
     safeDate, 
     promptAction, 
-    session,
     clientes,
     terapias,
     agendamentos,
@@ -20,7 +19,9 @@ export default function AgendaScreen() {
     bloqueios,
     updateAgendamento,
     updatePacote,
-    fetchData
+    setAgendamentos,
+    setPacotes,
+    addTransacao
   } = useAppContext();
   
   // State
@@ -34,7 +35,9 @@ export default function AgendaScreen() {
   const [showOrfaos, setShowOrfaos] = useState(false);
   const [expandedWeekIndex, setExpandedWeekIndex] = useState<number | null>(null);
   const [expandedClienteId, setExpandedClienteId] = useState<string | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const dragPreviewRef = useRef<HTMLDivElement>(null);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
 
   // Form State - Agendamento
@@ -69,14 +72,7 @@ export default function AgendaScreen() {
   const [blockMotivo, setBlockMotivo] = useState('');
 
   useEffect(() => {
-    fetchData();
-    const handleFocus = () => fetchData();
-    window.addEventListener('focus', handleFocus);
-    window.addEventListener('storage-sync', fetchData);
-    return () => {
-      window.removeEventListener('focus', handleFocus);
-      window.removeEventListener('storage-sync', fetchData);
-    };
+    // fetchData removido para Local-First
   }, [refreshTrigger]);
 
   // Calendar Helpers
@@ -92,10 +88,73 @@ export default function AgendaScreen() {
   const monthName = new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(currentMonth);
 
   // Handlers
-  const handleDragOver = (e: React.DragEvent) => e.preventDefault();
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDragStart = (e: React.DragEvent, data: { id?: string; clienteId?: string; terapiaId?: string; pacoteId?: string; itemPacoteId?: string; name: string; time: string }) => {
+    e.dataTransfer.effectAllowed = 'move';
+    if (data.id) e.dataTransfer.setData('agendamentoId', String(data.id));
+    if (data.clienteId) e.dataTransfer.setData('clienteId', String(data.clienteId));
+    if (data.terapiaId) e.dataTransfer.setData('terapiaId', String(data.terapiaId));
+    if (data.pacoteId) e.dataTransfer.setData('pacoteId', String(data.pacoteId));
+    if (data.itemPacoteId) e.dataTransfer.setData('itemPacoteId', String(data.itemPacoteId));
+
+    if (dragPreviewRef.current) {
+      const preview = dragPreviewRef.current;
+      const nameEl = preview.querySelector('.preview-name');
+      const timeEl = preview.querySelector('.preview-time');
+      if (nameEl) nameEl.textContent = data.name;
+      if (timeEl) timeEl.textContent = data.time;
+      
+      // Create a ghost image
+      preview.style.opacity = '0.7';
+      e.dataTransfer.setDragImage(preview, 40, 20);
+    }
+  };
+
+  const handleDropRetorno = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const agendamentoId = e.dataTransfer.getData('agendamentoId');
+    if (!agendamentoId) return;
+
+    const agendamento = agendamentos.find(a => String(a.id) === String(agendamentoId));
+    if (!agendamento) return;
+
+    // Se for pacote, incrementa
+    if (agendamento.pacoteId) {
+      setPacotes(prev => prev.map(p => {
+        if (String(p.id) === String(agendamento.pacoteId)) {
+          const updatedItens = p.itens.map((item) => {
+            if (String(item.terapiaId) === String(agendamento.terapiaId)) {
+              return { ...item, quantidadeRestante: (item.quantidadeRestante || 0) + 1 };
+            }
+            return item;
+          });
+          return { ...p, itens: updatedItens };
+        }
+        return p;
+      }));
+    }
+
+    // Remove do calendário
+    setAgendamentos(prev => prev.filter(a => String(a.id) !== String(agendamentoId)));
+    showNotification("Sessão devolvida ao pacote do cliente", "info");
+  };
 
   const handleDrop = (e: React.DragEvent, day: number) => {
     e.preventDefault();
+    e.stopPropagation();
+    console.log('Drop event triggered on day:', day);
+    
+    // Cleanup drag preview if needed (though browser usually handles this)
+    if (dragPreviewRef.current) {
+      dragPreviewRef.current.style.top = '-1000px';
+    }
+
     const agendamentoId = e.dataTransfer.getData('agendamentoId');
     const clienteId = e.dataTransfer.getData('clienteId');
     const terapiaId = e.dataTransfer.getData('terapiaId');
@@ -103,18 +162,15 @@ export default function AgendaScreen() {
     const itemPacoteId = e.dataTransfer.getData('itemPacoteId');
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
+    console.log('Drop data:', { agendamentoId, clienteId, terapiaId, pacoteId, itemPacoteId, dateStr });
+
     if (agendamentoId) {
       const itemToUpdate = agendamentos.find(a => String(a.id) === String(agendamentoId));
       
       if (itemToUpdate) {
-        // Garantimos que date e time sejam atualizados no estado local via updateAgendamento
-        const updatedItem = { ...itemToUpdate, date: dateStr, time: itemToUpdate.time };
-        
-        // updateAgendamento no AppContext já faz o update otimista no estado global
-        updateAgendamento(updatedItem).catch(err => {
-          console.error('Erro ao salvar agendamento:', err);
-          showNotification('Erro ao reagendar.', 'error');
-        });
+        // Optimistic UI: Update local state immediately
+        const updatedItem = { ...itemToUpdate, data: dateStr };
+        updateAgendamento(updatedItem);
         
         showNotification('Agendamento reagendado!', 'success');
       }
@@ -128,7 +184,7 @@ export default function AgendaScreen() {
       setFormPacoteId(pacoteId || undefined);
       setFormItemPacoteId(itemPacoteId || undefined);
       const terapia = terapias.find(t => t.id === terapiaId);
-      setFormValor(terapia?.valor || terapia?.price || 0);
+      setFormValor(terapia?.valor || 0);
       setFormHora('09:00');
       setIsModalOpen(true);
     }
@@ -154,89 +210,55 @@ export default function AgendaScreen() {
       }
     }
 
-    const saveAll = async (formaPagamento?: string) => {
+    const saveAll = (formaPagamento?: string) => {
       const newAgendamentos: Agendamento[] = [];
-      const prevPacotes = [...pacotes];
 
       for (let d of datesToSchedule) {
         const agendamentoId = crypto.randomUUID();
         const newAgendamento: Agendamento = {
           id: agendamentoId,
-          userId: session?.user?.id || '',
-          clientId: formClienteId,
-          therapyItemId: formTerapiaIds[0],
-          therapyName: selectedTerapias.map(t => t.name).join(' + '),
-          date: d,
-          time: formHora,
-          packageId: formPacoteId,
+          clienteId: formClienteId,
+          terapiaId: formTerapiaIds[0],
+          data: d,
+          hora: formHora,
+          pacoteId: formPacoteId,
           statusPagamento: formStatusPagamento,
           statusAtendimento: 'Agendado',
-          formaPagamento: formaPagamento,
-          dataPagamento: formaPagamento ? new Date().toISOString().split('T')[0] : undefined,
           valorCobrado: Number(formValor)
         };
         newAgendamentos.push(newAgendamento);
       }
 
       // Handle package updates if applicable
-      let updatedPacote: Pacote | null = null;
       if (formPacoteId && formItemPacoteId) {
-        const pacote = pacotes.find(p => p.id === formPacoteId);
-        if (pacote) {
-          const itensArray = Array.isArray(pacote.itens) ? pacote.itens : (typeof pacote.itens === 'string' ? JSON.parse(pacote.itens) : []);
-          const updatedItens = itensArray.map((item: any) => {
-            if (item.id === formItemPacoteId) {
-              return { ...item, quantidadeRestante: Number(item.quantidadeRestante || 0) - datesToSchedule.length };
-            }
-            return item;
-          });
-          updatedPacote = { ...pacote, itens: updatedItens };
-        }
+        setPacotes(prev => prev.map(p => {
+          if (p.id === formPacoteId) {
+            const updatedItens = p.itens.map((item) => {
+              if (item.id === formItemPacoteId) {
+                return { ...item, quantidadeRestante: Math.max(0, Number(item.quantidadeRestante || 0) - datesToSchedule.length) };
+              }
+              return item;
+            });
+            return { ...p, itens: updatedItens };
+          }
+          return p;
+        }));
       }
 
-      // Background persistence using AppContext methods for better reactivity
-      const persist = async () => {
-        try {
-          for (const ag of newAgendamentos) {
-            // Usamos o StorageService diretamente aqui para evitar o crypto.randomUUID() duplo do addAgendamento se quisermos manter o ID gerado acima
-            // Ou podemos simplesmente chamar addAgendamento se não nos importarmos com o ID exato gerado aqui.
-            // Para manter a consistência com o resto do app, vamos usar addAgendamento mas adaptado se necessário.
-            // Na verdade, addAgendamento no AppContext gera um novo ID. 
-            // Vamos usar o StorageService.saveItem diretamente para manter o ID que geramos para o financeiro.
-            await StorageService.saveItem(StorageKeys.AGENDAMENTOS, ag);
-            
-            if (formStatusPagamento === 'Pago') {
-              const cliente = clientes.find(c => String(c.id) === String(formClienteId));
-              const clienteNome = cliente?.name || cliente?.nome || 'Cliente';
-              const transacao = {
-                id: crypto.randomUUID(),
-                userId: session?.user?.id || '',
-                descricao: `Atendimento - ${clienteNome}`,
-                valor: Number(formValor),
-                data: new Date().toISOString().split('T')[0],
-                dataPagamento: new Date().toISOString().split('T')[0],
-                metodo: formaPagamento,
-                categoria: 'Atendimento',
-                status: 'Pago'
-              };
-              await StorageService.saveItem(StorageKeys.TRANSACOES, transacao);
-            }
-          }
+      // Update Agendamentos
+      setAgendamentos(prev => [...prev, ...newAgendamentos]);
 
-          if (updatedPacote) {
-            await updatePacote(updatedPacote);
-          }
-          
-          fetchData(); // Refresh global state
-        } catch (err) {
-          console.error("Erro na persistência em segundo plano:", err);
-          showNotification('Erro ao salvar no banco. Verifique sua conexão.', 'error');
-        }
-      };
-
-      // Optimistic UI update (manual since we have multiple agendamentos)
-      // We'll trigger a refresh after persist
-      persist();
+      // Handle Transactions if Paid
+      if (formStatusPagamento === 'Pago') {
+        const cliente = clientes.find(c => String(c.id) === String(formClienteId));
+        const clienteNome = cliente?.nome || 'Cliente';
+        addTransacao({
+          descricao: `Atendimento - ${clienteNome}`,
+          valor: Number(formValor) * datesToSchedule.length,
+          data: new Date().toISOString().split('T')[0],
+          status: 'Pago'
+        });
+      }
 
       setIsModalOpen(false);
       showNotification('Agendado com sucesso!', 'success');
@@ -253,33 +275,27 @@ export default function AgendaScreen() {
     }
   };
 
-  const handleDeleteAgendamento = async (agendamentoId: string) => {
-    confirmAction('Deseja realmente excluir este agendamento?', async () => {
-      try {
-        const allAgendamentos = await StorageService.getItems<Agendamento>(StorageKeys.AGENDAMENTOS);
-        const agendamento = allAgendamentos.find(a => String(a.id) === String(agendamentoId));
-        
-        if (agendamento?.packageId) {
-          const pacotesList = await StorageService.getItems<Pacote>(StorageKeys.PACOTES);
-          const pacote = pacotesList.find(p => String(p.id) === String(agendamento.packageId));
-          if (pacote) {
-            const itensArray = typeof pacote.itens === 'string' ? JSON.parse(pacote.itens) : (pacote.itens || []);
-            const updatedItens = itensArray.map((item: any) => {
-              if (String(item.id) === String(agendamento.therapyItemId)) {
+  const handleDeleteAgendamento = (agendamentoId: string) => {
+    confirmAction('Deseja realmente excluir este agendamento?', () => {
+      const agendamento = agendamentos.find(a => String(a.id) === String(agendamentoId));
+      
+      if (agendamento?.pacoteId) {
+        setPacotes(prev => prev.map(p => {
+          if (String(p.id) === String(agendamento.pacoteId)) {
+            const updatedItens = p.itens.map((item) => {
+              if (String(item.terapiaId) === String(agendamento.terapiaId)) {
                 return { ...item, quantidadeRestante: (item.quantidadeRestante || 0) + 1 };
               }
               return item;
             });
-            await StorageService.updateItem(StorageKeys.PACOTES, { ...pacote, itens: updatedItens });
+            return { ...p, itens: updatedItens };
           }
-        }
-
-        await StorageService.deleteItem(StorageKeys.AGENDAMENTOS, agendamentoId);
-        setRefreshTrigger(prev => prev + 1);
-        showNotification('Agendamento excluído!', 'success');
-      } catch (error) {
-        showNotification('Erro ao excluir agendamento.', 'error');
+          return p;
+        }));
       }
+
+      setAgendamentos(prev => prev.filter(a => String(a.id) !== String(agendamentoId)));
+      showNotification('Agendamento excluído!', 'success');
     }, { isDanger: true });
   };
 
@@ -339,12 +355,11 @@ export default function AgendaScreen() {
             {clientes.map(cliente => {
               const clientePacotes = pacotes.filter(p => p.clienteId === cliente.id);
               const orfaos = clientePacotes.flatMap(p => {
-                const itensArray: any[] = typeof p.itens === 'string' ? JSON.parse(p.itens) : (p.itens || []);
-                return itensArray.filter(item => Number(item.quantidadeRestante || 0) > 0).map(item => ({
+                return p.itens.filter(item => Number(item.quantidadeRestante || 0) > 0).map(item => ({
                   pacoteId: p.id,
                   itemPacoteId: item.id,
                   terapiaId: item.terapiaId,
-                  nome: terapias.find(t => t.id === item.terapiaId)?.name || 'Desconhecida',
+                  nome: terapias.find(t => t.id === item.terapiaId)?.nome || 'Desconhecida',
                   restante: item.quantidadeRestante
                 }));
               });
@@ -353,18 +368,20 @@ export default function AgendaScreen() {
 
               return (
                 <div key={cliente.id} className="bg-white dark:bg-gray-800 p-3 rounded-xl shadow-sm border border-orange-200 dark:border-orange-800 shrink-0 min-w-[160px]">
-                  <p className="text-[11px] font-bold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] mb-2 truncate border-b border-gray-100 dark:border-gray-700 pb-1">{cliente.name}</p>
+                  <p className="text-[11px] font-bold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] mb-2 truncate border-b border-gray-100 dark:border-gray-700 pb-1">{cliente.nome}</p>
                   <div className="space-y-1.5">
                     {orfaos.map((o, idx) => (
                       <div 
                         key={idx} 
                         draggable
-                        onDragStart={(e) => {
-                          e.dataTransfer.setData('clienteId', cliente.id);
-                          e.dataTransfer.setData('terapiaId', o.terapiaId);
-                          e.dataTransfer.setData('pacoteId', o.pacoteId);
-                          e.dataTransfer.setData('itemPacoteId', o.itemPacoteId);
-                        }}
+                        onDragStart={(e) => handleDragStart(e, {
+                          clienteId: cliente.id,
+                          terapiaId: o.terapiaId,
+                          pacoteId: o.pacoteId,
+                          itemPacoteId: o.itemPacoteId,
+                          name: cliente.nome || 'Cliente',
+                          time: 'Novo'
+                        })}
                         className="flex justify-between items-center gap-2 cursor-grab active:cursor-grabbing bg-orange-50 dark:bg-orange-900/20 p-1 rounded"
                       >
                         <span className="text-[10px] text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] truncate">{o.nome}</span>
@@ -380,6 +397,7 @@ export default function AgendaScreen() {
       )}
 
       {/* Calendar Grid */}
+      <DropZoneRetorno onDrop={handleDropRetorno} onDragOver={handleDragOver} />
       <div className="flex-1 overflow-y-auto p-4 pb-52 scrollbar-hide">
         <div className="grid grid-cols-7 gap-1 mb-2">
           {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(d => (
@@ -414,8 +432,8 @@ export default function AgendaScreen() {
                     
                     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                     const dayAgendamentos = agendamentos
-                      .filter(a => a.date === dateStr && a.statusAtendimento !== 'Cancelado')
-                      .sort((a, b) => a.time.localeCompare(b.time));
+                      .filter(a => a.data === dateStr && a.statusAtendimento !== 'Cancelado')
+                      .sort((a, b) => a.hora.localeCompare(b.hora));
                     const hasBloqueio = bloqueios.some(b => b.data === dateStr);
                     const isToday = new Date().toISOString().startsWith(dateStr);
 
@@ -446,7 +464,7 @@ export default function AgendaScreen() {
                         <div className="flex flex-col gap-1">
                           {isExpanded ? (
                             dayAgendamentos.map(ag => {
-                              const cliente = clientes.find(c => c.id === ag.clientId);
+                              const cliente = clientes.find(c => c.id === ag.clienteId);
                               const isRealizado = ag.statusAtendimento === 'Realizado';
                               return (
                                 <div 
@@ -454,17 +472,21 @@ export default function AgendaScreen() {
                                   draggable
                                   onDragStart={(e) => {
                                     e.stopPropagation();
-                                    e.dataTransfer.setData('agendamentoId', ag.id);
+                                    handleDragStart(e, {
+                                      id: ag.id,
+                                      name: cliente?.nome || 'Cliente',
+                                      time: ag.hora
+                                    });
                                   }}
                                   className={`text-[9px] p-1 rounded border leading-tight ${
                                     isRealizado ? 'bg-gray-100 text-gray-400' : 'bg-white dark:bg-gray-700 text-[var(--color-primary)] border-[var(--color-primary)]/30'
                                   }`}
                                 >
                                   <div className="flex justify-between items-center font-black">
-                                    <span>{ag.time}</span>
+                                    <span>{ag.hora}</span>
                                     {isRealizado && <CheckCircle2 size={8} />}
                                   </div>
-                                  <div className="truncate">{cliente?.name?.split(' ')[0]}</div>
+                                  <div className="truncate">{cliente?.nome?.split(' ')[0]}</div>
                                 </div>
                               );
                             })
@@ -472,7 +494,7 @@ export default function AgendaScreen() {
                             dayAgendamentos.length > 0 && (
                               <>
                                 <div className="text-[9px] px-1 py-0.5 rounded bg-[var(--color-primary)] text-white font-bold leading-tight truncate">
-                                  {clientes.find(c => c.id === dayAgendamentos[0].clientId)?.name?.split(' ')[0]}
+                                  {clientes.find(c => c.id === dayAgendamentos[0].clienteId)?.nome?.split(' ')[0]}
                                 </div>
                                 {dayAgendamentos.length > 1 && (
                                   <div className="text-[8px] font-black text-[var(--color-primary)] mt-0.5 bg-[var(--color-primary)]/10 px-1 rounded-sm w-fit">
@@ -504,12 +526,11 @@ export default function AgendaScreen() {
             const isExpanded = expandedClienteId === cliente.id;
             const clientePacotes = pacotes.filter(p => p.clienteId === cliente.id);
             const terapiasContratadas = clientePacotes.flatMap(p => {
-              const itensArray: any[] = typeof p.itens === 'string' ? JSON.parse(p.itens) : (p.itens || []);
-              return itensArray.map(item => ({
+              return p.itens.map(item => ({
                 pacoteId: p.id,
                 itemPacoteId: item.id,
                 terapiaId: item.terapiaId,
-                nome: terapias.find(t => t.id === item.terapiaId)?.name || 'Desconhecida',
+                nome: terapias.find(t => t.id === item.terapiaId)?.nome || 'Desconhecida',
                 restante: item.quantidadeRestante,
                 total: item.quantidadeTotal
               }));
@@ -526,7 +547,7 @@ export default function AgendaScreen() {
                   }`}
                 >
                   <span className="text-xs font-bold truncate">
-                    {cliente.name?.split(' ')[0] || "Sem Nome"}
+                    {cliente.nome?.split(' ')[0] || "Sem Nome"}
                   </span>
                   {terapiasContratadas.length > 0 && <div className={`w-2 h-2 rounded-full ${isExpanded ? 'bg-white' : 'bg-[var(--color-primary)]'}`}></div>}
                 </div>
@@ -540,10 +561,14 @@ export default function AgendaScreen() {
                           draggable={tc.restante > 0}
                           onDragStart={(e) => {
                             if (tc.restante <= 0) { e.preventDefault(); return; }
-                            e.dataTransfer.setData('clienteId', cliente.id);
-                            e.dataTransfer.setData('terapiaId', tc.terapiaId);
-                            e.dataTransfer.setData('pacoteId', tc.pacoteId);
-                            e.dataTransfer.setData('itemPacoteId', tc.itemPacoteId);
+                            handleDragStart(e, {
+                              clienteId: cliente.id,
+                              terapiaId: tc.terapiaId,
+                              pacoteId: tc.pacoteId,
+                              itemPacoteId: tc.itemPacoteId,
+                              name: cliente.nome || 'Cliente',
+                              time: 'Novo'
+                            });
                           }}
                           className={`px-3 py-2.5 rounded-xl border text-[10px] font-black flex justify-between items-center transition-all ${
                             tc.restante > 0 
@@ -565,6 +590,18 @@ export default function AgendaScreen() {
               </div>
             );
           })}
+        </div>
+      </div>
+
+      {/* Drag Preview (Hidden) */}
+      <div 
+        ref={dragPreviewRef}
+        className="fixed -top-full left-0 p-3 bg-[var(--color-primary)] text-white rounded-xl shadow-2xl flex flex-col gap-1 min-w-[140px] pointer-events-none z-[-1] border border-white/20"
+      >
+        <span className="preview-name text-sm font-bold truncate">Cliente</span>
+        <div className="flex items-center gap-2 opacity-90">
+          <Clock size={12} />
+          <span className="preview-time text-xs font-medium">00:00</span>
         </div>
       </div>
 
@@ -592,7 +629,7 @@ export default function AgendaScreen() {
               <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-800">
                 <label className="block text-[10px] font-black uppercase tracking-widest text-[var(--color-text-sec-light)] mb-2">Cliente</label>
                 <div className="text-lg font-bold text-[var(--color-primary)]">
-                  {clientes.find(c => c.id === formClienteId)?.name || "Cliente"}
+                  {clientes.find(c => c.id === formClienteId)?.nome || "Cliente"}
                 </div>
               </div>
 
@@ -603,7 +640,7 @@ export default function AgendaScreen() {
                     const t = terapias.find(x => x.id === tid);
                     return (
                       <div key={`${tid}-${index}`} className="flex items-center justify-between bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] px-4 py-3 rounded-2xl border border-[var(--color-primary)]/10 shadow-sm">
-                        <span className="text-sm font-bold">{t?.name || "Terapia"} <span className="text-xs font-normal opacity-60 ml-1">({t?.duration || 0}m)</span></span>
+                        <span className="text-sm font-bold">{t?.nome || "Terapia"} <span className="text-xs font-normal opacity-60 ml-1">({t?.duracao || 0}m)</span></span>
                         <button 
                           onClick={() => {
                             const newIds = [...formTerapiaIds];

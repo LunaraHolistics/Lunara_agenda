@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { supabase } from '../supabaseClient';
+// import { supabase } from '../supabaseClient';
 import { LogIn, Mail, Lock, Loader2, UserPlus } from 'lucide-react';
 import { useAppContext } from '../AppContext';
 
@@ -22,16 +22,9 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     setStatusMsg(null);
 
     try {
-      if (isSignUp) {
-        const { error } = await supabase.auth.signUp({ email, password });
-        if (error) throw error;
-        showNotification('Cadastro realizado! Verifique seu e-mail ou tente fazer login.', 'success');
-        setIsSignUp(false);
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        onLoginSuccess();
-      }
+      // Login bypass for local-first
+      showNotification('Acesso local liberado!', 'success');
+      onLoginSuccess();
     } catch (err: any) {
       setError(err.message);
       setStatusMsg("Falha no login: " + err.message);

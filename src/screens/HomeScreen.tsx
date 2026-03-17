@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { DollarSign, Clock, Tag, Plus, ChevronRight, PieChart, Settings, Check, Trash2, AlertTriangle, CheckCircle, Cloud, Loader2 } from 'lucide-react';
-import { StorageService, StorageKeys } from '../services/StorageService';
-import { Agendamento, Cliente, Terapia, Pacote } from '../types';
+import React, { useState, useMemo } from 'react';
+import { DollarSign, Clock, Tag, Plus, ChevronRight, PieChart, Settings, Check, Trash2, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Agendamento } from '../types';
 import FinanceiroScreen from './FinanceiroScreen';
 import ConfiguracoesScreen from './ConfiguracoesScreen';
 import ContasAReceberScreen from './ContasAReceberScreen';
@@ -9,160 +8,120 @@ import ConferenciaScreen from './ConferenciaScreen';
 import { useAppContext } from '../AppContext';
 
 export default function HomeScreen() {
-  const { showNotification, confirmAction, safeDate, completeAppointment, updatePacote, deleteAgendamento } = useAppContext();
-  const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
-  const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [terapias, setTerapias] = useState<Terapia[]>([]);
-  const [pacotes, setPacotes] = useState<Pacote[]>([]);
+  const { 
+    showNotification, 
+    confirmAction, 
+    safeDate, 
+    completeAppointment, 
+    updatePacote, 
+    deleteAgendamento,
+    agendamentos,
+    clientes,
+    terapias,
+    pacotes,
+    transacoes
+  } = useAppContext();
+
   const [showFinanceiro, setShowFinanceiro] = useState(false);
   const [showConfiguracoes, setShowConfiguracoes] = useState(false);
   const [showContasAReceber, setShowContasAReceber] = useState(false);
   const [showConferencia, setShowConferencia] = useState(false);
-  const [pendingCount, setPendingCount] = useState(0);
-  const [isSyncing, setIsSyncing] = useState(false);
-
-  useEffect(() => {
-    loadData();
-    checkPendingChanges();
-    updatePendingCount();
-    
-    window.addEventListener('storage-sync', loadData);
-    window.addEventListener('pending-changes-update', updatePendingCount);
-    return () => {
-      window.removeEventListener('storage-sync', loadData);
-      window.removeEventListener('pending-changes-update', updatePendingCount);
-    };
-  }, [showFinanceiro, showConfiguracoes, showContasAReceber, showConferencia]); // Reload when returning from other screens
-
-  const updatePendingCount = async () => {
-    const pending = await StorageService.getPendingChanges();
-    setPendingCount(pending.length);
-  };
-
-  const handleSync = async () => {
-    if (pendingCount === 0) return;
-    setIsSyncing(true);
-    try {
-      await StorageService.syncWithSupabase();
-      showNotification('Nuvem atualizada!', 'success');
-    } catch (e) {
-      showNotification('Erro ao sincronizar', 'error');
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  const checkPendingChanges = async () => {
-    const pending = await StorageService.getPendingChanges();
-    if (pending.length > 0) {
-      confirmAction(`Você possui ${pending.length} alterações locais. Deseja sincronizar com o servidor agora?`, async () => {
-        await StorageService.syncWithSupabase();
-        showNotification('Sincronização concluída!', 'success');
-      });
-    }
-  };
-
-  const loadData = async () => {
-    const [agends, clis, ters, pacs, trans] = await Promise.all([
-      StorageService.getItems<Agendamento>(StorageKeys.AGENDAMENTOS),
-      StorageService.getItems<Cliente>(StorageKeys.CLIENTES),
-      StorageService.getItems<Terapia>(StorageKeys.TERAPIAS),
-      StorageService.getItems<Pacote>(StorageKeys.PACOTES),
-      StorageService.getItems<any>(StorageKeys.TRANSACOES),
-    ]);
-    setAgendamentos(agends);
-    setClientes(clis);
-    setTerapias(ters);
-    setPacotes(pacs);
-    setTransacoes(trans);
-  };
-
-  const [transacoes, setTransacoes] = useState<any[]>([]);
 
   const currentMonth = new Date().getMonth();
   const currentYear = new Date().getFullYear();
 
   // Filtra agendamentos do mês atual (não cancelados)
-  const agendamentosMes = agendamentos.filter(ag => {
-    const date = safeDate(`${ag.date}T${ag.time}`);
-    return date.getMonth() === currentMonth && 
-           date.getFullYear() === currentYear &&
-           ag.status_atendimento !== 'Cancelado';
-  });
+  const agendamentosMes = useMemo(() => {
+    return agendamentos.filter(ag => {
+      const date = safeDate(`${ag.data}T${ag.hora}`);
+      return date.getMonth() === currentMonth && 
+             date.getFullYear() === currentYear &&
+             ag.statusAtendimento !== 'Cancelado';
+    });
+  }, [agendamentos, currentMonth, currentYear, safeDate]);
 
   // Cálculos dos Cards
-  const transacoesMes = transacoes.filter(t => {
-    if (!t.data) return false;
-    const date = safeDate(`${t.data}T00:00:00`);
-    return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
-  });
+  const transacoesMes = useMemo(() => {
+    return transacoes.filter(t => {
+      if (!t.data) return false;
+      const date = safeDate(`${t.data}T00:00:00`);
+      return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
+    });
+  }, [transacoes, currentMonth, currentYear, safeDate]);
 
-  const totalRecebido = transacoesMes
-    .filter(t => t.status === 'Pago' && t.tipo === 'Ganho' && t.valor != null)
-    .reduce((acc, t) => acc + Number(t.valor), 0);
+  const totalRecebido = useMemo(() => {
+    return transacoesMes
+      .filter(t => t.status === 'Pago' && t.tipo === 'Receita' && t.valor != null)
+      .reduce((acc, t) => acc + Number(t.valor), 0);
+  }, [transacoesMes]);
 
-  const totalPendente = transacoesMes
-    .filter(t => t.status === 'Pendente' && t.tipo === 'Ganho' && t.valor != null)
-    .reduce((acc, t) => acc + Number(t.valor), 0);
+  const totalPendente = useMemo(() => {
+    return transacoesMes
+      .filter(t => t.status === 'Pendente' && t.tipo === 'Receita' && t.valor != null)
+      .reduce((acc, t) => acc + Number(t.valor), 0);
+  }, [transacoesMes]);
 
-  const pacotesMes = pacotes.filter(p => {
-    const pDate = safeDate(`${p.mesReferencia}-01T00:00:00`);
-    return pDate.getMonth() === currentMonth && pDate.getFullYear() === currentYear;
-  });
+  const pacotesMes = useMemo(() => {
+    return pacotes.filter(p => {
+      const pDate = safeDate(`${p.mesReferencia}-01T00:00:00`);
+      return pDate.getMonth() === currentMonth && pDate.getFullYear() === currentYear;
+    });
+  }, [pacotes, currentMonth, currentYear, safeDate]);
 
-  const totalDesconto = agendamentosMes
-    .reduce((acc, ag) => acc + (Number(ag.desconto) || 0), 0) + 
-    pacotesMes.reduce((acc, p) => acc + (Number((p as any).valorDescontoTotal) || 0), 0);
+  const totalDesconto = useMemo(() => {
+    // Cálculo simplificado de descontos (pode ser expandido se houver campo específico)
+    return 0; 
+  }, []);
 
-  const totalRecebidoFixo = transacoesMes
-    .filter(t => t.status === 'Pago' && t.tipo === 'Ganho' && t.categoria === 'Pacote')
-    .reduce((acc, t) => acc + Number(t.valor), 0);
+  const totalRecebidoFixo = useMemo(() => {
+    return transacoesMes
+      .filter(t => t.status === 'Pago' && t.tipo === 'Receita' && t.descricao.toLowerCase().includes('pacote'))
+      .reduce((acc, t) => acc + Number(t.valor), 0);
+  }, [transacoesMes]);
 
-  const totalRecebidoAvulso = transacoesMes
-    .filter(t => t.status === 'Pago' && t.tipo === 'Ganho' && t.categoria === 'Sessão Avulsa')
-    .reduce((acc, t) => acc + Number(t.valor), 0);
+  const totalRecebidoAvulso = useMemo(() => {
+    return transacoesMes
+      .filter(t => t.status === 'Pago' && t.tipo === 'Receita' && !t.descricao.toLowerCase().includes('pacote'))
+      .reduce((acc, t) => acc + Number(t.valor), 0);
+  }, [transacoesMes]);
 
   // Próximos Atendimentos (Futuros e do dia atual)
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  
-  const proximosAtendimentos = agendamentos
-    .filter(ag => {
-      const agDate = safeDate(`${ag.date}T${ag.time}`);
-      return agDate.getTime() >= todayStart.getTime() && ag.statusAtendimento === 'Agendado';
-    })
-    .sort((a, b) => safeDate(`${a.date}T${a.time}`).getTime() - safeDate(`${b.date}T${b.time}`).getTime())
-    .slice(0, 5);
+  const proximosAtendimentos = useMemo(() => {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    
+    return agendamentos
+      .filter(ag => {
+        const agDate = safeDate(`${ag.data}T${ag.hora}`);
+        return agDate.getTime() >= todayStart.getTime() && ag.statusAtendimento === 'Agendado';
+      })
+      .sort((a, b) => safeDate(`${a.data}T${a.hora}`).getTime() - safeDate(`${b.data}T${b.hora}`).getTime())
+      .slice(0, 5);
+  }, [agendamentos, safeDate]);
 
-  const handleConcluir = async (agendamento: Agendamento) => {
-    await completeAppointment(agendamento.id);
-    loadData();
+  const handleConcluir = (agendamento: Agendamento) => {
+    completeAppointment(agendamento.id);
   };
 
-  const handleExcluir = async (agendamento: Agendamento) => {
-    if (agendamento.packageId && agendamento.therapy_item_id) {
-      confirmAction('Deseja excluir este agendamento e devolver a sessão ao pacote do cliente?', async () => {
-        const pacote = pacotes.find(p => p.id === agendamento.packageId);
+  const handleExcluir = (agendamento: Agendamento) => {
+    if (agendamento.pacoteId) {
+      confirmAction('Deseja excluir este agendamento e devolver a sessão ao pacote do cliente?', () => {
+        const pacote = pacotes.find(p => p.id === agendamento.pacoteId);
         if (pacote) {
-          let itens = pacote.itens || pacote.therapies;
-          if (typeof itens === 'string') {
-            try { itens = JSON.parse(itens); } catch (e) { itens = []; }
-          }
-          const updatedItens = (Array.isArray(itens) ? itens : []).map(item => {
-            if (item.id === agendamento.therapy_item_id) {
+          const updatedItens = pacote.itens.map(item => {
+            if (item.terapiaId === agendamento.terapiaId) {
               return { ...item, quantidadeRestante: (Number(item.quantidadeRestante) || 0) + 1 };
             }
             return item;
           });
-          const updatedPacote = { ...pacote, itens: updatedItens };
-          await updatePacote(updatedPacote);
+          updatePacote({ ...pacote, itens: updatedItens });
         }
-        await deleteAgendamento(agendamento.id);
+        deleteAgendamento(agendamento.id);
         showNotification('Agendamento excluído e sessão devolvida ao pacote.', 'success');
       }, { isDanger: true });
     } else {
-      confirmAction('Deseja realmente excluir este agendamento?', async () => {
-        await deleteAgendamento(agendamento.id);
+      confirmAction('Deseja realmente excluir este agendamento?', () => {
+        deleteAgendamento(agendamento.id);
         showNotification('Agendamento excluído com sucesso.', 'success');
       }, { isDanger: true });
     }
@@ -182,12 +141,13 @@ export default function HomeScreen() {
   };
 
   const getClienteNome = (id: string) => {
-    const cli = clientes.find(c => String(c.id) === String(id));
-    return cli?.name || cli?.nome || 'Desconhecido';
+    const cli = clientes.find(c => c.id === id);
+    return cli?.nome || 'Desconhecido';
   };
+
   const getTerapiaNome = (ag: Agendamento) => {
-    const terapia = terapias.find(t => String(t.id) === String(ag.therapy_item_id));
-    return terapia?.name || terapia?.nome || ag.therapy_name || 'Sem nome';
+    const terapia = terapias.find(t => t.id === ag.terapiaId);
+    return terapia?.nome || 'Sem nome';
   };
 
   if (showFinanceiro) {
@@ -207,9 +167,9 @@ export default function HomeScreen() {
   }
 
   const pastPendingCount = agendamentos.filter(ag => 
-    ag.status_atendimento === 'Realizado' && 
-    ag.status_pagamento === 'Pendente' &&
-    safeDate(`${ag.date}T${ag.time}`) < new Date()
+    ag.statusAtendimento === 'Realizado' && 
+    ag.statusPagamento === 'Pendente' &&
+    safeDate(`${ag.data}T${ag.hora}`) < new Date()
   ).length;
 
   return (
@@ -225,19 +185,6 @@ export default function HomeScreen() {
           </p>
         </div>
         <div className="flex gap-2">
-          <button 
-            onClick={handleSync}
-            className={`p-3 rounded-full shadow-sm transition-all relative ${isSyncing ? 'animate-spin' : ''} ${pendingCount > 0 ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-600'}`}
-            aria-label="Sincronizar"
-            title={pendingCount > 0 ? `${pendingCount} alterações pendentes` : "Sincronizado"}
-          >
-            {isSyncing ? <Loader2 size={24} /> : <Cloud size={24} />}
-            {pendingCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
-                {pendingCount}
-              </span>
-            )}
-          </button>
           <button 
             onClick={() => setShowConferencia(true)}
             className="p-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] rounded-full text-orange-500 shadow-sm"
@@ -354,11 +301,11 @@ export default function HomeScreen() {
           ) : (
             <div className="space-y-3">
               {proximosAtendimentos.map(ag => (
-                <div key={ag.id} className={`bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] p-4 rounded-2xl shadow-sm flex items-center gap-4 border-l-4 ${ag.status_pagamento === 'Pago' ? 'border-[var(--color-success)]' : 'border-[var(--color-warning)]'}`}>
-                  <div className={`flex flex-col items-center justify-center w-14 h-14 rounded-xl relative ${ag.status_pagamento === 'Pago' ? 'bg-[var(--color-success)]/10 text-[var(--color-success)]' : 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]'}`}>
-                    <span className="text-sm font-bold">{formatDate(ag.date)}</span>
-                    <span className="text-xs font-medium">{formatTime(ag.date, ag.time)}</span>
-                    {new Date(`${ag.date}T${ag.time}`) < new Date() && (
+                <div key={ag.id} className={`bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] p-4 rounded-2xl shadow-sm flex items-center gap-4 border-l-4 ${ag.statusPagamento === 'Pago' ? 'border-[var(--color-success)]' : 'border-[var(--color-warning)]'}`}>
+                  <div className={`flex flex-col items-center justify-center w-14 h-14 rounded-xl relative ${ag.statusPagamento === 'Pago' ? 'bg-[var(--color-success)]/10 text-[var(--color-success)]' : 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]'}`}>
+                    <span className="text-sm font-bold">{formatDate(ag.data)}</span>
+                    <span className="text-xs font-medium">{formatTime(ag.data, ag.hora)}</span>
+                    {safeDate(`${ag.data}T${ag.hora}`) < new Date() && (
                       <div className="absolute -top-1 -right-1 bg-gray-400 text-white rounded-full p-0.5 shadow-sm">
                         <Clock size={10} />
                       </div>
@@ -366,7 +313,7 @@ export default function HomeScreen() {
                   </div>
                   <div className="flex-1">
                     <h4 className="font-medium text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">
-                      {getClienteNome(ag.clientId)}
+                      {getClienteNome(ag.clienteId)}
                     </h4>
                     <p className="text-xs text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] mt-0.5">
                       {getTerapiaNome(ag)}

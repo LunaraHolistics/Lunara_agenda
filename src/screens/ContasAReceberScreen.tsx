@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, Search, CheckCircle, Calendar, DollarSign, CreditCard, Banknote, Landmark, User, X } from 'lucide-react';
-import { StorageService, StorageKeys } from '../services/StorageService';
-import { Agendamento, Cliente, Terapia, Pacote } from '../types';
+import { Agendamento, Cliente, Terapia, Pacote, Transacao } from '../types';
 import { useAppContext } from '../AppContext';
-import { supabase } from '../supabaseClient';
 
 interface ContasAReceberScreenProps {
   onBack: () => void;
@@ -21,7 +19,19 @@ type Pendencia = {
 };
 
 export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenProps) {
-  const { showNotification, session } = useAppContext();
+  const { 
+    showNotification, 
+    clientes,
+    terapias,
+    agendamentos,
+    pacotes,
+    transacoes,
+    updatePacote,
+    updateAgendamento,
+    addTransacao,
+    updateTransacao
+  } = useAppContext();
+  
   const [pendencias, setPendencias] = useState<Pendencia[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
@@ -35,35 +45,26 @@ export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenPro
 
   useEffect(() => {
     loadPendencias();
-  }, []);
+  }, [pacotes, agendamentos, clientes]);
 
-  const loadPendencias = async () => {
+  const loadPendencias = () => {
     setLoading(true);
     try {
-      const [agends, clis, pacs] = await Promise.all([
-        StorageService.getItems<Agendamento>(StorageKeys.AGENDAMENTOS),
-        StorageService.getItems<Cliente>(StorageKeys.CLIENTES),
-        StorageService.getItems<Pacote>(StorageKeys.PACOTES),
-      ]);
-
       const list: Pendencia[] = [];
 
       // Pacotes Pendentes
-      pacs.forEach(p => {
-        let hist: any = p.historicoPagamento;
-        if (typeof hist === 'string') {
-          try { hist = JSON.parse(hist); } catch (e) { hist = {}; }
-        }
-
-        if (hist?.status === 'Pendente') {
-          const cliente = clis.find(c => String(c.id) === String(p.clienteId));
+      pacotes.forEach(p => {
+        // Se o statusPagamento for Pendente ou não existir (default para pacotes novos se não marcado como pago)
+        // No PacotesScreen, se não for pago, ele não tem statusPagamento ou é Pendente.
+        if (p.statusPagamento === 'Pendente' || !p.statusPagamento) {
+          const cliente = clientes.find(c => c.id === p.clienteId);
           list.push({
             id: p.id,
             tipo: 'pacote',
             clienteId: p.clienteId,
-            clienteNome: cliente?.name || 'Desconhecido',
+            clienteNome: cliente?.nome || 'Desconhecido',
             descricao: `Pacote - ${p.mesReferencia || 'Mensal'}`,
-            valor: Number(hist?.valor || p.valorFinal) || 0,
+            valor: p.valorFinal || 0,
             dataOriginal: new Date().toISOString(),
             originalItem: p
           });
@@ -71,20 +72,23 @@ export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenPro
       });
 
       // Agendamentos Pendentes
-      agends.forEach(ag => {
+      agendamentos.forEach(ag => {
         if (ag.statusPagamento === 'Pendente') {
-          const isFromTotalPackage = ag.packageId && pacs.find(p => String(p.id) === String(ag.packageId))?.tipoPacote === 'Mensal Fixo';
+          // Se for de um pacote mensal fixo, o pagamento é pelo pacote, não pelo agendamento
+          const pacote = ag.pacoteId ? pacotes.find(p => p.id === ag.pacoteId) : null;
+          const isFromTotalPackage = pacote?.tipoPacote === 'Mensal Fixo';
           
           if (!isFromTotalPackage) {
-            const cliente = clis.find(c => String(c.id) === String(ag.clientId));
+            const cliente = clientes.find(c => c.id === ag.clienteId);
+            const terapia = terapias.find(t => t.id === ag.terapiaId);
             list.push({
               id: ag.id,
               tipo: 'agendamento',
-              clienteId: ag.clientId,
-              clienteNome: cliente?.name || 'Desconhecido',
-              descricao: ag.therapyName || 'Atendimento',
-              valor: Number(ag.valorCobrado) || 0,
-              dataOriginal: ag.date ? `${ag.date}T${ag.time || '00:00'}:00` : new Date().toISOString(),
+              clienteId: ag.clienteId,
+              clienteNome: cliente?.nome || 'Desconhecido',
+              descricao: terapia?.nome || 'Atendimento',
+              valor: ag.valorCobrado || 0,
+              dataOriginal: `${ag.data}T${ag.hora || '00:00'}:00`,
               originalItem: ag
             });
           }
@@ -99,14 +103,13 @@ export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenPro
     }
   };
 
-  const confirmBaixa = async () => {
-    if (!selectedPendencia || !session?.user?.id) {
-      showNotification('Sessão inválida ou pendência não selecionada.', 'error');
+  const confirmBaixa = () => {
+    if (!selectedPendencia) {
+      showNotification('Pendência não selecionada.', 'error');
       return;
     }
 
     try {
-      const transacoes = await StorageService.getItems<any>(StorageKeys.TRANSACOES);
       let transacaoExistente = null;
 
       if (selectedPendencia.tipo === 'pacote') {
@@ -115,67 +118,52 @@ export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenPro
         transacaoExistente = transacoes.find(t => t.agendamentoId === selectedPendencia.id);
       }
 
-      const transacaoFinanceira = {
+      const transacaoFinanceira: Transacao = {
         id: transacaoExistente ? transacaoExistente.id : crypto.randomUUID(),
-        userId: session.user.id,
         descricao: `Recebimento: ${selectedPendencia.clienteNome} (${selectedPendencia.descricao})`,
         valor: Number(valorFinal),
         data: dataPagamento,
-        dataPagamento: dataPagamento,
         metodo: formaPagamento,
-        categoria: selectedPendencia.tipo === 'pacote' ? 'Pacotes' : 'Atendimento',
+        categoria: selectedPendencia.tipo === 'pacote' ? 'Pacotes' : 'Terapias',
         status: 'Pago',
-        pacoteId: selectedPendencia.tipo === 'pacote' ? selectedPendencia.id : null
+        pacoteId: selectedPendencia.tipo === 'pacote' ? selectedPendencia.id : undefined,
+        agendamentoId: selectedPendencia.tipo === 'agendamento' ? selectedPendencia.id : undefined,
+        tipo: 'Receita'
       };
 
-      // Background persistence
-      const persist = async () => {
-        try {
-          if (transacaoExistente) {
-            await StorageService.updateItem(StorageKeys.TRANSACOES, transacaoFinanceira);
-          } else {
-            await StorageService.saveItem(StorageKeys.TRANSACOES, transacaoFinanceira);
-          }
-          
-          // Atualizar o item de origem (Pacote ou Agendamento)
-          if (selectedPendencia.tipo === 'pacote') {
-            const p = selectedPendencia.originalItem as Pacote;
-            const updatedPacote: Pacote = {
-              ...p,
-              historicoPagamento: {
-                status: 'Pago',
-                valor: valorFinal,
-                data: dataPagamento,
-                forma: formaPagamento,
-                banco: banco || undefined
-              }
-            };
-            await StorageService.updateItem(StorageKeys.PACOTES, updatedPacote);
-          } else {
-            const ag = selectedPendencia.originalItem as Agendamento;
-            const updatedAg: Agendamento = {
-              ...ag,
-              statusPagamento: 'Pago',
-              valorCobrado: valorFinal,
-              dataPagamento: dataPagamento,
-              formaPagamento: formaPagamento,
-              bancoPagamento: banco || undefined
-            };
-            await StorageService.updateItem(StorageKeys.AGENDAMENTOS, updatedAg);
-          }
-        } catch (err) {
-          console.error("Erro na persistência da baixa:", err);
-          showNotification('Erro ao salvar no banco. Verifique sua conexão.', 'error');
-        }
-      };
-
-      persist();
+      if (transacaoExistente) {
+        updateTransacao(transacaoFinanceira);
+      } else {
+        addTransacao(transacaoFinanceira);
+      }
       
-      // Atualiza estado local imediatamente
-      setPendencias(prev => prev.filter(p => p.id !== selectedPendencia.id));
+      // Atualizar o item de origem (Pacote ou Agendamento)
+      if (selectedPendencia.tipo === 'pacote') {
+        const p = selectedPendencia.originalItem as Pacote;
+        const updatedPacote: Pacote = {
+          ...p,
+          statusPagamento: 'Pago',
+          valorFinal: Number(valorFinal),
+          dataPagamento: dataPagamento,
+          formaPagamento: formaPagamento,
+          bancoPagamento: banco || undefined
+        };
+        updatePacote(updatedPacote);
+      } else {
+        const ag = selectedPendencia.originalItem as Agendamento;
+        const updatedAg: Agendamento = {
+          ...ag,
+          statusPagamento: 'Pago',
+          valorCobrado: Number(valorFinal),
+          dataPagamento: dataPagamento,
+          formaPagamento: formaPagamento,
+          bancoPagamento: banco || undefined
+        };
+        updateAgendamento(updatedAg);
+      }
+      
       setSelectedPendencia(null);
       showNotification('Baixa realizada e financeiro atualizado!', 'success');
-      window.dispatchEvent(new Event('storage-sync'));
 
     } catch (error: any) {
       console.error('Erro técnico na baixa:', error);
@@ -208,30 +196,6 @@ export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenPro
       case 'Transferência': return <Landmark size={16} />;
       case 'Dinheiro': return <Banknote size={16} />;
       default: return <DollarSign size={16} />;
-    }
-  };
-
-  const handleDarBaixa = async (item: any) => {
-    try {
-      const hoje = new Date().toISOString().split('T')[0];
-
-      const { error } = await supabase
-        .from('financeiro')
-        .update({ 
-          status: 'Pago',
-          data_pagamento: hoje
-        })
-        .eq('id', item.id);
-
-      if (error) throw error;
-
-      showNotification('Pagamento confirmado e fluxo atualizado!', 'success');
-      
-      // IMPORTANTE: Dispare a função que recarrega os dados da tela
-      loadPendencias();
-
-    } catch (error) {
-      showNotification('Erro ao processar baixa', 'error');
     }
   };
 

@@ -1,27 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Trash2, GripVertical, Plus, PackageOpen, CheckCircle, ChevronLeft, Edit2, User, AlertCircle } from 'lucide-react';
-import { StorageService, StorageKeys } from '../services/StorageService';
-import { Cliente, Terapia, Pacote, ItemPacote, PagamentoInfo, Agendamento } from '../types';
-import { AsyncStorage } from '../utils/storage';
+import { Save, Trash2, GripVertical, Plus, PackageOpen, CheckCircle, ChevronLeft, Edit2, User } from 'lucide-react';
+import { Cliente, Terapia, Pacote, ItemPacote, Transacao } from '../types';
 import { useAppContext } from '../AppContext';
 
 export default function PacotesScreen() {
   const { 
     showNotification, 
     confirmAction, 
-    session,
     clientes,
     terapias,
     pacotes,
-    fetchData,
-    addPacote,
-    updatePacote,
-    deletePacote
+    transacoes,
+    addPacote, 
+    updatePacote, 
+    deletePacote,
+    addTransacao,
+    updateTransacao
   } = useAppContext();
   
   const [viewMode, setViewMode] = useState<'list' | 'form'>('list');
   const [loading, setLoading] = useState(false);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
   
   // Form State
   const [editingPacoteId, setEditingPacoteId] = useState<string | null>(null);
@@ -34,63 +32,27 @@ export default function PacotesScreen() {
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [tipoPacote, setTipoPacote] = useState<'Mensal Fixo' | 'Avulso'>('Mensal Fixo');
   const [observacoes, setObservacoes] = useState('');
-  const [valorFinal, setValorFinal] = useState<number | null>(null);
   const [valorManual, setValorManual] = useState<number | null>(null);
   
-  // Payment State
-  const [historicoPagamento, setHistoricoPagamento] = useState({
-    status: 'Pendente',
-    data: undefined as string | undefined,
-    forma: undefined as string | undefined,
-    banco: undefined as string | undefined,
-    valor: 0
-  });
-
-  useEffect(() => {
-    fetchData();
-    window.addEventListener('storage-sync', fetchData);
-    return () => window.removeEventListener('storage-sync', fetchData);
-  }, [refreshTrigger]);
+  // Payment State (Temporary for form)
+  const [statusPagamento, setStatusPagamento] = useState<'Pendente' | 'Pago'>('Pendente');
+  const [dataPagamento, setDataPagamento] = useState<string | undefined>(undefined);
+  const [formaPagamento, setFormaPagamento] = useState<string | undefined>(undefined);
+  const [bancoPagamento, setBancoPagamento] = useState<string | undefined>(undefined);
 
   const handleEdit = async (pacote: Pacote) => {
-    setEditingPacoteId(String(pacote.id));
-    setClienteId(String(pacote.clienteId));
+    setEditingPacoteId(pacote.id);
+    setClienteId(pacote.clienteId);
     setMesReferencia(pacote.mesReferencia);
-    
-    // Safe parsing for itens
-    let parsedItens = [];
-    try {
-      const rawItens = pacote.itens;
-      if (Array.isArray(rawItens)) {
-        parsedItens = rawItens;
-      } else if (typeof rawItens === 'string') {
-        parsedItens = JSON.parse(rawItens);
-      }
-    } catch (e) {
-      console.error("Erro ao parsear itens:", e);
-    }
-    setItens(parsedItens || []);
-    
-    setTipoPacote(pacote.tipoPacote);
+    setItens(pacote.itens || []);
+    setTipoPacote(pacote.tipoPacote as any);
     setObservacoes(pacote.observacoes || '');
+    setValorManual(pacote.valorFinal);
     
-    // Use price or valorFinal
-    const valor = pacote.price !== undefined ? pacote.price : (pacote.valorFinal !== undefined ? pacote.valorFinal : 0);
-    setValorManual(Number(valor));
-    
-    // Safe parsing for historicoPagamento
-    let pagInfo = { status: 'Pendente', valor: 0, data: undefined, forma: undefined, banco: undefined };
-    try {
-      const rawPag = pacote.historicoPagamento;
-      if (typeof rawPag === 'string') {
-        pagInfo = JSON.parse(rawPag);
-      } else if (rawPag && typeof rawPag === 'object') {
-        pagInfo = { ...pagInfo, ...rawPag };
-      }
-    } catch (e) {
-      console.error("Erro ao parsear historicoPagamento:", e);
-    }
-    setHistoricoPagamento(pagInfo as any);
+    setStatusPagamento(pacote.statusPagamento || 'Pendente');
+    setDataPagamento(pacote.dataPagamento);
+    setFormaPagamento(pacote.formaPagamento);
+    setBancoPagamento(pacote.bancoPagamento);
     
     setViewMode('form');
   };
@@ -101,18 +63,19 @@ export default function PacotesScreen() {
     setItens([]);
     setTipoPacote('Mensal Fixo');
     setValorManual(null);
-    setHistoricoPagamento({ status: 'Pendente', valor: 0, data: undefined, forma: undefined, banco: undefined });
+    setObservacoes('');
+    setStatusPagamento('Pendente');
+    setDataPagamento(undefined);
+    setFormaPagamento(undefined);
+    setBancoPagamento(undefined);
     setViewMode('form');
   };
 
-  // REFORMULADO: Agora usa o StorageService corrigido para evitar erros de FK
   const handleDeleteTotal = async (pacoteId: string) => {
     confirmAction('Deseja realmente excluir este pacote? Os agendamentos futuros serão desvinculados automaticamente.', async () => {
       try {
         setLoading(true);
-        // Chama a nossa nova lógica que limpa os vínculos no Supabase primeiro
         await deletePacote(pacoteId);
-        
         showNotification('Pacote excluído com sucesso!', 'success');
         setViewMode('list');
       } catch (error: any) {
@@ -123,75 +86,61 @@ export default function PacotesScreen() {
     }, { isDanger: true });
   };
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!clienteId) {
-      showNotification('Selecione um cliente.', 'error');
+      showNotification('Selecione um cliente válido.', 'error');
       return;
     }
 
-    const prevPacotes = [...pacotes];
     const pacoteId = editingPacoteId || crypto.randomUUID();
     const valorCalculado = valorManual !== null ? valorManual : totais.final;
 
-    const novoPacote: Pacote = {
+    const pacoteData: Pacote = {
       id: pacoteId,
-      userId: session?.user?.id || '',
-      clienteId: String(clienteId),
+      clienteId: clienteId,
       mesReferencia,
       valorFinal: Number(valorCalculado),
-      price: Number(valorCalculado),
       itens: itens,
       tipoPacote,
-      status: historicoPagamento.status === 'Pago' ? 'Ativo' : 'Pendente',
+      status: 'Ativo',
+      statusPagamento,
+      dataPagamento,
+      formaPagamento,
+      bancoPagamento,
       observacoes
     };
+
+    if (editingPacoteId) {
+      updatePacote(pacoteData);
+    } else {
+      addPacote(pacoteData);
+    }
+
+    // Sincronização Financeira
+    const cliente = clientes.find(c => c.id === clienteId);
+    const clienteNome = cliente?.nome || 'Cliente';
     
-    // Immediate UI transition
-    setViewMode('list');
-    showNotification('Pacote salvo com sucesso!', 'success');
-
-    // Background persistence
-    const persist = async () => {
-      try {
-        if (editingPacoteId) {
-          await updatePacote(novoPacote);
-        } else {
-          await addPacote(novoPacote);
-        }
-
-        // Sincronização Financeira Otimizada
-        const cliente = clientes.find(c => String(c.id) === String(clienteId));
-        const clienteNome = cliente?.name || cliente?.nome || 'Cliente';
-        
-          const transacao = {
-            id: crypto.randomUUID(),
-            userId: session?.user?.id || '',
-            descricao: `Pacote (${tipoPacote}) - ${clienteNome}`,
-            valor: Number(valorCalculado),
-            data: historicoPagamento.data || new Date().toISOString().split('T')[0],
-            metodo: historicoPagamento.forma || 'PIX',
-            categoria: 'Terapias',
-            status: historicoPagamento.status === 'Pago' ? 'Pago' : 'Pendente',
-            pacoteId: pacoteId,
-            dataPagamento: historicoPagamento.status === 'Pago' ? (historicoPagamento.data || new Date().toISOString().split('T')[0]) : null
-          };
-
-        // Tenta atualizar ou criar a transação baseada no pacoteId
-        const transacoes = await StorageService.getItems<any>(StorageKeys.TRANSACOES);
-        const transacaoExistente = transacoes.find(t => t.pacoteId === pacoteId);
-        if (transacaoExistente) {
-          await StorageService.updateItem(StorageKeys.TRANSACOES, { ...transacao, id: transacaoExistente.id });
-        } else {
-          await StorageService.saveItem(StorageKeys.TRANSACOES, transacao);
-        }
-      } catch (error: any) {
-        console.error("Erro na persistência do pacote:", error);
-        showNotification('Erro ao sincronizar pacote.', 'error');
-      }
+    const transacaoData: Transacao = {
+      id: transacoes.find(t => t.pacoteId === pacoteId)?.id || crypto.randomUUID(),
+      descricao: `Pacote - ${clienteNome}`,
+      valor: Number(valorCalculado),
+      data: dataPagamento || new Date().toISOString().split('T')[0],
+      metodo: formaPagamento || 'PIX',
+      categoria: 'Pacotes',
+      status: statusPagamento,
+      pacoteId: pacoteId,
+      tipo: 'Receita'
     };
 
-    persist();
-    window.dispatchEvent(new Event('storage-sync'));
+    const transacaoExistente = transacoes.find(t => t.pacoteId === pacoteId);
+    if (transacaoExistente) {
+      updateTransacao(transacaoData);
+    } else {
+      addTransacao(transacaoData);
+    }
+    
+    setViewMode('list');
+    showNotification('Pacote salvo com sucesso!', 'success');
   };
 
   // Drag and Drop
@@ -213,18 +162,16 @@ export default function PacotesScreen() {
 
   const addTerapiaToPacote = (terapiaId: string) => {
     const tId = String(terapiaId);
-    if (itens.some(item => String(item.terapiaId) === tId)) {
+    if (itens.some(item => item.terapiaId === tId)) {
       showNotification('Terapia já inclusa', 'info');
       return;
     }
-    const terapiaObj = terapias.find(t => String(t.id) === tId);
+    const terapiaObj = terapias.find(t => t.id === tId);
     const newItem: ItemPacote = {
-      id: `item_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+      id: crypto.randomUUID(),
       terapiaId: tId,
       quantidadeTotal: 1,
-      quantidadeRestante: 1,
-      valorSessao: terapiaObj?.price || 0,
-      valorDesconto: 0,
+      quantidadeRestante: 1
     };
     setItens([...itens, newItem]);
   };
@@ -247,37 +194,35 @@ export default function PacotesScreen() {
     setItens(itens.filter(item => item.id !== id));
   };
 
-  const getTerapia = (id: string) => terapias.find(t => String(t.id) === String(id));
+  const getTerapia = (id: string) => terapias.find(t => t.id === id);
 
   const calcularTotais = () => {
     let bruto = 0;
-    let descontoTotal = 0;
     itens.forEach(item => {
       const terapia = getTerapia(item.terapiaId);
       if (terapia) {
-        bruto += terapia.price * item.quantidadeTotal;
-        descontoTotal += Number(item.valorDesconto) || 0;
+        bruto += terapia.valor * item.quantidadeTotal;
       }
     });
-    return { bruto, descontoTotal, final: bruto - descontoTotal };
+    return { bruto, final: bruto };
   };
 
   const totais = calcularTotais();
-
-  useEffect(() => {
-    setHistoricoPagamento(prev => ({ ...prev, valor: totais.final }));
-  }, [totais.final]);
 
   const formatCurrency = (value: number) => 
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
   const handleMarcarPago = () => {
-    setHistoricoPagamento(prev => ({
-      ...prev,
-      status: prev.status === 'Pago' ? 'Pendente' : 'Pago',
-      data: prev.status === 'Pendente' ? new Date().toISOString().split('T')[0] : undefined,
-      forma: prev.status === 'Pendente' ? 'PIX' : undefined,
-    }));
+    const novoStatus = statusPagamento === 'Pago' ? 'Pendente' : 'Pago';
+    setStatusPagamento(novoStatus);
+    if (novoStatus === 'Pago') {
+      setDataPagamento(new Date().toISOString().split('T')[0]);
+      setFormaPagamento('PIX');
+    } else {
+      setDataPagamento(undefined);
+      setFormaPagamento(undefined);
+      setBancoPagamento(undefined);
+    }
   };
 
   if (viewMode === 'list') {
@@ -300,8 +245,7 @@ export default function PacotesScreen() {
             </div>
           ) : (
             pacotes.map(p => {
-              const cliente = clientes.find(c => String(c.id) === String(p.clienteId));
-              let therapies: ItemPacote[] = Array.isArray(p.itens) ? p.itens : JSON.parse(p.itens || '[]');
+              const cliente = clientes.find(c => c.id === p.clienteId);
               return (
                 <div key={p.id} className="bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 flex items-center justify-between">
                   <div className="flex items-center gap-4">
@@ -309,9 +253,8 @@ export default function PacotesScreen() {
                       <User size={24} />
                     </div>
                     <div>
-                      {/* Correção para exibir o nome independente da origem do campo */}
                       <h4 className="font-bold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">
-                        {cliente?.name || cliente?.nome || 'Cliente não encontrado'}
+                        {cliente?.nome || 'Cliente não encontrado'}
                       </h4>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${p.tipoPacote === 'Mensal Fixo' ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'}`}>
@@ -373,7 +316,7 @@ export default function PacotesScreen() {
               >
                 <option value="" disabled>Selecione o Cliente...</option>
                 {clientes.map(c => (
-                  <option key={c.id} value={c.id || ''}>{c.name || c.nome || 'Sem Nome'}</option>
+                  <option key={c.id} value={c.id || ''}>{c.nome || 'Sem Nome'}</option>
                 ))}
               </select>
             </div>
@@ -435,11 +378,11 @@ export default function PacotesScreen() {
                     </button>
                   </div>
                   <h4 className="font-bold text-sm text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] leading-tight mt-1">
-                    {terapia.name || terapia.nome || 'Sem Nome'}
+                    {terapia.nome || 'Sem Nome'}
                   </h4>
                 </div>
                 <p className="text-[var(--color-primary)] font-bold text-sm mt-2">
-                  {formatCurrency(terapia.price)}
+                  {formatCurrency(terapia.valor)}
                 </p>
               </div>
             ))}
@@ -476,7 +419,7 @@ export default function PacotesScreen() {
                   <div key={item.id} className="bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] p-4 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
                     <div className="flex justify-between items-start mb-3">
                       <h4 className="font-bold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] text-sm">
-                        {index + 1}. {terapia.name || terapia.nome || 'Sem Nome'}
+                        {index + 1}. {terapia.nome || 'Sem Nome'}
                       </h4>
                       <button onClick={() => removeItem(item.id)} className="text-[var(--color-error)] p-1.5 bg-[var(--color-error)]/10 rounded-lg">
                         <Trash2 size={16} />
@@ -496,17 +439,6 @@ export default function PacotesScreen() {
                             updateItem(item.id, 'quantidadeRestante', novaQtd);
                           }}
                           className="w-full bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] border border-gray-100 dark:border-gray-800 rounded-xl px-2 py-2 text-sm outline-none text-center font-bold"
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <label className="block text-[10px] font-bold text-[var(--color-text-sec-light)] uppercase mb-1">Valor Desconto</label>
-                        <input 
-                          type="number" 
-                          min="0"
-                          step="0.01"
-                          value={item.valorDesconto || ''}
-                          onChange={(e) => updateItem(item.id, 'valorDesconto', parseFloat(e.target.value) || 0)}
-                          className="w-full bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] border border-gray-100 dark:border-gray-800 rounded-xl px-3 py-2 text-sm outline-none font-bold text-[var(--color-success)]"
                         />
                       </div>
                     </div>
@@ -537,30 +469,30 @@ export default function PacotesScreen() {
                 <button 
                   onClick={handleMarcarPago}
                   className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${
-                    historicoPagamento.status === 'Pago' ? 'bg-[var(--color-success)] text-white' : 'bg-[var(--color-warning)] text-white'
+                    statusPagamento === 'Pago' ? 'bg-[var(--color-success)] text-white' : 'bg-[var(--color-warning)] text-white'
                   }`}
                 >
                   <CheckCircle size={16} />
-                  {historicoPagamento.status === 'Pago' ? 'PAGO' : 'PENDENTE'}
+                  {statusPagamento === 'Pago' ? 'PAGO' : 'PENDENTE'}
                 </button>
               </div>
 
-              {historicoPagamento.status === 'Pago' && (
+              {statusPagamento === 'Pago' && (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[10px] font-bold text-[var(--color-text-sec-light)] uppercase mb-1">Data</label>
                     <input 
                       type="date" 
-                      value={historicoPagamento.data || ''}
-                      onChange={(e) => setHistoricoPagamento(prev => ({ ...prev, data: e.target.value }))}
+                      value={dataPagamento || ''}
+                      onChange={(e) => setDataPagamento(e.target.value)}
                       className="w-full bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] border border-gray-100 dark:border-gray-800 rounded-xl px-3 py-2.5 text-sm outline-none"
                     />
                   </div>
                   <div>
                     <label className="block text-[10px] font-bold text-[var(--color-text-sec-light)] uppercase mb-1">Forma</label>
                     <select 
-                      value={historicoPagamento.forma || ''}
-                      onChange={(e) => setHistoricoPagamento(prev => ({ ...prev, forma: e.target.value }))}
+                      value={formaPagamento || ''}
+                      onChange={(e) => setFormaPagamento(e.target.value)}
                       className="w-full bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] border border-gray-100 dark:border-gray-800 rounded-xl px-3 py-2.5 text-sm outline-none"
                     >
                       <option value="PIX">PIX</option>
@@ -582,10 +514,6 @@ export default function PacotesScreen() {
         <div className="flex justify-between items-center mb-1">
           <span className="text-xs font-bold text-[var(--color-text-sec-light)] uppercase">Bruto</span>
           <span className="text-sm font-bold text-[var(--color-text-main-light)]">{formatCurrency(totais.bruto)}</span>
-        </div>
-        <div className="flex justify-between items-center mb-3">
-          <span className="text-xs font-bold text-[var(--color-text-sec-light)] uppercase">Desconto</span>
-          <span className="text-sm font-bold text-[var(--color-success)]">-{formatCurrency(totais.descontoTotal)}</span>
         </div>
         <div className="flex justify-between items-center pt-3 border-t border-gray-100 mb-5">
           <span className="font-bold text-[var(--color-text-main-light)]">VALOR FINAL</span>

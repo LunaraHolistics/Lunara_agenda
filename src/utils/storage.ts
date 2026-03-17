@@ -1,35 +1,24 @@
-// Simulando o AsyncStorage do React Native para o ambiente Web (100% Offline)
-export const AsyncStorage = {
-  setItem: async (key: string, value: string): Promise<void> => {
+export const StorageService = {
+  saveData: (key: string, data: any): void => {
     try {
-      localStorage.setItem(key, value);
+      localStorage.setItem(key, JSON.stringify(data));
     } catch (e) {
       console.error('Erro ao salvar dados', e);
-      throw e;
     }
   },
-  getItem: async (key: string): Promise<string | null> => {
+  getData: (key: string): any => {
     try {
-      return localStorage.getItem(key);
+      const data = localStorage.getItem(key);
+      return data ? JSON.parse(data) : null;
     } catch (e) {
       console.error('Erro ao ler dados', e);
-      throw e;
+      return null;
     }
   },
-  removeItem: async (key: string): Promise<void> => {
-    try {
-      localStorage.removeItem(key);
-    } catch (e) {
-      console.error('Erro ao remover dados', e);
-      throw e;
-    }
+  removeItem: (key: string): void => {
+    localStorage.removeItem(key);
   },
-  clear: async (): Promise<void> => {
-    try {
-      localStorage.clear();
-    } catch (e) {
-      console.error('Erro ao limpar dados', e);
-      throw e;
-    }
+  clear: (): void => {
+    localStorage.clear();
   }
 };

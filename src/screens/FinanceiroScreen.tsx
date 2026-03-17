@@ -1,197 +1,197 @@
-import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Filter } from 'lucide-react';
-import { StorageService, StorageKeys } from '../services/StorageService';
-import { Agendamento, Cliente, Terapia } from '../types';
+import React, { useState, useMemo } from 'react';
+import { ArrowLeft, Filter, TrendingUp, TrendingDown, DollarSign, Calendar } from 'lucide-react';
 import { useAppContext } from '../AppContext';
+import { Transacao } from '../types';
 
 interface FinanceiroProps {
   onBack: () => void;
 }
 
 export default function FinanceiroScreen({ onBack }: FinanceiroProps) {
-  const { safeDate } = useAppContext();
-  const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
-  const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [terapias, setTerapias] = useState<Terapia[]>([]);
+  const { transacoes, clientes } = useAppContext();
   
   // Filtros
   const [filtroMes, setFiltroMes] = useState(String(new Date().getMonth()));
   const [filtroAno, setFiltroAno] = useState(String(new Date().getFullYear()));
-  const [filtroCliente, setFiltroCliente] = useState('todos');
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
-    const [agends, clis, ters] = await Promise.all([
-      StorageService.getItems<Agendamento>(StorageKeys.AGENDAMENTOS),
-      StorageService.getItems<Cliente>(StorageKeys.CLIENTES),
-      StorageService.getItems<Terapia>(StorageKeys.TERAPIAS),
-    ]);
-    setAgendamentos(agends);
-    setClientes(clis);
-    setTerapias(ters);
-  };
-
-  const getClienteNome = (id: string) => {
-    const cli = clientes.find(c => String(c.id) === String(id));
-    return cli?.name || cli?.nome || 'Desconhecido';
-  };
-  const getTerapiaNome = (ag: Agendamento) => {
-    const terapia = terapias.find(t => String(t.id) === String(ag.therapy_item_id));
-    return terapia?.name || terapia?.nome || ag.therapy_name || 'Sem nome';
-  };
-
-  const formatCurrency = (value: any) => {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value) || 0);
-  };
-
-  const formatDate = (date: string, time: string) => {
-    const d = safeDate(`${date}T${time}:00`);
-    return new Intl.DateTimeFormat('pt-BR', { 
-      day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' 
-    }).format(d);
-  };
-
-  // Aplicação dos filtros
-  const filteredAgendamentos = agendamentos.filter(ag => {
-    const date = safeDate(ag.date);
-    const matchMes = String(date.getMonth()) === filtroMes;
-    const matchAno = String(date.getFullYear()) === filtroAno;
-    const matchCliente = filtroCliente === 'todos' || ag.client_id === filtroCliente;
-    
-    // Consideramos apenas atendimentos não cancelados para o financeiro
-    const matchStatus = ag.statusAtendimento !== 'Cancelado';
-
-    return matchMes && matchAno && matchCliente && matchStatus;
-  }).sort((a, b) => safeDate(`${b.date}T${b.time}:00`).getTime() - safeDate(`${a.date}T${a.time}:00`).getTime());
-
-  // Cálculos de Totais
-  const totalRecebido = filteredAgendamentos
-    .filter(ag => ag.statusPagamento === 'Pago')
-    .reduce((acc, ag) => acc + (Number(ag.valorCobrado) || 0), 0);
-
-  const totalPendente = filteredAgendamentos
-    .filter(ag => ag.statusPagamento === 'Pendente')
-    .reduce((acc, ag) => acc + (Number(ag.valorCobrado) || 0), 0);
-
-  const totalBruto = totalRecebido + totalPendente;
+  const [filtroTipo, setFiltroTipo] = useState<'Todos' | 'Receita' | 'Despesa'>('Todos');
 
   const meses = [
     'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
     'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
   ];
 
+  const filteredTransacoes = useMemo(() => {
+    return transacoes.filter(t => {
+      const date = new Date(t.data + 'T12:00:00'); // Evitar problemas de fuso horário
+      const matchMes = String(date.getMonth()) === filtroMes;
+      const matchAno = String(date.getFullYear()) === filtroAno;
+      const matchTipo = filtroTipo === 'Todos' || t.tipo === filtroTipo;
+      
+      return matchMes && matchAno && matchTipo;
+    }).sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
+  }, [transacoes, filtroMes, filtroAno, filtroTipo]);
+
+  const stats = useMemo(() => {
+    const receitas = filteredTransacoes
+      .filter(t => t.tipo === 'Receita' && t.status === 'Pago')
+      .reduce((acc, t) => acc + t.valor, 0);
+      
+    const despesas = filteredTransacoes
+      .filter(t => t.tipo === 'Despesa' && t.status === 'Pago')
+      .reduce((acc, t) => acc + t.valor, 0);
+      
+    const pendente = filteredTransacoes
+      .filter(t => t.status === 'Pendente')
+      .reduce((acc, t) => acc + t.valor, 0);
+
+    return { receitas, despesas, saldo: receitas - despesas, pendente };
+  }, [filteredTransacoes]);
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+  };
+
+  const formatDate = (dateStr: string) => {
+    const [year, month, day] = dateStr.split('-');
+    return `${day}/${month}/${year}`;
+  };
+
   return (
     <div className="flex flex-col h-full bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)]">
       {/* Header */}
-      <div className="pt-12 pb-4 px-4 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] border-b border-gray-200 dark:border-gray-800 flex items-center gap-3">
+      <div className="pt-12 pb-4 px-4 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] border-b border-gray-200 dark:border-gray-800 flex items-center gap-3 sticky top-0 z-20">
         <button onClick={onBack} className="p-2 -ml-2 text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">
           <ArrowLeft size={24} />
         </button>
         <h1 className="text-xl font-semibold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">
-          Controle Financeiro
+          Fluxo de Caixa
         </h1>
       </div>
 
-      {/* Filtros */}
-      <div className="p-4 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] border-b border-gray-200 dark:border-gray-800 space-y-3">
-        <div className="flex items-center gap-2 text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] mb-1">
-          <Filter size={16} />
-          <span className="text-sm font-medium">Filtros</span>
+      {/* Resumo de Cards */}
+      <div className="p-4 grid grid-cols-2 gap-3 shrink-0">
+        <div className="bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] p-4 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
+          <div className="flex items-center gap-2 text-[var(--color-success)] mb-1">
+            <TrendingUp size={16} />
+            <span className="text-[10px] font-bold uppercase">Receitas</span>
+          </div>
+          <p className="text-lg font-bold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">
+            {formatCurrency(stats.receitas)}
+          </p>
         </div>
-        
-        <div className="flex gap-3">
+        <div className="bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] p-4 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
+          <div className="flex items-center gap-2 text-[var(--color-error)] mb-1">
+            <TrendingDown size={16} />
+            <span className="text-[10px] font-bold uppercase">Despesas</span>
+          </div>
+          <p className="text-lg font-bold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">
+            {formatCurrency(stats.despesas)}
+          </p>
+        </div>
+        <div className="bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] p-4 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm col-span-2 flex justify-between items-center">
+          <div>
+            <div className="flex items-center gap-2 text-[var(--color-primary)] mb-1">
+              <DollarSign size={16} />
+              <span className="text-[10px] font-bold uppercase">Saldo Líquido</span>
+            </div>
+            <p className="text-2xl font-black text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">
+              {formatCurrency(stats.saldo)}
+            </p>
+          </div>
+          <div className="text-right">
+            <span className="text-[10px] font-bold uppercase text-[var(--color-warning)] block mb-1">A Receber</span>
+            <p className="text-sm font-bold text-[var(--color-warning)]">
+              {formatCurrency(stats.pendente)}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Filtros */}
+      <div className="px-4 pb-4 space-y-3 shrink-0">
+        <div className="flex gap-2">
           <select 
             value={filtroMes}
             onChange={(e) => setFiltroMes(e.target.value)}
-            className="flex-1 bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)]"
+            className="flex-1 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm outline-none"
           >
             {meses.map((mes, index) => (
               <option key={index} value={index}>{mes}</option>
             ))}
           </select>
-
           <select 
             value={filtroAno}
             onChange={(e) => setFiltroAno(e.target.value)}
-            className="w-24 bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)]"
+            className="w-24 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm outline-none"
           >
-            {[...Array(5)].map((_, i) => {
-              const year = new Date().getFullYear() - 2 + i;
-              return <option key={year} value={year}>{year}</option>;
-            })}
+            {[2024, 2025, 2026].map(year => (
+              <option key={year} value={year}>{year}</option>
+            ))}
           </select>
         </div>
-
-        <select 
-          value={filtroCliente}
-          onChange={(e) => setFiltroCliente(e.target.value)}
-          className="w-full bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)]"
-        >
-          <option value="todos">Todos os Clientes</option>
-          {clientes.map(c => (
-            <option key={c.id} value={c.id}>{c.name || c.nome || "Sem Nome"}</option>
+        <div className="flex gap-2">
+          {['Todos', 'Receita', 'Despesa'].map((tipo) => (
+            <button
+              key={tipo}
+              onClick={() => setFiltroTipo(tipo as any)}
+              className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-all ${
+                filtroTipo === tipo 
+                  ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)] shadow-md' 
+                  : 'bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-gray-500 border-gray-200 dark:border-gray-800'
+              }`}
+            >
+              {tipo}
+            </button>
           ))}
-        </select>
+        </div>
       </div>
 
-      {/* Lista */}
-      <div className="flex-1 overflow-y-auto p-4 pb-32">
-        {filteredAgendamentos.length === 0 ? (
-          <div className="text-center text-[var(--color-text-sec-light)] mt-10">
-            Nenhum registro financeiro no período.
+      {/* Lista de Transações */}
+      <div className="flex-1 overflow-y-auto px-4 pb-10">
+        {filteredTransacoes.length === 0 ? (
+          <div className="text-center py-12 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] rounded-3xl border border-dashed border-gray-300 dark:border-gray-800">
+            <p className="text-gray-500 text-sm">Nenhuma transação neste período.</p>
           </div>
         ) : (
           <div className="space-y-3">
-            {filteredAgendamentos.map(ag => (
-              <div key={ag.id} className="bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800">
-                <div className="flex justify-between items-start mb-2">
-                  <div>
-                    <h3 className="font-medium text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">
-                      {getClienteNome(ag.client_id)}
-                    </h3>
-                    <p className="text-xs text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)]">
-                      {formatDate(ag.date, ag.time)} • {getTerapiaNome(ag)}
-                    </p>
-                  </div>
-                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${
-                    ag.statusPagamento === 'Pago' 
-                      ? 'bg-[var(--color-success)]/10 text-[var(--color-success)]' 
-                      : 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]'
+            {filteredTransacoes.map(t => (
+              <div key={t.id} className="bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] p-4 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                    t.tipo === 'Receita' ? 'bg-[var(--color-success)]/10 text-[var(--color-success)]' : 'bg-[var(--color-error)]/10 text-[var(--color-error)]'
                   }`}>
-                    {ag.statusPagamento}
-                  </span>
+                    {t.tipo === 'Receita' ? <TrendingUp size={20} /> : <TrendingDown size={20} />}
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-sm text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] leading-tight">
+                      {t.descricao}
+                    </h4>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-[10px] text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] flex items-center gap-1">
+                        <Calendar size={10} />
+                        {formatDate(t.data)}
+                      </span>
+                      <span className="text-[10px] text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded-md">
+                        {t.metodo || 'PIX'}
+                      </span>
+                      {t.status === 'Pendente' && (
+                        <span className="text-[10px] font-bold text-[var(--color-warning)] px-1.5 py-0.5 bg-[var(--color-warning)]/10 rounded-md">
+                          PENDENTE
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <div className="flex justify-between items-end mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
-                  <span className="text-xs text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)]">
-                    {ag.desconto > 0 ? `Desconto: ${formatCurrency(ag.desconto)}` : 'Sem desconto'}
-                  </span>
-                  <span className="font-semibold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">
-                    {formatCurrency(ag.valorCobrado)}
-                  </span>
+                <div className="text-right">
+                  <p className={`font-bold ${t.tipo === 'Receita' ? 'text-[var(--color-success)]' : 'text-[var(--color-error)]'}`}>
+                    {t.tipo === 'Receita' ? '+' : '-'}{formatCurrency(t.valor)}
+                  </p>
+                  <p className="text-[10px] text-gray-400">{t.categoria}</p>
                 </div>
               </div>
             ))}
           </div>
         )}
-      </div>
-
-      {/* Rodapé de Totais */}
-      <div className="absolute bottom-0 left-0 right-0 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] border-t border-gray-200 dark:border-gray-800 p-4 pb-8 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-        <div className="flex justify-between items-center mb-2">
-          <span className="text-sm text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)]">Recebido</span>
-          <span className="font-medium text-[var(--color-success)]">{formatCurrency(totalRecebido)}</span>
-        </div>
-        <div className="flex justify-between items-center mb-3">
-          <span className="text-sm text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)]">Pendente</span>
-          <span className="font-medium text-[var(--color-warning)]">{formatCurrency(totalPendente)}</span>
-        </div>
-        <div className="flex justify-between items-center pt-3 border-t border-gray-200 dark:border-gray-700">
-          <span className="font-medium text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">Total Bruto</span>
-          <span className="text-lg font-bold text-[var(--color-primary)]">{formatCurrency(totalBruto)}</span>
-        </div>
       </div>
     </div>
   );

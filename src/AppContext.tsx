@@ -1,7 +1,12 @@
 import React, { createContext, useContext, ReactNode, useState, useEffect } from 'react';
-import { supabase } from './supabaseClient';
-import { Agendamento, Cliente, Terapia, Pacote, Bloqueio, ImportedContact } from './types';
-import { mapFromSnakeCase, StorageService } from './services/StorageService';
+import { Agendamento, Cliente, Terapia, Pacote, Bloqueio, ImportedContact, Transacao } from './types';
+import { StorageService, StorageKeys } from './services/StorageService';
+
+const SEED_CLIENTES: Cliente[] = [{"id":"1773673732157","nome":"Ana Paula","telefone":"+447541648981","observacoes":"Ana Paula Alessandro\nDN 21/06/1969\nLondres/Inglaterra"},{"id":"1773673767714","nome":"Ivone","telefone":"+447541648981","observacoes":"Ivone Fernandes Alves\nDN 08/07/1948"},{"id":"1773674041075","nome":"Anne","telefone":"+447752188938","observacoes":"Anne Caroline Lins Bezerra\nDN 24/07/1994\nLondres/Inglaterra"},{"id":"1773674123806","nome":"Meire (Rosemeire Lancelotti)","telefone":"+5516994149085","observacoes":"Rosemeire Rodrigues dos Santos Lancelotti\nDN 16/01/1984\nSão Carlos/SP"},{"id":"1773674192083","nome":"Fabrício (esposo Meire)","telefone":"","observacoes":"Fabricio Lancelotti\nDN 07/06/1979\nSão Carlos"},{"id":"1773674220989","nome":"Bruno (filho Meire)","telefone":"","observacoes":"Bruno Lucas Lancelotti\nDN 10/09/2001"},{"id":"1773674244964","nome":"Fernanda (nora Meire)","telefone":"","observacoes":"Fernanda Gabrielli Genari\nDN 23/01/1999"},{"id":"1773674336022","nome":"Márcia (tia Deza)","telefone":"+5511983883879","observacoes":"Márcia Eloísa Silva Monteiro\nDN 24/11/1972\nGuararema/SP"},{"id":"1773674409197","nome":"Amanda","telefone":"+5514998229743","observacoes":"Amanda Letícia Bento Dias\nDN 05/03/1994\nOurinhos/SP"},{"id":"1773674472133","nome":"Andreza (Deza)","telefone":"+5516999637420","observacoes":"Andreza Gregório\nDN 24/02/1994\nAraraquara/SP"},{"id":"1773674555334","nome":"Maria Aparecida","telefone":"+5514997066353","observacoes":"Maria Aparecida da Silva\nDN 31/08/1979\nOurinhos/SP"},{"id":"1773674629767","nome":"Isabel (tia Deza)","telefone":"+5516997445647","observacoes":"Isabel Cristina Silva Nepomuceno\nDN 11/10/1969\nAraraquara/SP"}];
+
+const SEED_TERAPIAS: Terapia[] = [{"id":"1773674706071","nome":"Alinhamento Chakras","valor":60,"duracao":15},{"id":"1773674722479","nome":"Cartomancia","valor":130,"duracao":50},{"id":"1773674738183","nome":"Biomagnetismo","valor":80,"duracao":30},{"id":"1773674750071","nome":"Ativação de gráficos","valor":80,"duracao":15},{"id":"1773674769303","nome":"Pesquisa radiestésica","valor":20,"duracao":20},{"id":"1773674786679","nome":"Limpeza/Banimento","valor":80,"duracao":20},{"id":"1773674801551","nome":"Chakras/Bio Pets","valor":80,"duracao":20},{"id":"1773674831591","nome":"Bioressonância","valor":190,"duracao":30}];
+
+const SEED_TRANSACOES: Transacao[] = [{"id":"8735119b-5202-4639-9fae-175ddfec430f","descricao":"Pacote - Isabel (tia Deza)","valor":110,"data":"2026-03-17","metodo":"PIX","categoria":"Terapias","status":"Pendente","pacoteId":null, "tipo": "Receita"}];
 
 export interface CountryDDI {
   code: string;
@@ -15,724 +20,307 @@ export const DDI_LIST: CountryDDI[] = [
   { code: '+1', flag: '🇺🇸', name: 'EUA' },
   { code: '+244', flag: '🇦🇴', name: 'Angola' },
   { code: '+258', flag: '🇲🇿', name: 'Moçambique' },
-  { code: '+238', flag: '🇨🇻', name: 'Cabo Verde' },
+  { code: '+238', flag: '🇨𝑽', name: 'Cabo Verde' },
   { code: '+245', flag: '🇬🇼', name: 'Guiné-Bissau' },
   { code: '+239', flag: '🇸🇹', name: 'São Tomé e Príncipe' },
-  { code: '+670', flag: '🇹🇱', name: 'Timor-Leste' },
+  { code: '+670', flag: '🇹𝑳', name: 'Timor-Leste' },
   { code: '+54', flag: '🇦🇷', name: 'Argentina' },
   { code: '+595', flag: '🇵🇾', name: 'Paraguai' },
   { code: '+598', flag: '🇺🇾', name: 'Uruguai' },
 ];
 
 interface AppContextType {
-  handleImportContacts: () => Promise<ImportedContact[] | null>;
-  ddiList: CountryDDI[];
-  completeAppointment: (agendamentoId: string) => Promise<void>;
-  session: any;
-  loading: boolean;
-  statusMsg: string | null;
-  setStatusMsg: (msg: string | null) => void;
   clientes: Cliente[];
   agendamentos: Agendamento[];
   terapias: Terapia[];
   pacotes: Pacote[];
   bloqueios: Bloqueio[];
-  fetchData: () => Promise<void>;
-  addCliente: (cliente: Omit<Cliente, 'id'>) => Promise<void>;
-  updateCliente: (cliente: Cliente) => Promise<void>;
-  deleteCliente: (id: string) => Promise<void>;
-  addAgendamento: (agendamento: Omit<Agendamento, 'id'>) => Promise<void>;
-  updateAgendamento: (agendamento: Agendamento) => Promise<void>;
-  deleteAgendamento: (id: string) => Promise<void>;
-  addTerapia: (terapia: Omit<Terapia, 'id'>) => Promise<void>;
-  updateTerapia: (terapia: Terapia) => Promise<void>;
-  deleteTerapia: (id: string) => Promise<void>;
-  addPacote: (pacote: Omit<Pacote, 'id'>) => Promise<void>;
-  updatePacote: (pacote: Pacote) => Promise<void>;
-  deletePacote: (id: string) => Promise<void>;
-  addBloqueio: (bloqueio: Omit<Bloqueio, 'id'>) => Promise<void>;
-  deleteBloqueio: (id: string) => Promise<void>;
+  transacoes: Transacao[];
+
+  addCliente: (cliente: Omit<Cliente, 'id'>) => void;
+  updateCliente: (cliente: Cliente) => void;
+  deleteCliente: (id: string) => void;
+
+  addAgendamento: (agendamento: Omit<Agendamento, 'id'>) => void;
+  updateAgendamento: (agendamento: Agendamento) => void;
+  deleteAgendamento: (id: string) => void;
+  completeAppointment: (id: string) => void;
+
+  addTerapia: (terapias: Omit<Terapia, 'id'>) => void;
+  updateTerapia: (terapia: Terapia) => void;
+  deleteTerapia: (id: string) => void;
+
+  addPacote: (pacote: Omit<Pacote, 'id'>) => void;
+  updatePacote: (pacote: Pacote) => void;
+  deletePacote: (id: string) => void;
+
+  addBloqueio: (bloqueio: Omit<Bloqueio, 'id'>) => void;
+  deleteBloqueio: (id: string) => void;
+
+  addTransacao: (transacao: Partial<Transacao>) => void;
+  updateTransacao: (transacao: Transacao) => void;
+  deleteTransacao: (id: string) => void;
+
   showNotification: (message: string, type?: 'success' | 'error' | 'info') => void;
-  confirmAction: (message: string, onConfirm: () => void, options?: { title?: string; confirmText?: string; cancelText?: string; isDanger?: boolean; onCancel?: () => void }) => void;
-  promptAction: (message: string, defaultValue: string, onConfirm: (value: string) => void, options?: { title?: string; placeholder?: string }) => void;
+  confirmAction: (message: string, onConfirm: () => void, options?: any) => void;
+  promptAction: (message: string, defaultValue: string, onConfirm: (value: string) => void, options?: any) => void;
+  handleImportContacts: () => Promise<ImportedContact[] | null>;
+  exportarBackup: () => void;
+  importarBackup: (data: any) => void;
+  repairDatabase: () => void;
   safeDate: (d: any) => Date;
+  ddiList: CountryDDI[];
+  setAgendamentos: React.Dispatch<React.SetStateAction<Agendamento[]>>;
+  setPacotes: React.Dispatch<React.SetStateAction<Pacote[]>>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const ddiList = DDI_LIST;
-  const [session, setSession] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [statusMsg, setStatusMsg] = useState<string | null>(null);
-  const [notifiedAppointments, setNotifiedAppointments] = useState<Set<string>>(new Set());
+  const [clientes, setClientes] = useState<Cliente[]>(() => StorageService.getData(StorageKeys.CLIENTES) || SEED_CLIENTES);
+  const [agendamentos, setAgendamentos] = useState<Agendamento[]>(() => StorageService.getData(StorageKeys.AGENDAMENTOS) || []);
+  const [terapias, setTerapias] = useState<Terapia[]>(() => StorageService.getData(StorageKeys.TERAPIAS) || SEED_TERAPIAS);
+  const [pacotes, setPacotes] = useState<Pacote[]>(() => StorageService.getData(StorageKeys.PACOTES) || []);
+  const [bloqueios, setBloqueios] = useState<Bloqueio[]>(() => StorageService.getData(StorageKeys.BLOQUEIOS) || []);
+  const [transacoes, setTransacoes] = useState<Transacao[]>(() => StorageService.getData(StorageKeys.TRANSACOES) || SEED_TRANSACOES);
 
-  // Data states
-  const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
-  const [terapias, setTerapias] = useState<Terapia[]>([]);
-  const [pacotes, setPacotes] = useState<Pacote[]>([]);
-  const [bloqueios, setBloqueios] = useState<Bloqueio[]>([]);
+  useEffect(() => StorageService.saveData(StorageKeys.CLIENTES, clientes), [clientes]);
+  useEffect(() => StorageService.saveData(StorageKeys.AGENDAMENTOS, agendamentos), [agendamentos]);
+  useEffect(() => StorageService.saveData(StorageKeys.TERAPIAS, terapias), [terapias]);
+  useEffect(() => StorageService.saveData(StorageKeys.PACOTES, pacotes), [pacotes]);
+  useEffect(() => StorageService.saveData(StorageKeys.BLOQUEIOS, bloqueios), [bloqueios]);
+  useEffect(() => StorageService.saveData(StorageKeys.TRANSACOES, transacoes), [transacoes]);
 
-  // UI States
   const [notifications, setNotifications] = useState<{ id: string; message: string; type: 'success' | 'error' | 'info' }[]>([]);
-  const [confirmation, setConfirmation] = useState<{ message: string; onConfirm: () => void; title?: string; confirmText?: string; cancelText?: string; isDanger?: boolean; onCancel?: () => void } | null>(null);
-  const [prompt, setPrompt] = useState<{ message: string; defaultValue: string; onConfirm: (value: string) => void; title?: string; placeholder?: string } | null>(null);
+  const [confirmation, setConfirmation] = useState<any>(null);
+  const [prompt, setPrompt] = useState<any>(null);
 
   const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     const id = Math.random().toString(36).substring(2, 9);
     setNotifications(prev => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setNotifications(prev => prev.filter(n => n.id !== id));
-    }, 4000);
+    setTimeout(() => setNotifications(prev => prev.filter(n => n.id !== id)), 4000);
   };
 
-  const confirmAction = (message: string, onConfirm: () => void, options: { title?: string; confirmText?: string; cancelText?: string; isDanger?: boolean; onCancel?: () => void } = {}) => {
+  const confirmAction = (message: string, onConfirm: () => void, options: any = {}) => {
     setConfirmation({ message, onConfirm, ...options });
   };
 
-  const promptAction = (message: string, defaultValue: string, onConfirm: (value: string) => void, options: { title?: string; placeholder?: string } = {}) => {
+  const promptAction = (message: string, defaultValue: string, onConfirm: (value: string) => void, options: any = {}) => {
     setPrompt({ message, defaultValue, onConfirm, ...options });
   };
 
-  const safeDate = (d: any): Date => {
-    if (!d) return new Date();
-    const parsed = new Date(d);
-    return isNaN(parsed.getTime()) ? new Date() : parsed;
+  const addCliente = (data: Omit<Cliente, 'id'>) => {
+    const novo = { ...data, id: crypto.randomUUID() } as Cliente;
+    setClientes(prev => [...prev, novo].sort((a, b) => a.nome.localeCompare(b.nome)));
+    showNotification("Cliente salvo!", "success");
   };
 
-  useEffect(() => {
-    // Check current session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoading(false);
-      if (session) {
-        StorageService.syncWithCloud().then(() => fetchData());
-      }
-    });
+  const updateCliente = (data: Cliente) => {
+    setClientes(prev => prev.map(c => c.id === data.id ? data : c).sort((a, b) => a.nome.localeCompare(b.nome)));
+    showNotification("Cliente atualizado!", "success");
+  };
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (session) {
-        StorageService.syncWithCloud().then(() => fetchData());
-      } else {
-        // Clear data on logout
-        setClientes([]);
-        setAgendamentos([]);
-        setTerapias([]);
-        setPacotes([]);
-        setBloqueios([]);
-      }
-    });
+  const deleteCliente = (id: string) => {
+    setClientes(prev => prev.filter(c => c.id !== id));
+    showNotification("Cliente removido", "info");
+  };
 
-    return () => subscription.unsubscribe();
-  }, []);
+  const addAgendamento = (data: Omit<Agendamento, 'id'>) => {
+    const novo = { ...data, id: crypto.randomUUID() } as Agendamento;
+    setAgendamentos(prev => [...prev, novo].sort((a, b) => a.data.localeCompare(b.data) || a.hora.localeCompare(b.hora)));
+    showNotification("Agendado!", "success");
+  };
 
-  const fetchData = async () => {
-    if (!session?.user && !(await supabase.auth.getSession()).data.session?.user) return;
-    const user = session?.user || (await supabase.auth.getSession()).data.session?.user;
-    if (!user) return;
+  const updateAgendamento = (data: Agendamento) => {
+    setAgendamentos(prev => prev.map(a => a.id === data.id ? data : a).sort((a, b) => a.data.localeCompare(b.data) || a.hora.localeCompare(b.hora)));
+    showNotification("Agendamento atualizado!", "success");
+  };
 
+  const deleteAgendamento = (id: string) => {
+    setAgendamentos(prev => prev.filter(a => a.id !== id));
+    showNotification("Agendamento removido", "info");
+  };
+
+  const completeAppointment = (id: string) => {
+    setAgendamentos(prev => prev.map(a => a.id === id ? { ...a, statusAtendimento: 'Realizado' } : a));
+    showNotification("Atendimento concluído!", "success");
+  };
+
+  const addTerapia = (data: Omit<Terapia, 'id'>) => {
+    const novo = { ...data, id: crypto.randomUUID() } as Terapia;
+    setTerapias(prev => [...prev, novo].sort((a, b) => a.nome.localeCompare(b.nome)));
+    showNotification("Terapia adicionada!", "success");
+  };
+
+  const updateTerapia = (data: Terapia) => {
+    setTerapias(prev => prev.map(t => t.id === data.id ? data : t).sort((a, b) => a.nome.localeCompare(b.nome)));
+    showNotification("Terapia atualizada!", "success");
+  };
+
+  const deleteTerapia = (id: string) => {
+    setTerapias(prev => prev.filter(t => t.id !== id));
+    showNotification("Terapia removida", "info");
+  };
+
+  const addPacote = (data: Omit<Pacote, 'id'>) => {
+    const novo = { ...data, id: crypto.randomUUID() } as Pacote;
+    setPacotes(prev => [...prev, novo].sort((a, b) => b.mesReferencia.localeCompare(a.mesReferencia)));
+    showNotification("Pacote criado!", "success");
+  };
+
+  const updatePacote = (data: Pacote) => {
+    setPacotes(prev => prev.map(p => p.id === data.id ? data : p));
+    showNotification("Pacote atualizado!", "success");
+  };
+
+  const deletePacote = (id: string) => {
+    setPacotes(prev => prev.filter(p => p.id !== id));
+    setAgendamentos(prev => prev.filter(a => a.pacoteId !== id));
+    showNotification("Pacote e agendamentos removidos!", "info");
+  };
+
+  const addBloqueio = (data: Omit<Bloqueio, 'id'>) => {
+    const novo = { ...data, id: crypto.randomUUID() } as Bloqueio;
+    setBloqueios(prev => [...prev, novo]);
+    showNotification("Horário bloqueado", "success");
+  };
+
+  const deleteBloqueio = (id: string) => {
+    setBloqueios(prev => prev.filter(b => b.id !== id));
+  };
+
+  const addTransacao = (data: Partial<Transacao>) => {
+    const novo = {
+      id: crypto.randomUUID(),
+      descricao: data.descricao || 'Nova Transação',
+      valor: data.valor || 0,
+      tipo: data.tipo || 'Receita',
+      data: data.data || new Date().toISOString().split('T')[0],
+      status: data.status || 'Pago'
+    } as Transacao;
+    setTransacoes(prev => [novo, ...prev]);
+    showNotification("Transação registrada!", "success");
+  };
+
+  const updateTransacao = (data: Transacao) => {
+    setTransacoes(prev => prev.map(t => t.id === data.id ? data : t));
+  };
+
+  const deleteTransacao = (id: string) => {
+    setTransacoes(prev => prev.filter(t => t.id !== id));
+  };
+
+  const exportarBackup = () => {
+    const data = { clientes, agendamentos, terapias, pacotes, bloqueios, transacoes };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `lunara_v3_backup_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showNotification("Backup exportado!", "success");
+  };
+
+  const importarBackup = (json: any) => {
     try {
-      const clis = await StorageService.getItems('clientes');
-      const agends = await StorageService.getItems('agendamentos');
-      const ters = await StorageService.getItems('terapias');
-      const pacs = await StorageService.getItems('pacotes');
-      const blks = await StorageService.getItems('bloqueios');
-
-      console.log("Carregando clientes do StorageService...", clis);
-      console.log("Carregando agendamentos do StorageService...", agends);
-      console.log("Carregando terapias do StorageService...", ters);
-      console.log("Carregando pacotes do StorageService...", pacs);
-      console.log("Carregando bloqueios do StorageService...", blks);
-
-      setClientes(silentRepair('clientes', clis));
-      setAgendamentos(silentRepair('agendamentos', agends));
-      setTerapias(silentRepair('terapias', ters));
-      setPacotes(silentRepair('pacotes', pacs));
-      setBloqueios(silentRepair('bloqueios', blks));
-    } catch (error) {
-      console.error('Erro ao buscar dados:', error);
+      if (json.clientes) setClientes(json.clientes);
+      if (json.agendamentos) setAgendamentos(json.agendamentos);
+      if (json.terapias) setTerapias(json.terapias);
+      if (json.pacotes) setPacotes(json.pacotes);
+      if (json.bloqueios) setBloqueios(json.bloqueios);
+      if (json.transacoes) setTransacoes(json.transacoes);
+      showNotification("Dados restaurados!", "success");
+    } catch (e) {
+      showNotification("Erro na importação", "error");
     }
   };
 
-  const silentRepair = (key: string, items: any[]): any[] => {
-    let correctedCount = 0;
-    const repaired = items.filter(item => {
-      if (!item || !item.id || String(item.id) === "undefined" || String(item.id) === "null") {
-        correctedCount++;
-        return false;
-      }
-      return true;
-    }).map(item => {
-      const newItem = { ...item };
-      let changed = false;
-
-      // Normalize IDs
-      if (typeof newItem.id !== 'string') {
-        newItem.id = String(newItem.id);
-        changed = true;
-      }
-      if (newItem.clienteId && typeof newItem.clienteId !== 'string') {
-        newItem.clienteId = String(newItem.clienteId);
-        changed = true;
-      }
-      if (newItem.client_id && typeof newItem.client_id !== 'string') {
-        newItem.client_id = String(newItem.client_id);
-        changed = true;
-      }
-
-      // Normalize Dates
-      if (key === 'agendamentos' && newItem.date && newItem.date.includes('/')) {
-        const parts = newItem.date.split('/');
-        if (parts.length === 3) {
-          const [d, m, y] = parts;
-          newItem.date = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
-          changed = true;
-        }
-      }
-
-      if (changed) correctedCount++;
-      return newItem;
-    });
-
-    if (correctedCount > 0) {
-      console.log(`Sincronização: ${correctedCount} registros de data/nome/ID corrigidos para compatibilidade em ${key}.`);
-    }
-    return repaired;
+  const repairDatabase = () => {
+    const validAgendamentos = agendamentos.filter(a => 
+      clientes.some(c => c.id === a.clienteId) && 
+      terapias.some(t => t.id === a.terapiaId)
+    );
+    setAgendamentos(validAgendamentos);
+    
+    const validPacotes = pacotes.filter(p => clientes.some(c => c.id === p.clienteId));
+    setPacotes(validPacotes);
+    
+    showNotification("Banco de dados reparado!", "success");
   };
-
-  // Listen for storage updates
-  useEffect(() => {
-    const handleStorageUpdate = () => {
-      fetchData();
-    };
-
-    window.addEventListener('storage-update', handleStorageUpdate);
-
-    return () => {
-      window.removeEventListener('storage-update', handleStorageUpdate);
-    };
-  }, []);
-
-  useEffect(() => {
-    const checkPendingAppointments = async () => {
-      try {
-        const now = new Date();
-        const today = now.toISOString().split('T')[0];
-
-        const pending = agendamentos.filter(ag => {
-          const agDate = new Date(`${ag.date}T${ag.time}`);
-          if (isNaN(agDate.getTime())) return false; // Ignore malformed dates
-
-          const agDay = agDate.toISOString().split('T')[0];
-          
-          if (agDay === today && ag.statusAtendimento === 'Agendado') {
-            const overdueTime = new Date(agDate.getTime() + 30 * 60000);
-            return now > overdueTime && !notifiedAppointments.has(ag.id);
-          }
-          return false;
-        });
-
-        if (pending.length > 0) {
-          if ('Notification' in window && Notification.permission === 'granted') {
-            new Notification("Atendimento Pendente", {
-              body: `O atendimento de um cliente passou do horário e não foi finalizado.`,
-              icon: "/favicon.png"
-            });
-          }
-
-          setNotifiedAppointments(prev => {
-            const next = new Set(prev);
-            pending.forEach(ag => next.add(ag.id));
-            return next;
-          });
-        }
-      } catch (error) {
-        console.error('Erro ao verificar agendamentos pendentes:', error);
-      }
-    };
-
-    checkPendingAppointments();
-    const interval = setInterval(checkPendingAppointments, 15 * 60000);
-    return () => clearInterval(interval);
-  }, [notifiedAppointments, agendamentos]);
 
   const handleImportContacts = async (): Promise<ImportedContact[] | null> => {
     if ('contacts' in navigator && 'select' in (navigator as any).contacts) {
       try {
-        const props = ['name', 'tel'];
-        const opts = { multiple: true };
-        const contacts = await (navigator as any).contacts.select(props, opts);
-        
-        if (contacts && contacts.length > 0) {
+        const contacts = await (navigator as any).contacts.select(['name', 'tel'], { multiple: true });
+        if (contacts?.length) {
           return contacts.map((c: any) => ({
             nome: c.name?.[0] || 'Sem Nome',
             telefone: c.tel?.[0] || '',
           }));
         }
-        return null;
-      } catch (err) {
-        console.error('Erro ao selecionar contatos:', err);
-      }
+      } catch (err) { console.error(err); }
     }
-
-    return new Promise((resolve) => {
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = '.csv';
-      
-      input.onchange = async (e: any) => {
-        const file = e.target.files[0];
-        if (!file) {
-          resolve(null);
-          return;
-        }
-        
-        const reader = new FileReader();
-        reader.onload = (event: any) => {
-          try {
-            const text = event.target.result;
-            const lines = text.split('\n');
-            const imported = lines.slice(1)
-              .map((line: string) => {
-                const parts = line.split(',');
-                if (parts.length < 2) return null;
-                return { 
-                  nome: parts[0]?.trim(), 
-                  telefone: parts[1]?.trim() 
-                };
-              })
-              .filter((c: any): c is ImportedContact => !!(c && c.nome && c.telefone));
-            
-            if (imported.length > 0) {
-              resolve(imported);
-            } else {
-              showNotification("Nenhum contato válido encontrado no CSV.", "error");
-              resolve(null);
-            }
-          } catch (err) {
-            console.error('Erro ao processar CSV:', err);
-            resolve(null);
-          }
-        };
-        reader.readAsText(file);
-      };
-      input.click();
-    });
+    return null;
   };
 
-  const completeAppointment = async (agendamentoId: string) => {
-    const prevAgendamentos = agendamentos;
-
-    try {
-      const agendamento = agendamentos.find(a => a.id === agendamentoId);
-      if (!agendamento) return;
-      
-      const updatedAgendamento = { ...agendamento, statusAtendimento: 'Realizado' as const };
-      
-      setAgendamentos(prev => prev.map(a => a.id === agendamentoId ? updatedAgendamento : a));
-      
-      await StorageService.updateItem('agendamentos', updatedAgendamento);
-    } catch (error) {
-      console.error('Erro ao completar agendamento:', error);
-      setAgendamentos(prevAgendamentos); // rollback real
-    }
-  };
-
-const addCliente = async (cliente: Omit<Cliente, 'id'>) => {
-  if (!session?.user?.id) {
-    console.error('Usuário não autenticado');
-    return;
-  }
-
-  const prevClientes = clientes;
-
-  try {
-    const newCliente = {
-      ...cliente,
-      id: crypto.randomUUID(),
-      userId: session.user.id
-    } as Cliente;
-
-    setClientes(prev =>
-      [...prev, newCliente].sort((a, b) =>
-        (a.nome || a.name).localeCompare(b.nome || b.name)
-      )
-    );
-
-    await StorageService.saveItem('clientes', newCliente);
-  } catch (error) {
-    console.error('Erro ao adicionar cliente:', error);
-    setClientes(prevClientes); // rollback real
-  }
-};
-
-const updateCliente = async (cliente: Cliente) => {
-  const prevClientes = clientes;
-
-  try {
-    setClientes(prev =>
-      prev
-        .map(c => (c.id === cliente.id ? cliente : c))
-        .sort((a, b) =>
-          (a.nome || a.name).localeCompare(b.nome || b.name)
-        )
-    );
-
-    await StorageService.updateItem('clientes', cliente);
-  } catch (error) {
-    console.error('Erro ao atualizar cliente:', error);
-    setClientes(prevClientes); // rollback real
-  }
-};
-
-const deleteCliente = async (id: string) => {
-  const prevClientes = clientes;
-
-  try {
-    setClientes(prev => prev.filter(c => c.id !== id));
-
-    await StorageService.deleteItem('clientes', id);
-  } catch (error) {
-    console.error('Erro ao deletar cliente:', error);
-    setClientes(prevClientes); // rollback real
-  }
-};
-
-const addAgendamento = async (agendamento: Omit<Agendamento, 'id'>) => {
-  if (!session?.user?.id) {
-    console.error('Usuário não autenticado');
-    return;
-  }
-
-  const prevAgendamentos = agendamentos;
-
-  try {
-    const newAgendamento = {
-      ...agendamento,
-      id: crypto.randomUUID(),
-      userId: session.user.id
-    } as Agendamento;
-
-    setAgendamentos(prev =>
-      [...prev, newAgendamento].sort((a, b) => {
-        if (a.date !== b.date) return a.date.localeCompare(b.date);
-        return a.time.localeCompare(b.time);
-      })
-    );
-
-    await StorageService.saveItem('agendamentos', newAgendamento);
-  } catch (error) {
-    console.error('Erro ao adicionar agendamento:', error);
-    setAgendamentos(prevAgendamentos); // rollback real
-  }
-};
-
-const updateAgendamento = async (agendamento: Agendamento) => {
-  const prevAgendamentos = agendamentos;
-
-  try {
-    setAgendamentos(prev =>
-      prev
-        .map(a => (a.id === agendamento.id ? agendamento : a))
-        .sort((a, b) => {
-          if (a.date !== b.date) return a.date.localeCompare(b.date);
-          return a.time.localeCompare(b.time);
-        })
-    );
-
-    await StorageService.updateItem('agendamentos', agendamento);
-  } catch (error) {
-    console.error('Erro ao atualizar agendamento:', error);
-    setAgendamentos(prevAgendamentos); // rollback real
-  }
-};
-
-const deleteAgendamento = async (id: string) => {
-  const prevAgendamentos = agendamentos;
-
-  try {
-    setAgendamentos(prev => prev.filter(a => a.id !== id));
-
-    await StorageService.deleteItem('agendamentos', id);
-  } catch (error) {
-    console.error('Erro ao deletar agendamento:', error);
-    setAgendamentos(prevAgendamentos); // rollback real
-  }
-};
-
-  const addTerapia = async (terapia: Omit<Terapia, 'id'>) => {
-    if (!session?.user?.id) {
-      console.error('Usuário não autenticado');
-      return;
-    }
-
-    const prevTerapias = terapias;
-
-    try {
-      const newTerapia = {
-        ...terapia,
-        id: crypto.randomUUID(),
-        userId: session.user.id
-      } as Terapia;
-      
-      setTerapias(prev => [...prev, newTerapia].sort((a, b) => (a.name || a.nome || '').localeCompare(b.name || b.nome || '')));
-      
-      await StorageService.saveItem('terapias', newTerapia);
-    } catch (error) {
-      console.error('Erro ao adicionar terapia:', error);
-      setTerapias(prevTerapias); // rollback real
-    }
-  };
-
-  const updateTerapia = async (terapia: Terapia) => {
-    const prevTerapias = terapias;
-
-    try {
-      setTerapias(prev => prev.map(t => t.id === terapia.id ? terapia : t).sort((a, b) => (a.name || a.nome || '').localeCompare(b.name || b.nome || '')));
-      
-      await StorageService.updateItem('terapias', terapia);
-    } catch (error) {
-      console.error('Erro ao atualizar terapia:', error);
-      setTerapias(prevTerapias); // rollback real
-    }
-  };
-
-  const deleteTerapia = async (id: string) => {
-    const prevTerapias = terapias;
-
-    try {
-      setTerapias(prev => prev.filter(t => t.id !== id));
-      
-      await StorageService.deleteItem('terapias', id);
-    } catch (error) {
-      console.error('Erro ao deletar terapia:', error);
-      setTerapias(prevTerapias); // rollback real
-    }
-  };
-
-  const addPacote = async (pacote: Omit<Pacote, 'id'>) => {
-    if (!session?.user?.id) {
-      console.error('Usuário não autenticado');
-      return;
-    }
-
-    const prevPacotes = pacotes;
-
-    try {
-      const newPacote = {
-        ...pacote,
-        id: crypto.randomUUID(),
-        userId: session.user.id
-      } as Pacote;
-      
-      setPacotes(prev => [...prev, newPacote].sort((a, b) => b.mesReferencia.localeCompare(a.mesReferencia)));
-      
-      await StorageService.saveItem('pacotes', newPacote);
-    } catch (error) {
-      console.error('Erro ao adicionar pacote:', error);
-      setPacotes(prevPacotes); // rollback real
-    }
-  };
-
-  const updatePacote = async (pacote: Pacote) => {
-    const prevPacotes = pacotes;
-
-    try {
-      setPacotes(prev => prev.map(p => p.id === pacote.id ? pacote : p).sort((a, b) => b.mesReferencia.localeCompare(a.mesReferencia)));
-      
-      await StorageService.updateItem('pacotes', pacote);
-    } catch (error) {
-      console.error('Erro ao atualizar pacote:', error);
-      setPacotes(prevPacotes); // rollback real
-    }
-  };
-
-  const deletePacote = async (id: string) => {
-    const prevPacotes = pacotes;
-
-    try {
-      setPacotes(prev => prev.filter(p => p.id !== id));
-      
-      await StorageService.deleteItem('pacotes', id);
-    } catch (error) {
-      console.error('Erro ao deletar pacote:', error);
-      setPacotes(prevPacotes); // rollback real
-    }
-  };
-
-  const addBloqueio = async (bloqueio: Omit<Bloqueio, 'id'>) => {
-    if (!session?.user?.id) {
-      console.error('Usuário não autenticado');
-      return;
-    }
-
-    const prevBloqueios = bloqueios;
-
-    try {
-      const newBloqueio = {
-        ...bloqueio,
-        id: crypto.randomUUID(),
-        userId: session.user.id
-      } as Bloqueio;
-      
-      setBloqueios(prev => [...prev, newBloqueio].sort((a, b) => a.data.localeCompare(b.data)));
-      
-      await StorageService.saveItem('bloqueios', newBloqueio);
-    } catch (error) {
-      console.error('Erro ao adicionar bloqueio:', error);
-      setBloqueios(prevBloqueios); // rollback real
-    }
-  };
-
-  const deleteBloqueio = async (id: string) => {
-    const prevBloqueios = bloqueios;
-
-    try {
-      setBloqueios(prev => prev.filter(b => b.id !== id));
-      
-      await StorageService.deleteItem('bloqueios', id);
-    } catch (error) {
-      console.error('Erro ao deletar bloqueio:', error);
-      setBloqueios(prevBloqueios); // rollback real
-    }
+  const safeDate = (d: any): Date => {
+    const parsed = new Date(d);
+    return isNaN(parsed.getTime()) ? new Date() : parsed;
   };
 
   return (
-    <AppContext.Provider value={{ 
-      handleImportContacts, 
-      ddiList, 
-      completeAppointment, 
-      session, 
-      loading,
-      statusMsg,
-      setStatusMsg,
-      clientes,
-      agendamentos,
-      terapias,
-      pacotes,
-      bloqueios,
-      fetchData,
-      addCliente,
-      updateCliente,
-      deleteCliente,
-      addAgendamento,
-      updateAgendamento,
-      deleteAgendamento,
-      addTerapia,
-      updateTerapia,
-      deleteTerapia,
-      addPacote,
-      updatePacote,
-      deletePacote,
-      addBloqueio,
-      deleteBloqueio,
-      showNotification,
-      confirmAction,
-      promptAction,
-      safeDate
+    <AppContext.Provider value={{
+      clientes, agendamentos, terapias, pacotes, bloqueios, transacoes,
+      addCliente, updateCliente, deleteCliente,
+      addAgendamento, updateAgendamento, deleteAgendamento, completeAppointment,
+      addTerapia, updateTerapia, deleteTerapia,
+      addPacote, updatePacote, deletePacote,
+      addBloqueio, deleteBloqueio,
+      addTransacao, updateTransacao, deleteTransacao,
+      showNotification, confirmAction, promptAction,
+      handleImportContacts, exportarBackup, importarBackup, repairDatabase,
+      safeDate, ddiList: DDI_LIST,
+      setAgendamentos, setPacotes
     }}>
       {children}
-
-      {/* Global Notifications (Toasts) */}
       <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none">
         {notifications.map(n => (
-          <div 
-            key={n.id} 
-            className={`px-4 py-3 rounded-xl shadow-lg border flex items-center gap-3 animate-in slide-in-from-right-full duration-300 pointer-events-auto ${
-              n.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' :
-              n.type === 'error' ? 'bg-red-50 border-red-200 text-red-800' :
-              'bg-blue-50 border-blue-200 text-blue-800'
-            }`}
-          >
+          <div key={n.id} className={`px-4 py-3 rounded-xl shadow-lg border flex items-center gap-3 animate-in slide-in-from-right-full duration-300 pointer-events-auto ${
+            n.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' :
+            n.type === 'error' ? 'bg-red-50 border-red-200 text-red-800' : 'bg-blue-50 border-blue-200 text-blue-800'
+          }`}>
             <p className="text-sm font-medium">{n.message}</p>
           </div>
         ))}
       </div>
-
-      {/* Global Confirmation Modal */}
       {confirmation && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-6">
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
-                {confirmation.title || 'Confirmar Ação'}
-              </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                {confirmation.message}
-              </p>
-            </div>
-            <div className="flex border-t border-gray-100 dark:border-gray-800">
-              <button 
-                onClick={() => {
-                  if (confirmation.onCancel) confirmation.onCancel();
-                  setConfirmation(null);
-                }}
-                className="flex-1 py-4 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
-              >
-                {confirmation.cancelText || 'Cancelar'}
-              </button>
-              <button 
-                onClick={() => {
-                  confirmation.onConfirm();
-                  setConfirmation(null);
-                }}
-                className={`flex-1 py-4 text-sm font-bold border-l border-gray-100 dark:border-gray-800 hover:opacity-90 transition-colors ${
-                  confirmation.isDanger ? 'text-red-600' : 'text-[var(--color-primary)]'
-                }`}
-              >
-                {confirmation.confirmText || 'Confirmar'}
-              </button>
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-2xl shadow-2xl p-6">
+            <h3 className="text-lg font-bold mb-2">{confirmation.title || 'Confirmar'}</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">{confirmation.message}</p>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmation(null)} className="flex-1 py-3 text-sm font-medium text-gray-500">Cancelar</button>
+              <button onClick={() => { confirmation.onConfirm(); setConfirmation(null); }} className={`flex-1 py-3 text-sm font-bold rounded-xl ${confirmation.isDanger ? 'bg-red-600 text-white' : 'bg-[var(--color-primary)] text-white'}`}>Confirmar</button>
             </div>
           </div>
         </div>
       )}
-
-      {/* Global Prompt Modal */}
       {prompt && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-6">
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
-                {prompt.title || 'Entrada de Dados'}
-              </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                {prompt.message}
-              </p>
-              <input 
-                type="text"
-                autoFocus
-                defaultValue={prompt.defaultValue}
-                placeholder={prompt.placeholder}
-                className="w-full px-4 py-3 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-gray-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    prompt.onConfirm((e.target as HTMLInputElement).value);
-                    setPrompt(null);
-                  }
-                }}
-                id="global-prompt-input"
-              />
-            </div>
-            <div className="flex border-t border-gray-100 dark:border-gray-800">
-              <button 
-                onClick={() => setPrompt(null)}
-                className="flex-1 py-4 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button 
-                onClick={() => {
-                  const val = (document.getElementById('global-prompt-input') as HTMLInputElement)?.value;
-                  prompt.onConfirm(val);
-                  setPrompt(null);
-                }}
-                className="flex-1 py-4 text-sm font-bold border-l border-gray-100 dark:border-gray-800 text-[var(--color-primary)] hover:opacity-90 transition-colors"
-              >
-                Confirmar
-              </button>
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-2xl shadow-2xl p-6">
+            <h3 className="text-lg font-bold mb-2">{prompt.title || 'Entrada'}</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">{prompt.message}</p>
+            <input 
+              type="text" 
+              autoFocus 
+              defaultValue={prompt.defaultValue} 
+              className="w-full px-4 py-3 bg-gray-50 dark:bg-white/5 border rounded-xl mb-6 outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+              id="global-prompt-input"
+            />
+            <div className="flex gap-3">
+              <button onClick={() => setPrompt(null)} className="flex-1 py-3 text-sm font-medium text-gray-500">Cancelar</button>
+              <button onClick={() => { prompt.onConfirm((document.getElementById('global-prompt-input') as HTMLInputElement).value); setPrompt(null); }} className="flex-1 py-3 text-sm font-bold bg-[var(--color-primary)] text-white rounded-xl">Confirmar</button>
             </div>
           </div>
         </div>
@@ -743,8 +331,6 @@ const deleteAgendamento = async (id: string) => {
 
 export const useAppContext = () => {
   const context = useContext(AppContext);
-  if (!context) {
-    throw new Error('useAppContext must be used within an AppProvider');
-  }
+  if (!context) throw new Error('useAppContext must be used within AppProvider');
   return context;
 };

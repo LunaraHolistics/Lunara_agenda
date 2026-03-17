@@ -6,12 +6,21 @@ import { AsyncStorage } from '../utils/storage';
 import { useAppContext } from '../AppContext';
 
 export default function PacotesScreen() {
-  const { showNotification, confirmAction, session } = useAppContext();
-  const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [terapias, setTerapias] = useState<Terapia[]>([]);
-  const [pacotes, setPacotes] = useState<Pacote[]>([]);
+  const { 
+    showNotification, 
+    confirmAction, 
+    session,
+    clientes,
+    terapias,
+    pacotes,
+    fetchData,
+    addPacote,
+    updatePacote,
+    deletePacote
+  } = useAppContext();
+  
   const [viewMode, setViewMode] = useState<'list' | 'form'>('list');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   
   // Form State
@@ -38,47 +47,55 @@ export default function PacotesScreen() {
   });
 
   useEffect(() => {
-    loadData();
-    window.addEventListener('storage-sync', loadData);
-    return () => window.removeEventListener('storage-sync', loadData);
+    fetchData();
+    window.addEventListener('storage-sync', fetchData);
+    return () => window.removeEventListener('storage-sync', fetchData);
   }, [refreshTrigger]);
 
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      const [clis, ters, pacs] = await Promise.all([
-        StorageService.getItems<Cliente>(StorageKeys.CLIENTES),
-        StorageService.getItems<Terapia>(StorageKeys.TERAPIAS),
-        StorageService.getItems<Pacote>(StorageKeys.PACOTES),
-      ]);
-      // Sincronia de IDs para garantir que o filtro funcione (Andreza/Amanda)
-      setClientes(clis.filter(c => c.name || c.nome)); 
-      setTerapias(ters);
-      setPacotes(pacs);
-    } catch (error) {
-      console.error("Erro ao carregar dados:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleEdit = async (pacote: Pacote) => {
-    await loadData();
     setEditingPacoteId(String(pacote.id));
     setClienteId(String(pacote.clienteId));
     setMesReferencia(pacote.mesReferencia);
-    setItens(Array.isArray(pacote.itens) ? pacote.itens : JSON.parse(pacote.itens || '[]'));
+    
+    // Safe parsing for itens
+    let parsedItens = [];
+    try {
+      const rawItens = pacote.itens;
+      if (Array.isArray(rawItens)) {
+        parsedItens = rawItens;
+      } else if (typeof rawItens === 'string') {
+        parsedItens = JSON.parse(rawItens);
+      }
+    } catch (e) {
+      console.error("Erro ao parsear itens:", e);
+    }
+    setItens(parsedItens || []);
+    
     setTipoPacote(pacote.tipoPacote);
     setObservacoes(pacote.observacoes || '');
-    setValorManual(pacote.valorFinal != null ? Number(pacote.valorFinal) : null);
-    setHistoricoPagamento(typeof pacote.historicoPagamento === 'string' 
-      ? JSON.parse(pacote.historicoPagamento) 
-      : (pacote.historicoPagamento || { status: 'Pendente', valor: 0 }));
+    
+    // Use price or valorFinal
+    const valor = pacote.price !== undefined ? pacote.price : (pacote.valorFinal !== undefined ? pacote.valorFinal : 0);
+    setValorManual(Number(valor));
+    
+    // Safe parsing for historicoPagamento
+    let pagInfo = { status: 'Pendente', valor: 0, data: undefined, forma: undefined, banco: undefined };
+    try {
+      const rawPag = pacote.historicoPagamento;
+      if (typeof rawPag === 'string') {
+        pagInfo = JSON.parse(rawPag);
+      } else if (rawPag && typeof rawPag === 'object') {
+        pagInfo = { ...pagInfo, ...rawPag };
+      }
+    } catch (e) {
+      console.error("Erro ao parsear historicoPagamento:", e);
+    }
+    setHistoricoPagamento(pagInfo as any);
+    
     setViewMode('form');
   };
 
-  const handleNew = async () => {
-    await loadData();
+  const handleNew = () => {
     setEditingPacoteId(null);
     setClienteId('');
     setItens([]);
@@ -94,10 +111,9 @@ export default function PacotesScreen() {
       try {
         setLoading(true);
         // Chama a nossa nova lógica que limpa os vínculos no Supabase primeiro
-        await StorageService.deleteItem(StorageKeys.PACOTES, pacoteId);
+        await deletePacote(pacoteId);
         
         showNotification('Pacote excluído com sucesso!', 'success');
-        await loadData(); // Recarrega tudo
         setViewMode('list');
       } catch (error: any) {
         showNotification('Erro ao excluir: ' + error.message, 'error');
@@ -107,81 +123,76 @@ export default function PacotesScreen() {
     }, { isDanger: true });
   };
 
-    const handleSave = async () => {
-      if (!clienteId) {
-        showNotification('Selecione um cliente.', 'error');
-        return;
-      }
+  const handleSave = async () => {
+    if (!clienteId) {
+      showNotification('Selecione um cliente.', 'error');
+      return;
+    }
 
+    const prevPacotes = [...pacotes];
+    const pacoteId = editingPacoteId || crypto.randomUUID();
+    const valorCalculado = valorManual !== null ? valorManual : totais.final;
+
+    const novoPacote: Pacote = {
+      id: pacoteId,
+      userId: session?.user?.id || '',
+      clienteId: String(clienteId),
+      mesReferencia,
+      valorFinal: Number(valorCalculado),
+      price: Number(valorCalculado),
+      itens: itens,
+      tipoPacote,
+      status: historicoPagamento.status === 'Pago' ? 'Ativo' : 'Pendente',
+      observacoes
+    };
+    
+    // Immediate UI transition
+    setViewMode('list');
+    showNotification('Pacote salvo com sucesso!', 'success');
+
+    // Background persistence
+    const persist = async () => {
       try {
-        setLoading(true);
-        // Garante que o ID seja consistente
-        const pacoteId = editingPacoteId || `pac_${Date.now()}`;
-        const valorCalculado = valorManual !== null ? valorManual : totais.final;
-
-        const novoPacote: Pacote = {
-          id: pacoteId,
-          userId: session?.user?.id || '',
-          clienteId: String(clienteId),
-          mesReferencia,
-          price: valorCalculado,
-          payment_method: historicoPagamento.forma || 'PIX',
-          payment_date: historicoPagamento.data || new Date().toISOString().split('T')[0],
-          itens: JSON.stringify(itens),
-          tipoPacote,
-          observacoes,
-        };
-        
-        console.log("Salvando pacote:", novoPacote);
-        if (itens.length === 0) {
-          console.warn("Atenção: A lista de terapias está vazia.");
-        }
-
         if (editingPacoteId) {
-          await StorageService.updateItem(StorageKeys.PACOTES, novoPacote);
+          await updatePacote(novoPacote);
         } else {
-          await StorageService.saveItem(StorageKeys.PACOTES, novoPacote);
+          await addPacote(novoPacote);
         }
 
         // Sincronização Financeira Otimizada
-        if (historicoPagamento.status === 'Pago') {
-          const clienteNome = clientes.find(c => String(c.id) === String(clienteId))?.name || 'Cliente';
-          
+        const cliente = clientes.find(c => String(c.id) === String(clienteId));
+        const clienteNome = cliente?.name || cliente?.nome || 'Cliente';
+        
           const transacao = {
-            id: `trans_${Date.now()}`,
-            pacoteId: pacoteId,
-            clienteId: String(clienteId),
-            user_id: session?.user?.id,
-            tipo: 'Ganho',
-            descricao: `Pacote - ${clienteNome}`,
+            id: crypto.randomUUID(),
+            userId: session?.user?.id || '',
+            descricao: `Pacote (${tipoPacote}) - ${clienteNome}`,
             valor: Number(valorCalculado),
             data: historicoPagamento.data || new Date().toISOString().split('T')[0],
             metodo: historicoPagamento.forma || 'PIX',
-            banco: historicoPagamento.banco || null,
-            categoria: 'Terapias'
+            categoria: 'Terapias',
+            status: historicoPagamento.status === 'Pago' ? 'Pago' : 'Pendente',
+            pacoteId: pacoteId,
+            dataPagamento: historicoPagamento.status === 'Pago' ? (historicoPagamento.data || new Date().toISOString().split('T')[0]) : null
           };
 
-          // Tenta atualizar ou criar a transação baseada no pacoteId
-          const transacoes = await StorageService.getItems<any>(StorageKeys.TRANSACOES);
-          const transacaoExistente = transacoes.find(t => t.pacoteId === pacoteId);
-
-          if (transacaoExistente) {
-            await StorageService.updateItem(StorageKeys.TRANSACOES, { ...transacao, id: transacaoExistente.id });
-          } else {
-            await StorageService.saveItem(StorageKeys.TRANSACOES, transacao);
-          }
+        // Tenta atualizar ou criar a transação baseada no pacoteId
+        const transacoes = await StorageService.getItems<any>(StorageKeys.TRANSACOES);
+        const transacaoExistente = transacoes.find(t => t.pacoteId === pacoteId);
+        if (transacaoExistente) {
+          await StorageService.updateItem(StorageKeys.TRANSACOES, { ...transacao, id: transacaoExistente.id });
+        } else {
+          await StorageService.saveItem(StorageKeys.TRANSACOES, transacao);
         }
-
-        showNotification('Pacote salvo com sucesso!', 'success');
-        setViewMode('list');
-        await loadData();
-        window.dispatchEvent(new Event('storage-sync'));
       } catch (error: any) {
-        showNotification('Erro ao salvar: ' + error.message, 'error');
-      } finally {
-        setLoading(false);
+        console.error("Erro na persistência do pacote:", error);
+        showNotification('Erro ao sincronizar pacote.', 'error');
       }
     };
+
+    persist();
+    window.dispatchEvent(new Event('storage-sync'));
+  };
 
   // Drag and Drop
   const handleDragStart = (e: React.DragEvent, terapiaId: string) => {

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, ReactNode, useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import { Agendamento, Cliente, Terapia, Pacote, Bloqueio, ImportedContact } from './types';
-import { mapFromSnakeCase, mapToSnakeCase } from './services/StorageService';
+import { mapFromSnakeCase, StorageService } from './services/StorageService';
 
 export interface CountryDDI {
   code: string;
@@ -107,7 +107,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setSession(session);
       setLoading(false);
       if (session) {
-        fetchData();
+        StorageService.syncWithCloud().then(() => fetchData());
       }
     });
 
@@ -115,7 +115,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session) {
-        fetchData();
+        StorageService.syncWithCloud().then(() => fetchData());
       } else {
         // Clear data on logout
         setClientes([]);
@@ -135,31 +135,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!user) return;
 
     try {
-      const [clis, agends, ters, pacs, blks] = await Promise.all([
-        supabase.from('clientes').select('*').eq('user_id', user.id).order('name'),
-        supabase.from('agendamentos').select('*').eq('user_id', user.id).order('date', { ascending: true }).order('time', { ascending: true }),
-        supabase.from('terapias').select('*').eq('user_id', user.id).order('name'),
-        supabase.from('pacotes').select('*').eq('user_id', user.id).order('month', { ascending: false }),
-        supabase.from('bloqueios').select('*').eq('user_id', user.id).order('data'),
-      ]);
+      const clis = await StorageService.getItems('clientes');
+      const agends = await StorageService.getItems('agendamentos');
+      const ters = await StorageService.getItems('terapias');
+      const pacs = await StorageService.getItems('pacotes');
+      const blks = await StorageService.getItems('bloqueios');
 
-      console.log("Carregando clientes...", clis.data);
-      console.log("Carregando agendamentos...", agends.data);
-      console.log("Carregando terapias...", ters.data);
-      console.log("Carregando pacotes...", pacs.data);
-      console.log("Carregando bloqueios...", blks.data);
+      console.log("Carregando clientes do StorageService...", clis);
+      console.log("Carregando agendamentos do StorageService...", agends);
+      console.log("Carregando terapias do StorageService...", ters);
+      console.log("Carregando pacotes do StorageService...", pacs);
+      console.log("Carregando bloqueios do StorageService...", blks);
 
-      if (clis.error) console.error("Erro clientes:", clis.error);
-      if (agends.error) console.error("Erro agendamentos:", agends.error);
-      if (ters.error) console.error("Erro terapias:", ters.error);
-      if (pacs.error) console.error("Erro pacotes:", pacs.error);
-      if (blks.error) console.error("Erro bloqueios:", blks.error);
-
-      if (clis.data) setClientes(silentRepair('clientes', clis.data.map(item => mapFromSnakeCase('clientes', item))));
-      if (agends.data) setAgendamentos(silentRepair('agendamentos', agends.data.map(item => mapFromSnakeCase('agendamentos', item))));
-      if (ters.data) setTerapias(silentRepair('terapias', ters.data.map(item => mapFromSnakeCase('terapias', item))));
-      if (pacs.data) setPacotes(silentRepair('pacotes', pacs.data.map(item => mapFromSnakeCase('pacotes', item))));
-      if (blks.data) setBloqueios(silentRepair('bloqueios', blks.data.map(item => mapFromSnakeCase('bloqueios', item))));
+      setClientes(silentRepair('clientes', clis));
+      setAgendamentos(silentRepair('agendamentos', agends));
+      setTerapias(silentRepair('terapias', ters));
+      setPacotes(silentRepair('pacotes', pacs));
+      setBloqueios(silentRepair('bloqueios', blks));
     } catch (error) {
       console.error('Erro ao buscar dados:', error);
     }
@@ -211,23 +203,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return repaired;
   };
 
-  // Real-time subscription
+  // Listen for storage updates
   useEffect(() => {
-    if (!session?.user) return;
+    const handleStorageUpdate = () => {
+      fetchData();
+    };
 
-    const channels = ['clientes', 'agendamentos', 'terapias', 'pacotes', 'bloqueios'].map(table => {
-      return supabase
-        .channel(`public:${table}`)
-        .on('postgres_changes', { event: '*', schema: 'public', table }, () => {
-          fetchData();
-        })
-        .subscribe();
-    });
+    window.addEventListener('storage-update', handleStorageUpdate);
 
     return () => {
-      channels.forEach(channel => supabase.removeChannel(channel));
+      window.removeEventListener('storage-update', handleStorageUpdate);
     };
-  }, [session]);
+  }, []);
 
   useEffect(() => {
     const checkPendingAppointments = async () => {
@@ -337,193 +324,279 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const completeAppointment = async (agendamentoId: string) => {
+    const prevAgendamentos = agendamentos;
+
     try {
-      const { error } = await supabase
-        .from('agendamentos')
-        .update({ appointment_status: 'Realizado' })
-        .eq('id', agendamentoId);
+      const agendamento = agendamentos.find(a => a.id === agendamentoId);
+      if (!agendamento) return;
       
-      if (error) throw error;
-      fetchData();
+      const updatedAgendamento = { ...agendamento, statusAtendimento: 'Realizado' as const };
+      
+      setAgendamentos(prev => prev.map(a => a.id === agendamentoId ? updatedAgendamento : a));
+      
+      await StorageService.updateItem('agendamentos', updatedAgendamento);
     } catch (error) {
       console.error('Erro ao completar agendamento:', error);
+      setAgendamentos(prevAgendamentos); // rollback real
     }
   };
 
-  const addCliente = async (cliente: Omit<Cliente, 'id'>) => {
-    try {
-      const { error } = await supabase
-        .from('clientes')
-        .insert([{ ...mapToSnakeCase('clientes', cliente), user_id: session.user.id }]);
-      if (error) throw error;
-      fetchData();
-    } catch (error) {
-      console.error('Erro ao adicionar cliente:', error);
-    }
-  };
+const addCliente = async (cliente: Omit<Cliente, 'id'>) => {
+  if (!session?.user?.id) {
+    console.error('Usuário não autenticado');
+    return;
+  }
 
-  const updateCliente = async (cliente: Cliente) => {
-    try {
-      const { error } = await supabase
-        .from('clientes')
-        .update(mapToSnakeCase('clientes', cliente))
-        .eq('id', cliente.id);
-      if (error) throw error;
-      fetchData();
-    } catch (error) {
-      console.error('Erro ao atualizar cliente:', error);
-    }
-  };
+  const prevClientes = clientes;
 
-  const deleteCliente = async (id: string) => {
-    try {
-      const { error } = await supabase
-        .from('clientes')
-        .delete()
-        .eq('id', id);
-      if (error) throw error;
-      fetchData();
-    } catch (error) {
-      console.error('Erro ao deletar cliente:', error);
-    }
-  };
+  try {
+    const newCliente = {
+      ...cliente,
+      id: crypto.randomUUID(),
+      userId: session.user.id
+    } as Cliente;
 
-  const addAgendamento = async (agendamento: Omit<Agendamento, 'id'>) => {
-    try {
-      const { error } = await supabase
-        .from('agendamentos')
-        .insert([{ ...mapToSnakeCase('agendamentos', agendamento), user_id: session.user.id }]);
-      if (error) throw error;
-      fetchData();
-    } catch (error) {
-      console.error('Erro ao adicionar agendamento:', error);
-    }
-  };
+    setClientes(prev =>
+      [...prev, newCliente].sort((a, b) =>
+        (a.nome || a.name).localeCompare(b.nome || b.name)
+      )
+    );
 
-  const updateAgendamento = async (agendamento: Agendamento) => {
-    try {
-      const { error } = await supabase
-        .from('agendamentos')
-        .update(mapToSnakeCase('agendamentos', agendamento))
-        .eq('id', agendamento.id);
-      if (error) throw error;
-      fetchData();
-    } catch (error) {
-      console.error('Erro ao atualizar agendamento:', error);
-    }
-  };
+    await StorageService.saveItem('clientes', newCliente);
+  } catch (error) {
+    console.error('Erro ao adicionar cliente:', error);
+    setClientes(prevClientes); // rollback real
+  }
+};
 
-  const deleteAgendamento = async (id: string) => {
-    try {
-      const { error } = await supabase
-        .from('agendamentos')
-        .delete()
-        .eq('id', id);
-      if (error) throw error;
-      fetchData();
-    } catch (error) {
-      console.error('Erro ao deletar agendamento:', error);
-    }
-  };
+const updateCliente = async (cliente: Cliente) => {
+  const prevClientes = clientes;
+
+  try {
+    setClientes(prev =>
+      prev
+        .map(c => (c.id === cliente.id ? cliente : c))
+        .sort((a, b) =>
+          (a.nome || a.name).localeCompare(b.nome || b.name)
+        )
+    );
+
+    await StorageService.updateItem('clientes', cliente);
+  } catch (error) {
+    console.error('Erro ao atualizar cliente:', error);
+    setClientes(prevClientes); // rollback real
+  }
+};
+
+const deleteCliente = async (id: string) => {
+  const prevClientes = clientes;
+
+  try {
+    setClientes(prev => prev.filter(c => c.id !== id));
+
+    await StorageService.deleteItem('clientes', id);
+  } catch (error) {
+    console.error('Erro ao deletar cliente:', error);
+    setClientes(prevClientes); // rollback real
+  }
+};
+
+const addAgendamento = async (agendamento: Omit<Agendamento, 'id'>) => {
+  if (!session?.user?.id) {
+    console.error('Usuário não autenticado');
+    return;
+  }
+
+  const prevAgendamentos = agendamentos;
+
+  try {
+    const newAgendamento = {
+      ...agendamento,
+      id: crypto.randomUUID(),
+      userId: session.user.id
+    } as Agendamento;
+
+    setAgendamentos(prev =>
+      [...prev, newAgendamento].sort((a, b) => {
+        if (a.date !== b.date) return a.date.localeCompare(b.date);
+        return a.time.localeCompare(b.time);
+      })
+    );
+
+    await StorageService.saveItem('agendamentos', newAgendamento);
+  } catch (error) {
+    console.error('Erro ao adicionar agendamento:', error);
+    setAgendamentos(prevAgendamentos); // rollback real
+  }
+};
+
+const updateAgendamento = async (agendamento: Agendamento) => {
+  const prevAgendamentos = agendamentos;
+
+  try {
+    setAgendamentos(prev =>
+      prev
+        .map(a => (a.id === agendamento.id ? agendamento : a))
+        .sort((a, b) => {
+          if (a.date !== b.date) return a.date.localeCompare(b.date);
+          return a.time.localeCompare(b.time);
+        })
+    );
+
+    await StorageService.updateItem('agendamentos', agendamento);
+  } catch (error) {
+    console.error('Erro ao atualizar agendamento:', error);
+    setAgendamentos(prevAgendamentos); // rollback real
+  }
+};
+
+const deleteAgendamento = async (id: string) => {
+  const prevAgendamentos = agendamentos;
+
+  try {
+    setAgendamentos(prev => prev.filter(a => a.id !== id));
+
+    await StorageService.deleteItem('agendamentos', id);
+  } catch (error) {
+    console.error('Erro ao deletar agendamento:', error);
+    setAgendamentos(prevAgendamentos); // rollback real
+  }
+};
 
   const addTerapia = async (terapia: Omit<Terapia, 'id'>) => {
+    if (!session?.user?.id) {
+      console.error('Usuário não autenticado');
+      return;
+    }
+
+    const prevTerapias = terapias;
+
     try {
-      const { error } = await supabase
-        .from('terapias')
-        .insert([{ ...mapToSnakeCase('terapias', terapia), user_id: session.user.id }]);
-      if (error) throw error;
-      fetchData();
+      const newTerapia = {
+        ...terapia,
+        id: crypto.randomUUID(),
+        userId: session.user.id
+      } as Terapia;
+      
+      setTerapias(prev => [...prev, newTerapia].sort((a, b) => (a.name || a.nome || '').localeCompare(b.name || b.nome || '')));
+      
+      await StorageService.saveItem('terapias', newTerapia);
     } catch (error) {
       console.error('Erro ao adicionar terapia:', error);
+      setTerapias(prevTerapias); // rollback real
     }
   };
 
   const updateTerapia = async (terapia: Terapia) => {
+    const prevTerapias = terapias;
+
     try {
-      const { error } = await supabase
-        .from('terapias')
-        .update(mapToSnakeCase('terapias', terapia))
-        .eq('id', terapia.id);
-      if (error) throw error;
-      fetchData();
+      setTerapias(prev => prev.map(t => t.id === terapia.id ? terapia : t).sort((a, b) => (a.name || a.nome || '').localeCompare(b.name || b.nome || '')));
+      
+      await StorageService.updateItem('terapias', terapia);
     } catch (error) {
       console.error('Erro ao atualizar terapia:', error);
+      setTerapias(prevTerapias); // rollback real
     }
   };
 
   const deleteTerapia = async (id: string) => {
+    const prevTerapias = terapias;
+
     try {
-      const { error } = await supabase
-        .from('terapias')
-        .delete()
-        .eq('id', id);
-      if (error) throw error;
-      fetchData();
+      setTerapias(prev => prev.filter(t => t.id !== id));
+      
+      await StorageService.deleteItem('terapias', id);
     } catch (error) {
       console.error('Erro ao deletar terapia:', error);
+      setTerapias(prevTerapias); // rollback real
     }
   };
 
   const addPacote = async (pacote: Omit<Pacote, 'id'>) => {
+    if (!session?.user?.id) {
+      console.error('Usuário não autenticado');
+      return;
+    }
+
+    const prevPacotes = pacotes;
+
     try {
-      const { error } = await supabase
-        .from('pacotes')
-        .insert([{ ...mapToSnakeCase('pacotes', pacote), user_id: session.user.id }]);
-      if (error) throw error;
-      fetchData();
+      const newPacote = {
+        ...pacote,
+        id: crypto.randomUUID(),
+        userId: session.user.id
+      } as Pacote;
+      
+      setPacotes(prev => [...prev, newPacote].sort((a, b) => b.mesReferencia.localeCompare(a.mesReferencia)));
+      
+      await StorageService.saveItem('pacotes', newPacote);
     } catch (error) {
       console.error('Erro ao adicionar pacote:', error);
+      setPacotes(prevPacotes); // rollback real
     }
   };
 
   const updatePacote = async (pacote: Pacote) => {
+    const prevPacotes = pacotes;
+
     try {
-      const { error } = await supabase
-        .from('pacotes')
-        .update(mapToSnakeCase('pacotes', pacote))
-        .eq('id', pacote.id);
-      if (error) throw error;
-      fetchData();
+      setPacotes(prev => prev.map(p => p.id === pacote.id ? pacote : p).sort((a, b) => b.mesReferencia.localeCompare(a.mesReferencia)));
+      
+      await StorageService.updateItem('pacotes', pacote);
     } catch (error) {
       console.error('Erro ao atualizar pacote:', error);
+      setPacotes(prevPacotes); // rollback real
     }
   };
 
   const deletePacote = async (id: string) => {
+    const prevPacotes = pacotes;
+
     try {
-      const { error } = await supabase
-        .from('pacotes')
-        .delete()
-        .eq('id', id);
-      if (error) throw error;
-      fetchData();
+      setPacotes(prev => prev.filter(p => p.id !== id));
+      
+      await StorageService.deleteItem('pacotes', id);
     } catch (error) {
       console.error('Erro ao deletar pacote:', error);
+      setPacotes(prevPacotes); // rollback real
     }
   };
 
   const addBloqueio = async (bloqueio: Omit<Bloqueio, 'id'>) => {
+    if (!session?.user?.id) {
+      console.error('Usuário não autenticado');
+      return;
+    }
+
+    const prevBloqueios = bloqueios;
+
     try {
-      const { error } = await supabase
-        .from('bloqueios')
-        .insert([{ ...mapToSnakeCase('bloqueios', bloqueio), user_id: session.user.id }]);
-      if (error) throw error;
-      fetchData();
+      const newBloqueio = {
+        ...bloqueio,
+        id: crypto.randomUUID(),
+        userId: session.user.id
+      } as Bloqueio;
+      
+      setBloqueios(prev => [...prev, newBloqueio].sort((a, b) => a.data.localeCompare(b.data)));
+      
+      await StorageService.saveItem('bloqueios', newBloqueio);
     } catch (error) {
       console.error('Erro ao adicionar bloqueio:', error);
+      setBloqueios(prevBloqueios); // rollback real
     }
   };
 
   const deleteBloqueio = async (id: string) => {
+    const prevBloqueios = bloqueios;
+
     try {
-      const { error } = await supabase
-        .from('bloqueios')
-        .delete()
-        .eq('id', id);
-      if (error) throw error;
-      fetchData();
+      setBloqueios(prev => prev.filter(b => b.id !== id));
+      
+      await StorageService.deleteItem('bloqueios', id);
     } catch (error) {
       console.error('Erro ao deletar bloqueio:', error);
+      setBloqueios(prevBloqueios); // rollback real
     }
   };
 

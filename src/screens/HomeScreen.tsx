@@ -9,7 +9,7 @@ import ConferenciaScreen from './ConferenciaScreen';
 import { useAppContext } from '../AppContext';
 
 export default function HomeScreen() {
-  const { showNotification, confirmAction, safeDate } = useAppContext();
+  const { showNotification, confirmAction, safeDate, completeAppointment, updatePacote, deleteAgendamento } = useAppContext();
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [terapias, setTerapias] = useState<Terapia[]>([]);
@@ -63,17 +63,21 @@ export default function HomeScreen() {
   };
 
   const loadData = async () => {
-    const [agends, clis, ters, pacs] = await Promise.all([
+    const [agends, clis, ters, pacs, trans] = await Promise.all([
       StorageService.getItems<Agendamento>(StorageKeys.AGENDAMENTOS),
       StorageService.getItems<Cliente>(StorageKeys.CLIENTES),
       StorageService.getItems<Terapia>(StorageKeys.TERAPIAS),
       StorageService.getItems<Pacote>(StorageKeys.PACOTES),
+      StorageService.getItems<any>(StorageKeys.TRANSACOES),
     ]);
     setAgendamentos(agends);
     setClientes(clis);
     setTerapias(ters);
     setPacotes(pacs);
+    setTransacoes(trans);
   };
+
+  const [transacoes, setTransacoes] = useState<any[]>([]);
 
   const currentMonth = new Date().getMonth();
   const currentYear = new Date().getFullYear();
@@ -87,71 +91,36 @@ export default function HomeScreen() {
   });
 
   // Cálculos dos Cards
-  const pacotesMes = pacotes.filter(p => p.mesReferencia === `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`);
-  
-  // Receita de Pacotes Fixos
-  const receitaPacotesFixosTotal = pacotesMes
-    .filter(p => p.tipoPacote === 'Mensal Fixo' && p.historicoPagamento)
-    .reduce((acc, p) => {
-      let hist = p.historicoPagamento;
-      if (typeof hist === 'string') {
-        try { hist = JSON.parse(hist); } catch (e) { hist = {}; }
-      }
-      if (hist?.status === 'Pago') {
-        return acc + (Number(hist?.valor) || Number(p.valorFinal) || 0);
-      }
-      return acc;
-    }, 0);
-  
-  const receitaPacotesFixosAtendimento = agendamentosMes
-    .filter(ag => ag.status_pagamento === 'Pago' && ag.tipoAtendimento === 'Mensal Fixo')
-    .reduce((acc, ag) => acc + (Number(ag.valorCobrado) || 0), 0);
-  
-  const totalRecebidoFixo = receitaPacotesFixosTotal + receitaPacotesFixosAtendimento;
+  const transacoesMes = transacoes.filter(t => {
+    if (!t.data) return false;
+    const date = safeDate(`${t.data}T00:00:00`);
+    return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
+  });
 
-  // Receita de Atendimentos Avulsos
-  const receitaPacotesAvulsosTotal = pacotesMes
-    .filter(p => p.tipoPacote === 'Avulso' && p.historicoPagamento)
-    .reduce((acc, p) => {
-      let hist = p.historicoPagamento;
-      if (typeof hist === 'string') {
-        try { hist = JSON.parse(hist); } catch (e) { hist = {}; }
-      }
-      if (hist?.status === 'Pago') {
-        return acc + (Number(hist?.valor) || Number(p.valorFinal) || 0);
-      }
-      return acc;
-    }, 0);
-  
-  const receitaAtendimentosAvulsos = agendamentosMes
-    .filter(ag => ag.status_pagamento === 'Pago' && (ag.tipoAtendimento === 'Avulso' || !ag.tipoAtendimento))
-    .reduce((acc, ag) => acc + (Number(ag.valorCobrado) || 0), 0);
-  
-  const totalRecebidoAvulso = receitaPacotesAvulsosTotal + receitaAtendimentosAvulsos;
+  const totalRecebido = transacoesMes
+    .filter(t => t.status === 'Pago' && t.tipo === 'Ganho' && t.valor != null)
+    .reduce((acc, t) => acc + Number(t.valor), 0);
 
-  const totalRecebido = totalRecebidoFixo + totalRecebidoAvulso;
+  const totalPendente = transacoesMes
+    .filter(t => t.status === 'Pendente' && t.tipo === 'Ganho' && t.valor != null)
+    .reduce((acc, t) => acc + Number(t.valor), 0);
 
-  const totalPendentePacotes = pacotesMes
-    .reduce((acc, p) => {
-      let hist = p.historicoPagamento;
-      if (typeof hist === 'string') {
-        try { hist = JSON.parse(hist); } catch (e) { hist = {}; }
-      }
-      if (hist?.status === 'Pendente') {
-        return acc + (Number(hist?.valor) || Number(p.valorFinal) || 0);
-      }
-      return acc;
-    }, 0);
-
-  const totalPendenteSessoes = agendamentosMes
-    .filter(ag => ag.status_pagamento === 'Pendente' && (!ag.packageId || pacotes.find(p => p.id === ag.packageId)?.tipoPacote === 'Avulso'))
-    .reduce((acc, ag) => acc + (Number(ag.valorCobrado) || 0), 0);
-
-  const totalPendente = totalPendentePacotes + totalPendenteSessoes;
+  const pacotesMes = pacotes.filter(p => {
+    const pDate = safeDate(`${p.mesReferencia}-01T00:00:00`);
+    return pDate.getMonth() === currentMonth && pDate.getFullYear() === currentYear;
+  });
 
   const totalDesconto = agendamentosMes
     .reduce((acc, ag) => acc + (Number(ag.desconto) || 0), 0) + 
-    pacotesMes.reduce((acc, p) => acc + (Number(p.valorDescontoTotal) || 0), 0);
+    pacotesMes.reduce((acc, p) => acc + (Number((p as any).valorDescontoTotal) || 0), 0);
+
+  const totalRecebidoFixo = transacoesMes
+    .filter(t => t.status === 'Pago' && t.tipo === 'Ganho' && t.categoria === 'Pacote')
+    .reduce((acc, t) => acc + Number(t.valor), 0);
+
+  const totalRecebidoAvulso = transacoesMes
+    .filter(t => t.status === 'Pago' && t.tipo === 'Ganho' && t.categoria === 'Sessão Avulsa')
+    .reduce((acc, t) => acc + Number(t.valor), 0);
 
   // Próximos Atendimentos (Futuros e do dia atual)
   const todayStart = new Date();
@@ -166,18 +135,16 @@ export default function HomeScreen() {
     .slice(0, 5);
 
   const handleConcluir = async (agendamento: Agendamento) => {
-    const updatedAgendamento = { ...agendamento, status_atendimento: 'Realizado' as const };
-    await StorageService.updateItem(StorageKeys.AGENDAMENTOS, updatedAgendamento);
+    await completeAppointment(agendamento.id);
     loadData();
   };
 
   const handleExcluir = async (agendamento: Agendamento) => {
     if (agendamento.packageId && agendamento.therapy_item_id) {
       confirmAction('Deseja excluir este agendamento e devolver a sessão ao pacote do cliente?', async () => {
-        const pacotes = await StorageService.getItems<Pacote>(StorageKeys.PACOTES);
         const pacote = pacotes.find(p => p.id === agendamento.packageId);
         if (pacote) {
-          let itens = pacote.itens;
+          let itens = pacote.itens || pacote.therapies;
           if (typeof itens === 'string') {
             try { itens = JSON.parse(itens); } catch (e) { itens = []; }
           }
@@ -188,16 +155,14 @@ export default function HomeScreen() {
             return item;
           });
           const updatedPacote = { ...pacote, itens: updatedItens };
-          await StorageService.updateItem(StorageKeys.PACOTES, updatedPacote);
+          await updatePacote(updatedPacote);
         }
-        await StorageService.deleteItem(StorageKeys.AGENDAMENTOS, agendamento.id);
-        setAgendamentos(prev => prev.filter(a => a.id !== agendamento.id));
+        await deleteAgendamento(agendamento.id);
         showNotification('Agendamento excluído e sessão devolvida ao pacote.', 'success');
       }, { isDanger: true });
     } else {
       confirmAction('Deseja realmente excluir este agendamento?', async () => {
-        await StorageService.deleteItem(StorageKeys.AGENDAMENTOS, agendamento.id);
-        setAgendamentos(prev => prev.filter(a => a.id !== agendamento.id));
+        await deleteAgendamento(agendamento.id);
         showNotification('Agendamento excluído com sucesso.', 'success');
       }, { isDanger: true });
     }

@@ -72,7 +72,7 @@ export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenPro
 
       // Agendamentos Pendentes
       agends.forEach(ag => {
-        if (ag.status_pagamento === 'Pendente') {
+        if (ag.statusPagamento === 'Pendente') {
           const isFromTotalPackage = ag.packageId && pacs.find(p => String(p.id) === String(ag.packageId))?.tipoPacote === 'Mensal Fixo';
           
           if (!isFromTotalPackage) {
@@ -82,7 +82,7 @@ export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenPro
               tipo: 'agendamento',
               clienteId: ag.clientId,
               clienteNome: cliente?.name || 'Desconhecido',
-              descricao: ag.therapy_name || 'Atendimento',
+              descricao: ag.therapyName || 'Atendimento',
               valor: Number(ag.valorCobrado) || 0,
               dataOriginal: ag.date ? `${ag.date}T${ag.time || '00:00'}:00` : new Date().toISOString(),
               originalItem: ag
@@ -106,59 +106,80 @@ export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenPro
     }
 
     try {
-      // 1. Preparar o objeto de transação rigorosamente conforme o schema public.financeiro
-      const transacaoFinanceira = {
-        id: `trans_${Date.now()}`,
-        user_id: session.user.id, // UUID obrigatório do auth.users
-        tipo: 'Ganho',            // Aceito pelo CHECK CONSTRAINT
-        descricao: `Recebimento: ${selectedPendencia.clienteNome} (${selectedPendencia.descricao})`,
-        valor: Number(valorFinal),
-        data: dataPagamento,      // 'YYYY-MM-DD'
-        metodo: formaPagamento,   // Mapeado para a coluna 'metodo'
-        banco: banco || null,
-        categoria: selectedPendencia.tipo === 'pacote' ? 'Pacotes' : 'Atendimento'
-      };
+      const transacoes = await StorageService.getItems<any>(StorageKeys.TRANSACOES);
+      let transacaoExistente = null;
 
-      console.log("Enviando para o Supabase (financeiro):", transacaoFinanceira);
-
-      // 2. Salvar no Financeiro (Deixando o Supabase gerar o ID UUID automaticamente)
-      await StorageService.saveItem(StorageKeys.TRANSACOES, transacaoFinanceira);
-      
-      // 3. Atualizar o item de origem (Pacote ou Agendamento)
       if (selectedPendencia.tipo === 'pacote') {
-        const p = selectedPendencia.originalItem as Pacote;
-        const updatedPacote: Pacote = {
-          ...p,
-          historicoPagamento: {
-            status: 'Pago',
-            valor: valorFinal,
-            data: dataPagamento,
-            forma: formaPagamento,
-            banco: banco || undefined
-          }
-        };
-        await StorageService.updateItem(StorageKeys.PACOTES, updatedPacote);
+        transacaoExistente = transacoes.find(t => t.pacoteId === selectedPendencia.id);
       } else {
-        const ag = selectedPendencia.originalItem as Agendamento;
-        const updatedAg: Agendamento = {
-          ...ag,
-          status_pagamento: 'Pago',
-          valorCobrado: valorFinal,
-          dataPagamento: dataPagamento,
-          formaPagamento: formaPagamento,
-          bancoPagamento: banco || undefined
-        };
-        await StorageService.updateItem(StorageKeys.AGENDAMENTOS, updatedAg);
+        transacaoExistente = transacoes.find(t => t.agendamentoId === selectedPendencia.id);
       }
 
-      showNotification('Baixa realizada e financeiro atualizado!', 'success');
+      const transacaoFinanceira = {
+        id: transacaoExistente ? transacaoExistente.id : crypto.randomUUID(),
+        userId: session.user.id,
+        descricao: `Recebimento: ${selectedPendencia.clienteNome} (${selectedPendencia.descricao})`,
+        valor: Number(valorFinal),
+        data: dataPagamento,
+        dataPagamento: dataPagamento,
+        metodo: formaPagamento,
+        categoria: selectedPendencia.tipo === 'pacote' ? 'Pacotes' : 'Atendimento',
+        status: 'Pago',
+        pacoteId: selectedPendencia.tipo === 'pacote' ? selectedPendencia.id : null
+      };
+
+      // Background persistence
+      const persist = async () => {
+        try {
+          if (transacaoExistente) {
+            await StorageService.updateItem(StorageKeys.TRANSACOES, transacaoFinanceira);
+          } else {
+            await StorageService.saveItem(StorageKeys.TRANSACOES, transacaoFinanceira);
+          }
+          
+          // Atualizar o item de origem (Pacote ou Agendamento)
+          if (selectedPendencia.tipo === 'pacote') {
+            const p = selectedPendencia.originalItem as Pacote;
+            const updatedPacote: Pacote = {
+              ...p,
+              historicoPagamento: {
+                status: 'Pago',
+                valor: valorFinal,
+                data: dataPagamento,
+                forma: formaPagamento,
+                banco: banco || undefined
+              }
+            };
+            await StorageService.updateItem(StorageKeys.PACOTES, updatedPacote);
+          } else {
+            const ag = selectedPendencia.originalItem as Agendamento;
+            const updatedAg: Agendamento = {
+              ...ag,
+              statusPagamento: 'Pago',
+              valorCobrado: valorFinal,
+              dataPagamento: dataPagamento,
+              formaPagamento: formaPagamento,
+              bancoPagamento: banco || undefined
+            };
+            await StorageService.updateItem(StorageKeys.AGENDAMENTOS, updatedAg);
+          }
+        } catch (err) {
+          console.error("Erro na persistência da baixa:", err);
+          showNotification('Erro ao salvar no banco. Verifique sua conexão.', 'error');
+        }
+      };
+
+      persist();
+      
+      // Atualiza estado local imediatamente
+      setPendencias(prev => prev.filter(p => p.id !== selectedPendencia.id));
       setSelectedPendencia(null);
-      loadPendencias();
+      showNotification('Baixa realizada e financeiro atualizado!', 'success');
       window.dispatchEvent(new Event('storage-sync'));
 
     } catch (error: any) {
       console.error('Erro técnico na baixa:', error);
-      showNotification('Falha na comunicação com o banco: ' + (error.message || 'Erro 400'), 'error');
+      showNotification('Falha ao processar baixa.', 'error');
     }
   };
 

@@ -6,15 +6,25 @@ import { AsyncStorage } from '../utils/storage';
 import { useAppContext } from '../AppContext';
 
 export default function AgendaScreen() {
-  const { completeAppointment, showNotification, confirmAction, safeDate, promptAction, session } = useAppContext();
+  const { 
+    completeAppointment, 
+    showNotification, 
+    confirmAction, 
+    safeDate, 
+    promptAction, 
+    session,
+    clientes,
+    terapias,
+    agendamentos,
+    pacotes,
+    bloqueios,
+    updateAgendamento,
+    updatePacote,
+    fetchData
+  } = useAppContext();
   
   // State
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [terapias, setTerapias] = useState<Terapia[]>([]);
-  const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
-  const [bloqueios, setBloqueios] = useState<Bloqueio[]>([]);
-  const [pacotes, setPacotes] = useState<Pacote[]>([]);
   
   // UI State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -59,34 +69,15 @@ export default function AgendaScreen() {
   const [blockMotivo, setBlockMotivo] = useState('');
 
   useEffect(() => {
-    loadData();
-    const handleFocus = () => loadData();
+    fetchData();
+    const handleFocus = () => fetchData();
     window.addEventListener('focus', handleFocus);
-    window.addEventListener('storage-sync', loadData);
+    window.addEventListener('storage-sync', fetchData);
     return () => {
       window.removeEventListener('focus', handleFocus);
-      window.removeEventListener('storage-sync', loadData);
+      window.removeEventListener('storage-sync', fetchData);
     };
   }, [refreshTrigger]);
-
-  const loadData = async () => {
-    try {
-      const [clis, ters, agends, blocks, pacs] = await Promise.all([
-        StorageService.getItems<Cliente>(StorageKeys.CLIENTES),
-        StorageService.getItems<Terapia>(StorageKeys.TERAPIAS),
-        StorageService.getItems<Agendamento>(StorageKeys.AGENDAMENTOS),
-        StorageService.getItems<Bloqueio>(StorageKeys.BLOQUEIOS),
-        StorageService.getItems<Pacote>(StorageKeys.PACOTES),
-      ]);
-      setClientes(clis || []);
-      setTerapias(ters || []);
-      setAgendamentos(agends || []);
-      setBloqueios(blocks || []);
-      setPacotes(pacs || []);
-    } catch (error) {
-      console.error("Erro ao carregar dados da agenda:", error);
-    }
-  };
 
   // Calendar Helpers
   const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
@@ -103,33 +94,28 @@ export default function AgendaScreen() {
   // Handlers
   const handleDragOver = (e: React.DragEvent) => e.preventDefault();
 
-  const handleDrop = async (e: React.DragEvent, day: number) => {
+  const handleDrop = (e: React.DragEvent, day: number) => {
     e.preventDefault();
+    const agendamentoId = e.dataTransfer.getData('agendamentoId');
     const clienteId = e.dataTransfer.getData('clienteId');
     const terapiaId = e.dataTransfer.getData('terapiaId');
     const pacoteId = e.dataTransfer.getData('pacoteId');
     const itemPacoteId = e.dataTransfer.getData('itemPacoteId');
-    const agendamentoId = e.dataTransfer.getData('agendamentoId');
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
     if (agendamentoId) {
-      const agends = await StorageService.getItems<Agendamento>(StorageKeys.AGENDAMENTOS);
-      const itemToUpdate = agends.find(a => String(a.id) === String(agendamentoId));
+      const itemToUpdate = agendamentos.find(a => String(a.id) === String(agendamentoId));
       
       if (itemToUpdate) {
-        // Criamos uma cópia limpa para evitar enviar campos fantasmas
-        const updatedItem = {
-          ...itemToUpdate,
-          date: dateStr,
-          // Se o erro diz que não achou 'cliente_id', certifique-se que 
-          // o objeto NÃO tenha essa chave se o banco espera 'client_id'
-        };
-
-        // Remove chaves que podem estar causando conflito de esquema se necessário
-        // delete (updatedItem as any).cliente_id; 
-
-        await StorageService.updateItem(StorageKeys.AGENDAMENTOS, updatedItem);
-        loadData();
+        // Garantimos que date e time sejam atualizados no estado local via updateAgendamento
+        const updatedItem = { ...itemToUpdate, date: dateStr, time: itemToUpdate.time };
+        
+        // updateAgendamento no AppContext já faz o update otimista no estado global
+        updateAgendamento(updatedItem).catch(err => {
+          console.error('Erro ao salvar agendamento:', err);
+          showNotification('Erro ao reagendar.', 'error');
+        });
+        
         showNotification('Agendamento reagendado!', 'success');
       }
       return;
@@ -169,60 +155,91 @@ export default function AgendaScreen() {
     }
 
     const saveAll = async (formaPagamento?: string) => {
+      const newAgendamentos: Agendamento[] = [];
+      const prevPacotes = [...pacotes];
+
       for (let d of datesToSchedule) {
-        const agendamentoId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+        const agendamentoId = crypto.randomUUID();
         const newAgendamento: Agendamento = {
           id: agendamentoId,
-          userId: '',
+          userId: session?.user?.id || '',
           clientId: formClienteId,
-          therapy_item_id: formTerapiaIds[0],
-          therapy_name: selectedTerapias.map(t => t.name).join(' + '),
+          therapyItemId: formTerapiaIds[0],
+          therapyName: selectedTerapias.map(t => t.name).join(' + '),
           date: d,
           time: formHora,
           packageId: formPacoteId,
-          status_pagamento: formStatusPagamento,
-          status_atendimento: 'Agendado',
+          statusPagamento: formStatusPagamento,
+          statusAtendimento: 'Agendado',
           formaPagamento: formaPagamento,
-          dataPagamento: formaPagamento ? new Date().toISOString().split('T')[0] : undefined
+          dataPagamento: formaPagamento ? new Date().toISOString().split('T')[0] : undefined,
+          valorCobrado: Number(formValor)
         };
-        await StorageService.saveItem(StorageKeys.AGENDAMENTOS, newAgendamento);
-
-        if (formStatusPagamento === 'Pago') {
-          const clienteNome = clientes.find(c => String(c.id) === String(formClienteId))?.name || 'Cliente';
-          const transacao = {
-            id: `trans_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-            user_id: session.user.id,
-            tipo: 'Ganho',
-            descricao: `Pagamento: ${clienteNome}`,
-            valor: Number(formValor),
-            data: new Date().toISOString().split('T')[0],
-            metodo: formaPagamento,
-            banco: null,
-            categoria: 'Atendimento'
-          };
-          console.log("Dados enviados ao financeiro:", transacao);
-          await StorageService.saveItem(StorageKeys.TRANSACOES, transacao);
-        }
+        newAgendamentos.push(newAgendamento);
       }
 
+      // Handle package updates if applicable
+      let updatedPacote: Pacote | null = null;
       if (formPacoteId && formItemPacoteId) {
         const pacote = pacotes.find(p => p.id === formPacoteId);
         if (pacote) {
-          const itensArray = typeof pacote.itens === 'string' ? JSON.parse(pacote.itens) : (pacote.itens || []);
+          const itensArray = Array.isArray(pacote.itens) ? pacote.itens : (typeof pacote.itens === 'string' ? JSON.parse(pacote.itens) : []);
           const updatedItens = itensArray.map((item: any) => {
             if (item.id === formItemPacoteId) {
               return { ...item, quantidadeRestante: Number(item.quantidadeRestante || 0) - datesToSchedule.length };
             }
             return item;
           });
-          await StorageService.updateItem(StorageKeys.PACOTES, { ...pacote, itens: updatedItens });
+          updatedPacote = { ...pacote, itens: updatedItens };
         }
       }
 
+      // Background persistence using AppContext methods for better reactivity
+      const persist = async () => {
+        try {
+          for (const ag of newAgendamentos) {
+            // Usamos o StorageService diretamente aqui para evitar o crypto.randomUUID() duplo do addAgendamento se quisermos manter o ID gerado acima
+            // Ou podemos simplesmente chamar addAgendamento se não nos importarmos com o ID exato gerado aqui.
+            // Para manter a consistência com o resto do app, vamos usar addAgendamento mas adaptado se necessário.
+            // Na verdade, addAgendamento no AppContext gera um novo ID. 
+            // Vamos usar o StorageService.saveItem diretamente para manter o ID que geramos para o financeiro.
+            await StorageService.saveItem(StorageKeys.AGENDAMENTOS, ag);
+            
+            if (formStatusPagamento === 'Pago') {
+              const cliente = clientes.find(c => String(c.id) === String(formClienteId));
+              const clienteNome = cliente?.name || cliente?.nome || 'Cliente';
+              const transacao = {
+                id: crypto.randomUUID(),
+                userId: session?.user?.id || '',
+                descricao: `Atendimento - ${clienteNome}`,
+                valor: Number(formValor),
+                data: new Date().toISOString().split('T')[0],
+                dataPagamento: new Date().toISOString().split('T')[0],
+                metodo: formaPagamento,
+                categoria: 'Atendimento',
+                status: 'Pago'
+              };
+              await StorageService.saveItem(StorageKeys.TRANSACOES, transacao);
+            }
+          }
+
+          if (updatedPacote) {
+            await updatePacote(updatedPacote);
+          }
+          
+          fetchData(); // Refresh global state
+        } catch (err) {
+          console.error("Erro na persistência em segundo plano:", err);
+          showNotification('Erro ao salvar no banco. Verifique sua conexão.', 'error');
+        }
+      };
+
+      // Optimistic UI update (manual since we have multiple agendamentos)
+      // We'll trigger a refresh after persist
+      persist();
+
       setIsModalOpen(false);
-      setRefreshTrigger(prev => prev + 1);
       showNotification('Agendado com sucesso!', 'success');
-      window.dispatchEvent(new Event('storage-sync'));
     };
 
     if (formStatusPagamento === 'Pago') {
@@ -248,7 +265,7 @@ export default function AgendaScreen() {
           if (pacote) {
             const itensArray = typeof pacote.itens === 'string' ? JSON.parse(pacote.itens) : (pacote.itens || []);
             const updatedItens = itensArray.map((item: any) => {
-              if (String(item.id) === String(agendamento.therapy_item_id)) {
+              if (String(item.id) === String(agendamento.therapyItemId)) {
                 return { ...item, quantidadeRestante: (item.quantidadeRestante || 0) + 1 };
               }
               return item;
@@ -397,7 +414,7 @@ export default function AgendaScreen() {
                     
                     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                     const dayAgendamentos = agendamentos
-                      .filter(a => a.date === dateStr && a.status_atendimento !== 'Cancelado')
+                      .filter(a => a.date === dateStr && a.statusAtendimento !== 'Cancelado')
                       .sort((a, b) => a.time.localeCompare(b.time));
                     const hasBloqueio = bloqueios.some(b => b.data === dateStr);
                     const isToday = new Date().toISOString().startsWith(dateStr);
@@ -430,7 +447,7 @@ export default function AgendaScreen() {
                           {isExpanded ? (
                             dayAgendamentos.map(ag => {
                               const cliente = clientes.find(c => c.id === ag.clientId);
-                              const isRealizado = ag.status_atendimento === 'Realizado';
+                              const isRealizado = ag.statusAtendimento === 'Realizado';
                               return (
                                 <div 
                                   key={ag.id}

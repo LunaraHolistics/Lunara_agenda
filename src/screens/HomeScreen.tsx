@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, Clock, Tag, Plus, ChevronRight, PieChart, Settings, Check, Trash2, AlertTriangle, CheckCircle } from 'lucide-react';
+import { DollarSign, Clock, Tag, Plus, ChevronRight, PieChart, Settings, Check, Trash2, AlertTriangle, CheckCircle, Cloud, Loader2 } from 'lucide-react';
 import { StorageService, StorageKeys } from '../services/StorageService';
 import { Agendamento, Cliente, Terapia, Pacote } from '../types';
 import FinanceiroScreen from './FinanceiroScreen';
@@ -18,13 +18,49 @@ export default function HomeScreen() {
   const [showConfiguracoes, setShowConfiguracoes] = useState(false);
   const [showContasAReceber, setShowContasAReceber] = useState(false);
   const [showConferencia, setShowConferencia] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
     loadData();
+    checkPendingChanges();
+    updatePendingCount();
     
     window.addEventListener('storage-sync', loadData);
-    return () => window.removeEventListener('storage-sync', loadData);
+    window.addEventListener('pending-changes-update', updatePendingCount);
+    return () => {
+      window.removeEventListener('storage-sync', loadData);
+      window.removeEventListener('pending-changes-update', updatePendingCount);
+    };
   }, [showFinanceiro, showConfiguracoes, showContasAReceber, showConferencia]); // Reload when returning from other screens
+
+  const updatePendingCount = async () => {
+    const pending = await StorageService.getPendingChanges();
+    setPendingCount(pending.length);
+  };
+
+  const handleSync = async () => {
+    if (pendingCount === 0) return;
+    setIsSyncing(true);
+    try {
+      await StorageService.syncWithSupabase();
+      showNotification('Nuvem atualizada!', 'success');
+    } catch (e) {
+      showNotification('Erro ao sincronizar', 'error');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const checkPendingChanges = async () => {
+    const pending = await StorageService.getPendingChanges();
+    if (pending.length > 0) {
+      confirmAction(`Você possui ${pending.length} alterações locais. Deseja sincronizar com o servidor agora?`, async () => {
+        await StorageService.syncWithSupabase();
+        showNotification('Sincronização concluída!', 'success');
+      });
+    }
+  };
 
   const loadData = async () => {
     const [agends, clis, ters, pacs] = await Promise.all([
@@ -47,7 +83,7 @@ export default function HomeScreen() {
     const date = safeDate(`${ag.date}T${ag.time}`);
     return date.getMonth() === currentMonth && 
            date.getFullYear() === currentYear &&
-           ag.statusAtendimento !== 'Cancelado';
+           ag.status_atendimento !== 'Cancelado';
   });
 
   // Cálculos dos Cards
@@ -68,7 +104,7 @@ export default function HomeScreen() {
     }, 0);
   
   const receitaPacotesFixosAtendimento = agendamentosMes
-    .filter(ag => ag.statusPagamento === 'Pago' && ag.tipoAtendimento === 'Mensal Fixo')
+    .filter(ag => ag.status_pagamento === 'Pago' && ag.tipoAtendimento === 'Mensal Fixo')
     .reduce((acc, ag) => acc + (Number(ag.valorCobrado) || 0), 0);
   
   const totalRecebidoFixo = receitaPacotesFixosTotal + receitaPacotesFixosAtendimento;
@@ -88,7 +124,7 @@ export default function HomeScreen() {
     }, 0);
   
   const receitaAtendimentosAvulsos = agendamentosMes
-    .filter(ag => ag.statusPagamento === 'Pago' && (ag.tipoAtendimento === 'Avulso' || !ag.tipoAtendimento))
+    .filter(ag => ag.status_pagamento === 'Pago' && (ag.tipoAtendimento === 'Avulso' || !ag.tipoAtendimento))
     .reduce((acc, ag) => acc + (Number(ag.valorCobrado) || 0), 0);
   
   const totalRecebidoAvulso = receitaPacotesAvulsosTotal + receitaAtendimentosAvulsos;
@@ -108,7 +144,7 @@ export default function HomeScreen() {
     }, 0);
 
   const totalPendenteSessoes = agendamentosMes
-    .filter(ag => ag.statusPagamento === 'Pendente' && (!ag.package_id || pacotes.find(p => p.id === ag.package_id)?.tipoPacote === 'Avulso'))
+    .filter(ag => ag.status_pagamento === 'Pendente' && (!ag.packageId || pacotes.find(p => p.id === ag.packageId)?.tipoPacote === 'Avulso'))
     .reduce((acc, ag) => acc + (Number(ag.valorCobrado) || 0), 0);
 
   const totalPendente = totalPendentePacotes + totalPendenteSessoes;
@@ -130,16 +166,16 @@ export default function HomeScreen() {
     .slice(0, 5);
 
   const handleConcluir = async (agendamento: Agendamento) => {
-    const updatedAgendamento = { ...agendamento, statusAtendimento: 'Realizado' as const };
+    const updatedAgendamento = { ...agendamento, status_atendimento: 'Realizado' as const };
     await StorageService.updateItem(StorageKeys.AGENDAMENTOS, updatedAgendamento);
     loadData();
   };
 
   const handleExcluir = async (agendamento: Agendamento) => {
-    if (agendamento.package_id && agendamento.therapy_item_id) {
+    if (agendamento.packageId && agendamento.therapy_item_id) {
       confirmAction('Deseja excluir este agendamento e devolver a sessão ao pacote do cliente?', async () => {
         const pacotes = await StorageService.getItems<Pacote>(StorageKeys.PACOTES);
-        const pacote = pacotes.find(p => p.id === agendamento.package_id);
+        const pacote = pacotes.find(p => p.id === agendamento.packageId);
         if (pacote) {
           let itens = pacote.itens;
           if (typeof itens === 'string') {
@@ -206,8 +242,8 @@ export default function HomeScreen() {
   }
 
   const pastPendingCount = agendamentos.filter(ag => 
-    ag.statusAtendimento === 'Realizado' && 
-    ag.statusPagamento === 'Pendente' &&
+    ag.status_atendimento === 'Realizado' && 
+    ag.status_pagamento === 'Pendente' &&
     safeDate(`${ag.date}T${ag.time}`) < new Date()
   ).length;
 
@@ -224,6 +260,19 @@ export default function HomeScreen() {
           </p>
         </div>
         <div className="flex gap-2">
+          <button 
+            onClick={handleSync}
+            className={`p-3 rounded-full shadow-sm transition-all relative ${isSyncing ? 'animate-spin' : ''} ${pendingCount > 0 ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-600'}`}
+            aria-label="Sincronizar"
+            title={pendingCount > 0 ? `${pendingCount} alterações pendentes` : "Sincronizado"}
+          >
+            {isSyncing ? <Loader2 size={24} /> : <Cloud size={24} />}
+            {pendingCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                {pendingCount}
+              </span>
+            )}
+          </button>
           <button 
             onClick={() => setShowConferencia(true)}
             className="p-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] rounded-full text-orange-500 shadow-sm"
@@ -340,8 +389,8 @@ export default function HomeScreen() {
           ) : (
             <div className="space-y-3">
               {proximosAtendimentos.map(ag => (
-                <div key={ag.id} className={`bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] p-4 rounded-2xl shadow-sm flex items-center gap-4 border-l-4 ${ag.statusPagamento === 'Pago' ? 'border-[var(--color-success)]' : 'border-[var(--color-warning)]'}`}>
-                  <div className={`flex flex-col items-center justify-center w-14 h-14 rounded-xl relative ${ag.statusPagamento === 'Pago' ? 'bg-[var(--color-success)]/10 text-[var(--color-success)]' : 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]'}`}>
+                <div key={ag.id} className={`bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] p-4 rounded-2xl shadow-sm flex items-center gap-4 border-l-4 ${ag.status_pagamento === 'Pago' ? 'border-[var(--color-success)]' : 'border-[var(--color-warning)]'}`}>
+                  <div className={`flex flex-col items-center justify-center w-14 h-14 rounded-xl relative ${ag.status_pagamento === 'Pago' ? 'bg-[var(--color-success)]/10 text-[var(--color-success)]' : 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]'}`}>
                     <span className="text-sm font-bold">{formatDate(ag.date)}</span>
                     <span className="text-xs font-medium">{formatTime(ag.date, ag.time)}</span>
                     {new Date(`${ag.date}T${ag.time}`) < new Date() && (
@@ -352,7 +401,7 @@ export default function HomeScreen() {
                   </div>
                   <div className="flex-1">
                     <h4 className="font-medium text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">
-                      {getClienteNome(ag.client_id)}
+                      {getClienteNome(ag.clientId)}
                     </h4>
                     <p className="text-xs text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] mt-0.5">
                       {getTerapiaNome(ag)}

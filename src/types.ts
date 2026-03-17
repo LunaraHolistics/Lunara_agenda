@@ -26,14 +26,14 @@ export interface Terapia {
 export interface Agendamento {
   id: string;
   userId: string;
-  client_id: string;
+  clientId: string;
   date: string;
   time: string;
-  package_id?: string;
+  packageId?: string;
   therapy_item_id?: string;
   therapy_name?: string;
-  statusPagamento?: 'Pendente' | 'Pago';
-  statusAtendimento?: 'Agendado' | 'Realizado' | 'Cancelado';
+  status_pagamento?: 'Pendente' | 'Pago';
+  status_atendimento?: 'Agendado' | 'Realizado' | 'Cancelado';
   tipoAtendimento?: 'Mensal Fixo' | 'Avulso';
   valorCobrado?: number;
   desconto?: number;
@@ -65,14 +65,33 @@ export interface Pacote {
   clienteId: string;
   mesReferencia: string;
   tipoPacote: 'Mensal Fixo' | 'Avulso';
-  valorFinal: number;
-  valorDescontoTotal?: number;
-  historicoPagamento: PagamentoInfo | string; // JSON
+  price: number;
+  payment_method: string;
+  payment_date: string;
+  therapies?: ItemPacote[] | string; // JSON
+  observacoes?: string;
+  // Old fields kept for compatibility
+  valorFinal?: number;
+  historicoPagamento?: PagamentoInfo | string; // JSON
   formaPagamento?: string;
   dataPagamento?: string;
   bancoPagamento?: string;
-  observacoes?: string;
-  itens: ItemPacote[] | string; // JSON
+  itens?: ItemPacote[] | string; // JSON
+}
+
+export interface Transacao {
+  id: string;
+  userId: string;
+  cliente_id?: string;
+  tipo: 'receita' | 'despesa';
+  valor: number;
+  status: 'recebido' | 'pendente' | 'pago';
+  data: string;
+  data_pagamento?: string;
+  pacoteId?: string;
+  agendamentoId?: string;
+  descricao?: string;
+  forma_pagamento?: string;
 }
 
 export interface Bloqueio {

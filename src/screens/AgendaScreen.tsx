@@ -6,7 +6,7 @@ import { AsyncStorage } from '../utils/storage';
 import { useAppContext } from '../AppContext';
 
 export default function AgendaScreen() {
-  const { completeAppointment, showNotification, confirmAction, safeDate, promptAction } = useAppContext();
+  const { completeAppointment, showNotification, confirmAction, safeDate, promptAction, session } = useAppContext();
   
   // State
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -29,6 +29,17 @@ export default function AgendaScreen() {
 
   // Form State - Agendamento
   const [formClienteId, setFormClienteId] = useState('');
+  const [activePackage, setActivePackage] = useState<Pacote | null>(null);
+
+  useEffect(() => {
+    if (formClienteId) {
+      const active = pacotes.find(p => p.clienteId === formClienteId);
+      setActivePackage(active || null);
+    } else {
+      setActivePackage(null);
+    }
+  }, [formClienteId, pacotes]);
+
   const [formTerapiaIds, setFormTerapiaIds] = useState<string[]>([]);
   const [formPacoteId, setFormPacoteId] = useState<string | undefined>(undefined);
   const [formItemPacoteId, setFormItemPacoteId] = useState<string | undefined>(undefined);
@@ -157,38 +168,72 @@ export default function AgendaScreen() {
       }
     }
 
-    for (let d of datesToSchedule) {
-      const newAgendamento: Agendamento = {
-        id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-        client_id: formClienteId,
-        therapy_item_id: formTerapiaIds[0],
-        therapy_name: selectedTerapias.map(t => t.name).join(' + '),
-        date: d,
-        time: formHora,
-        package_id: formPacoteId,
-        statusPagamento: formStatusPagamento,
-        statusAtendimento: 'Agendado'
-      };
-      await StorageService.saveItem(StorageKeys.AGENDAMENTOS, newAgendamento);
-    }
+    const saveAll = async (formaPagamento?: string) => {
+      for (let d of datesToSchedule) {
+        const agendamentoId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+        const newAgendamento: Agendamento = {
+          id: agendamentoId,
+          userId: '',
+          clientId: formClienteId,
+          therapy_item_id: formTerapiaIds[0],
+          therapy_name: selectedTerapias.map(t => t.name).join(' + '),
+          date: d,
+          time: formHora,
+          packageId: formPacoteId,
+          status_pagamento: formStatusPagamento,
+          status_atendimento: 'Agendado',
+          formaPagamento: formaPagamento,
+          dataPagamento: formaPagamento ? new Date().toISOString().split('T')[0] : undefined
+        };
+        await StorageService.saveItem(StorageKeys.AGENDAMENTOS, newAgendamento);
 
-    if (formPacoteId && formItemPacoteId) {
-      const pacote = pacotes.find(p => p.id === formPacoteId);
-      if (pacote) {
-        const itensArray = typeof pacote.itens === 'string' ? JSON.parse(pacote.itens) : (pacote.itens || []);
-        const updatedItens = itensArray.map((item: any) => {
-          if (item.id === formItemPacoteId) {
-            return { ...item, quantidadeRestante: Math.max(0, Number(item.quantidadeRestante || 0) - datesToSchedule.length) };
-          }
-          return item;
-        });
-        await StorageService.updateItem(StorageKeys.PACOTES, { ...pacote, itens: updatedItens });
+        if (formStatusPagamento === 'Pago') {
+          const clienteNome = clientes.find(c => String(c.id) === String(formClienteId))?.name || 'Cliente';
+          const transacao = {
+            id: `trans_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+            user_id: session.user.id,
+            tipo: 'Ganho',
+            descricao: `Pagamento: ${clienteNome}`,
+            valor: Number(formValor),
+            data: new Date().toISOString().split('T')[0],
+            metodo: formaPagamento,
+            banco: null,
+            categoria: 'Atendimento'
+          };
+          console.log("Dados enviados ao financeiro:", transacao);
+          await StorageService.saveItem(StorageKeys.TRANSACOES, transacao);
+        }
       }
-    }
 
-    setIsModalOpen(false);
-    setRefreshTrigger(prev => prev + 1);
-    showNotification('Agendado com sucesso!', 'success');
+      if (formPacoteId && formItemPacoteId) {
+        const pacote = pacotes.find(p => p.id === formPacoteId);
+        if (pacote) {
+          const itensArray = typeof pacote.itens === 'string' ? JSON.parse(pacote.itens) : (pacote.itens || []);
+          const updatedItens = itensArray.map((item: any) => {
+            if (item.id === formItemPacoteId) {
+              return { ...item, quantidadeRestante: Number(item.quantidadeRestante || 0) - datesToSchedule.length };
+            }
+            return item;
+          });
+          await StorageService.updateItem(StorageKeys.PACOTES, { ...pacote, itens: updatedItens });
+        }
+      }
+
+      setIsModalOpen(false);
+      setRefreshTrigger(prev => prev + 1);
+      showNotification('Agendado com sucesso!', 'success');
+      window.dispatchEvent(new Event('storage-sync'));
+    };
+
+    if (formStatusPagamento === 'Pago') {
+      promptAction('Forma de Pagamento (PIX, Crédito, Débito, Transferência, Dinheiro):', 'PIX', async (forma) => {
+        if (forma) {
+          await saveAll(forma);
+        }
+      }, { title: 'Registrar Pagamento', placeholder: 'PIX, Dinheiro, etc.' });
+    } else {
+      await saveAll();
+    }
   };
 
   const handleDeleteAgendamento = async (agendamentoId: string) => {
@@ -197,9 +242,9 @@ export default function AgendaScreen() {
         const allAgendamentos = await StorageService.getItems<Agendamento>(StorageKeys.AGENDAMENTOS);
         const agendamento = allAgendamentos.find(a => String(a.id) === String(agendamentoId));
         
-        if (agendamento?.package_id) {
+        if (agendamento?.packageId) {
           const pacotesList = await StorageService.getItems<Pacote>(StorageKeys.PACOTES);
-          const pacote = pacotesList.find(p => String(p.id) === String(agendamento.package_id));
+          const pacote = pacotesList.find(p => String(p.id) === String(agendamento.packageId));
           if (pacote) {
             const itensArray = typeof pacote.itens === 'string' ? JSON.parse(pacote.itens) : (pacote.itens || []);
             const updatedItens = itensArray.map((item: any) => {
@@ -352,7 +397,7 @@ export default function AgendaScreen() {
                     
                     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                     const dayAgendamentos = agendamentos
-                      .filter(a => a.date === dateStr && a.statusAtendimento !== 'Cancelado')
+                      .filter(a => a.date === dateStr && a.status_atendimento !== 'Cancelado')
                       .sort((a, b) => a.time.localeCompare(b.time));
                     const hasBloqueio = bloqueios.some(b => b.data === dateStr);
                     const isToday = new Date().toISOString().startsWith(dateStr);
@@ -384,8 +429,8 @@ export default function AgendaScreen() {
                         <div className="flex flex-col gap-1">
                           {isExpanded ? (
                             dayAgendamentos.map(ag => {
-                              const cliente = clientes.find(c => c.id === ag.client_id);
-                              const isRealizado = ag.statusAtendimento === 'Realizado';
+                              const cliente = clientes.find(c => c.id === ag.clientId);
+                              const isRealizado = ag.status_atendimento === 'Realizado';
                               return (
                                 <div 
                                   key={ag.id}
@@ -410,7 +455,7 @@ export default function AgendaScreen() {
                             dayAgendamentos.length > 0 && (
                               <>
                                 <div className="text-[9px] px-1 py-0.5 rounded bg-[var(--color-primary)] text-white font-bold leading-tight truncate">
-                                  {clientes.find(c => c.id === dayAgendamentos[0].client_id)?.name?.split(' ')[0]}
+                                  {clientes.find(c => c.id === dayAgendamentos[0].clientId)?.name?.split(' ')[0]}
                                 </div>
                                 {dayAgendamentos.length > 1 && (
                                   <div className="text-[8px] font-black text-[var(--color-primary)] mt-0.5 bg-[var(--color-primary)]/10 px-1 rounded-sm w-fit">
@@ -438,7 +483,7 @@ export default function AgendaScreen() {
           <GripVertical size={14} className="animate-pulse" /> Arraste a terapia para agendar
         </h3>
         <div className="flex overflow-x-auto pb-4 gap-3 snap-x scroll-smooth no-scrollbar">
-          {clientes.map(cliente => {
+          {clientes.filter(cliente => pacotes.some(p => p.clienteId === cliente.id)).map(cliente => {
             const isExpanded = expandedClienteId === cliente.id;
             const clientePacotes = pacotes.filter(p => p.clienteId === cliente.id);
             const terapiasContratadas = clientePacotes.flatMap(p => {

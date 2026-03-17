@@ -34,7 +34,7 @@ export default function ConferenciaScreen({ onBack }: ConferenciaScreenProps) {
 
     const filtered = agends.filter(ag => {
       const agDate = safeDate(`${ag.date}T${ag.time}:00`);
-      return agDate >= sevenDaysAgo && agDate <= new Date() && ag.statusAtendimento !== 'Cancelado';
+      return agDate >= sevenDaysAgo && agDate <= new Date() && ag.status_atendimento !== 'Cancelado';
     }).sort((a, b) => safeDate(`${b.date}T${b.time}:00`).getTime() - safeDate(`${a.date}T${a.time}:00`).getTime());
 
     setAgendamentos(filtered);
@@ -44,7 +44,7 @@ export default function ConferenciaScreen({ onBack }: ConferenciaScreenProps) {
   };
 
   const handleConfirmAllPaid = async () => {
-    const pendentes = agendamentos.filter(ag => ag.statusPagamento === 'Pendente' && ag.statusAtendimento === 'Realizado');
+    const pendentes = agendamentos.filter(ag => ag.status_pagamento === 'Pendente' && ag.status_atendimento === 'Realizado');
     
     if (pendentes.length === 0) {
       showNotification('Não existem atendimentos realizados pendentes de pagamento nos últimos 7 dias.', 'info');
@@ -57,7 +57,7 @@ export default function ConferenciaScreen({ onBack }: ConferenciaScreenProps) {
       for (const ag of pendentes) {
         const updatedAg: Agendamento = {
           ...ag,
-          statusPagamento: 'Pago',
+          status_pagamento: 'Pago',
           dataPagamento: today,
           formaPagamento: 'PIX'
         };
@@ -74,7 +74,7 @@ export default function ConferenciaScreen({ onBack }: ConferenciaScreenProps) {
       if (forma) {
         const updatedAg: Agendamento = {
           ...ag,
-          statusPagamento: 'Pago',
+          status_pagamento: 'Pago',
           dataPagamento: new Date().toISOString().split('T')[0],
           formaPagamento: forma
         };
@@ -102,7 +102,7 @@ export default function ConferenciaScreen({ onBack }: ConferenciaScreenProps) {
     return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(safeDate(`${date}T${time}:00`));
   };
 
-  const pendentesCount = agendamentos.filter(ag => ag.statusPagamento === 'Pendente' && ag.statusAtendimento === 'Realizado').length;
+  const pendentesCount = agendamentos.filter(ag => ag.status_pagamento === 'Pendente' && ag.status_atendimento === 'Realizado').length;
 
   return (
     <div className="flex flex-col h-full bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)]">
@@ -180,7 +180,7 @@ export default function ConferenciaScreen({ onBack }: ConferenciaScreenProps) {
                     </div>
                     <div className="flex-1">
                       <h4 className="font-bold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">
-                        {getClienteNome(ag.client_id)}
+                        {getClienteNome(ag.clientId)}
                       </h4>
                       <div className="flex items-center gap-1 text-xs text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)]">
                         <Activity size={12} />
@@ -192,9 +192,9 @@ export default function ConferenciaScreen({ onBack }: ConferenciaScreenProps) {
                         {formatCurrency(ag.valorCobrado)}
                       </p>
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                        ag.statusPagamento === 'Pago' ? 'bg-[var(--color-success)]/10 text-[var(--color-success)]' : 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]'
+                        ag.status_pagamento === 'Pago' ? 'bg-[var(--color-success)]/10 text-[var(--color-success)]' : 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]'
                       }`}>
-                        {ag.statusPagamento}
+                        {ag.status_pagamento}
                       </span>
                     </div>
                   </div>

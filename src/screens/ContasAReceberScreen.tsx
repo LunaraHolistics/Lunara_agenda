@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, Search, CheckCircle, Calendar, DollarSign, CreditCard, Banknote, Landmark, User, X } from 'lucide-react';
 import { StorageService, StorageKeys } from '../services/StorageService';
-import { Agendamento, Cliente, Terapia, Pacote, PagamentoInfo } from '../types';
+import { Agendamento, Cliente, Terapia, Pacote } from '../types';
 import { useAppContext } from '../AppContext';
+import { supabase } from '../supabaseClient';
 
 interface ContasAReceberScreenProps {
   onBack: () => void;
@@ -20,7 +21,7 @@ type Pendencia = {
 };
 
 export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenProps) {
-  const { showNotification } = useAppContext();
+  const { showNotification, session } = useAppContext();
   const [pendencias, setPendencias] = useState<Pendencia[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
@@ -38,88 +39,94 @@ export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenPro
 
   const loadPendencias = async () => {
     setLoading(true);
-    const [agends, clis, ters, pacs] = await Promise.all([
-      StorageService.getItems<Agendamento>(StorageKeys.AGENDAMENTOS),
-      StorageService.getItems<Cliente>(StorageKeys.CLIENTES),
-      StorageService.getItems<Terapia>(StorageKeys.TERAPIAS),
-      StorageService.getItems<Pacote>(StorageKeys.PACOTES),
-    ]);
+    try {
+      const [agends, clis, pacs] = await Promise.all([
+        StorageService.getItems<Agendamento>(StorageKeys.AGENDAMENTOS),
+        StorageService.getItems<Cliente>(StorageKeys.CLIENTES),
+        StorageService.getItems<Pacote>(StorageKeys.PACOTES),
+      ]);
 
-    const list: Pendencia[] = [];
+      const list: Pendencia[] = [];
 
-    // Pacotes Pendentes (Tipo Pacote)
-    pacs.forEach(p => {
-      // No novo schema, tipoCobranca não existe mais, usamos tipoPacote
-      // historicoPagamento é JSON, precisamos garantir que p.historicoPagamento.status exista
-      let hist: any = p.historicoPagamento;
-      if (typeof hist === 'string') {
-        try { hist = JSON.parse(hist); } catch (e) { hist = {}; }
-      }
+      // Pacotes Pendentes
+      pacs.forEach(p => {
+        let hist: any = p.historicoPagamento;
+        if (typeof hist === 'string') {
+          try { hist = JSON.parse(hist); } catch (e) { hist = {}; }
+        }
 
-      if (hist?.status === 'Pendente') {
-        const cliente = clis.find(c => String(c.id) === String(p.clienteId));
-        list.push({
-          id: p.id,
-          tipo: 'pacote',
-          clienteId: p.clienteId,
-          clienteNome: cliente?.name || cliente?.nome || 'Desconhecido',
-          descricao: `Pacote - ${p.mesReferencia}`,
-          valor: Number(hist?.valor || p.valorFinal) || 0,
-          dataOriginal: new Date().toISOString(), // Pacotes não tem dataCriacao no schema atual, usando data atual como fallback
-          originalItem: p
-        });
-      }
-    });
-
-    // Agendamentos Pendentes
-    agends.forEach(ag => {
-      if (ag.statusPagamento === 'Pendente') {
-        // Só conta se não for de um pacote "Total" (Mensal Fixo no novo schema)
-        const isFromTotalPackage = ag.package_id && pacs.find(p => String(p.id) === String(ag.package_id))?.tipoPacote === 'Mensal Fixo';
-        if (!isFromTotalPackage) {
-          const cliente = clis.find(c => String(c.id) === String(ag.client_id));
-          const therapyNames = ag.therapy_name || 'Atendimento';
-            
+        if (hist?.status === 'Pendente') {
+          const cliente = clis.find(c => String(c.id) === String(p.clienteId));
           list.push({
-            id: ag.id,
-            tipo: 'agendamento',
-            clienteId: ag.client_id,
-            clienteNome: cliente?.name || cliente?.nome || 'Desconhecido',
-            descricao: therapyNames,
-            valor: Number(ag.valorCobrado) || 0,
-            dataOriginal: `${ag.date}T${ag.time}:00`,
-            originalItem: ag
+            id: p.id,
+            tipo: 'pacote',
+            clienteId: p.clienteId,
+            clienteNome: cliente?.name || 'Desconhecido',
+            descricao: `Pacote - ${p.mesReferencia || 'Mensal'}`,
+            valor: Number(hist?.valor || p.valorFinal) || 0,
+            dataOriginal: new Date().toISOString(),
+            originalItem: p
           });
         }
-      }
-    });
+      });
 
-    setPendencias(list.sort((a, b) => new Date(b.dataOriginal).getTime() - new Date(a.dataOriginal).getTime()));
-    setLoading(false);
-  };
+      // Agendamentos Pendentes
+      agends.forEach(ag => {
+        if (ag.status_pagamento === 'Pendente') {
+          const isFromTotalPackage = ag.packageId && pacs.find(p => String(p.id) === String(ag.packageId))?.tipoPacote === 'Mensal Fixo';
+          
+          if (!isFromTotalPackage) {
+            const cliente = clis.find(c => String(c.id) === String(ag.clientId));
+            list.push({
+              id: ag.id,
+              tipo: 'agendamento',
+              clienteId: ag.clientId,
+              clienteNome: cliente?.name || 'Desconhecido',
+              descricao: ag.therapy_name || 'Atendimento',
+              valor: Number(ag.valorCobrado) || 0,
+              dataOriginal: ag.date ? `${ag.date}T${ag.time || '00:00'}:00` : new Date().toISOString(),
+              originalItem: ag
+            });
+          }
+        }
+      });
 
-  const handleDarBaixa = (pendencia: Pendencia) => {
-    setSelectedPendencia(pendencia);
-    setValorFinal(pendencia.valor);
-    setDataPagamento(new Date().toISOString().split('T')[0]);
-    setFormaPagamento('PIX');
-    setBanco('');
+      setPendencias(list.sort((a, b) => new Date(b.dataOriginal).getTime() - new Date(a.dataOriginal).getTime()));
+    } catch (error) {
+      console.error("Erro ao carregar pendências:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const confirmBaixa = async () => {
-    if (!selectedPendencia) return;
+    if (!selectedPendencia || !session?.user?.id) {
+      showNotification('Sessão inválida ou pendência não selecionada.', 'error');
+      return;
+    }
 
     try {
-      if (selectedPendencia.tipo === 'pacote') {
-        // Buscar o pacote mais recente do storage para evitar sobrescrever dados
-        const allPacotes = await StorageService.getItems<Pacote>(StorageKeys.PACOTES);
-        const p = allPacotes.find(item => String(item.id) === String(selectedPendencia.id));
-        
-        if (!p) {
-          showNotification('Pacote não encontrado para atualização.', 'error');
-          return;
-        }
+      // 1. Preparar o objeto de transação rigorosamente conforme o schema public.financeiro
+      const transacaoFinanceira = {
+        id: `trans_${Date.now()}`,
+        user_id: session.user.id, // UUID obrigatório do auth.users
+        tipo: 'Ganho',            // Aceito pelo CHECK CONSTRAINT
+        descricao: `Recebimento: ${selectedPendencia.clienteNome} (${selectedPendencia.descricao})`,
+        valor: Number(valorFinal),
+        data: dataPagamento,      // 'YYYY-MM-DD'
+        metodo: formaPagamento,   // Mapeado para a coluna 'metodo'
+        banco: banco || null,
+        categoria: selectedPendencia.tipo === 'pacote' ? 'Pacotes' : 'Atendimento'
+      };
 
+      console.log("Enviando para o Supabase (financeiro):", transacaoFinanceira);
+
+      // 2. Salvar no Financeiro (Deixando o Supabase gerar o ID UUID automaticamente)
+      await StorageService.saveItem(StorageKeys.TRANSACOES, transacaoFinanceira);
+      
+      // 3. Atualizar o item de origem (Pacote ou Agendamento)
+      if (selectedPendencia.tipo === 'pacote') {
+        const p = selectedPendencia.originalItem as Pacote;
         const updatedPacote: Pacote = {
           ...p,
           historicoPagamento: {
@@ -127,39 +134,31 @@ export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenPro
             valor: valorFinal,
             data: dataPagamento,
             forma: formaPagamento,
-            banco: formaPagamento === 'Transferência' ? banco : undefined
+            banco: banco || undefined
           }
         };
-        
         await StorageService.updateItem(StorageKeys.PACOTES, updatedPacote);
-        console.log('DEBUG: Pagamento de Pacote Total registrado com sucesso:', updatedPacote.id);
       } else {
-        const allAgendamentos = await StorageService.getItems<Agendamento>(StorageKeys.AGENDAMENTOS);
-        const ag = allAgendamentos.find(item => String(item.id) === String(selectedPendencia.id));
-        
-        if (!ag) {
-          showNotification('Agendamento não encontrado para atualização.', 'error');
-          return;
-        }
-
+        const ag = selectedPendencia.originalItem as Agendamento;
         const updatedAg: Agendamento = {
           ...ag,
-          statusPagamento: 'Pago',
+          status_pagamento: 'Pago',
           valorCobrado: valorFinal,
           dataPagamento: dataPagamento,
           formaPagamento: formaPagamento,
-          bancoPagamento: formaPagamento === 'Transferência' ? banco : undefined
+          bancoPagamento: banco || undefined
         };
         await StorageService.updateItem(StorageKeys.AGENDAMENTOS, updatedAg);
-        console.log('DEBUG: Pagamento de Agendamento Avulso registrado com sucesso:', updatedAg.id);
       }
 
-      showNotification('Baixa realizada com sucesso!', 'success');
+      showNotification('Baixa realizada e financeiro atualizado!', 'success');
       setSelectedPendencia(null);
       loadPendencias();
+      window.dispatchEvent(new Event('storage-sync'));
+
     } catch (error: any) {
-      console.error('Erro ao confirmar baixa:', error);
-      showNotification('Erro ao confirmar baixa: ' + error.message, 'error');
+      console.error('Erro técnico na baixa:', error);
+      showNotification('Falha na comunicação com o banco: ' + (error.message || 'Erro 400'), 'error');
     }
   };
 
@@ -173,7 +172,11 @@ export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenPro
   };
 
   const formatDate = (isoString: string) => {
-    return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(isoString));
+    try {
+      return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(isoString));
+    } catch (e) {
+      return isoString;
+    }
   };
 
   const getPaymentIcon = (forma?: string) => {
@@ -187,9 +190,32 @@ export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenPro
     }
   };
 
+  const handleDarBaixa = async (item: any) => {
+    try {
+      const hoje = new Date().toISOString().split('T')[0];
+
+      const { error } = await supabase
+        .from('financeiro')
+        .update({ 
+          status: 'Pago',
+          data_pagamento: hoje
+        })
+        .eq('id', item.id);
+
+      if (error) throw error;
+
+      showNotification('Pagamento confirmado e fluxo atualizado!', 'success');
+      
+      // IMPORTANTE: Dispare a função que recarrega os dados da tela
+      loadPendencias();
+
+    } catch (error) {
+      showNotification('Erro ao processar baixa', 'error');
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)]">
-      {/* Header */}
       <div className="pt-12 pb-4 px-4 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button onClick={onBack} className="p-2 -ml-2 text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">
@@ -201,7 +227,6 @@ export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenPro
         </div>
       </div>
 
-      {/* Search Bar */}
       <div className="p-4">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
@@ -215,7 +240,6 @@ export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenPro
         </div>
       </div>
 
-      {/* List */}
       <div className="flex-1 overflow-y-auto px-4 pb-24">
         {loading ? (
           <div className="flex justify-center py-10">
@@ -248,7 +272,7 @@ export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenPro
                     </div>
                   </div>
                   <button 
-                    onClick={() => handleDarBaixa(p)}
+                    onClick={() => { setSelectedPendencia(p); setValorFinal(p.valor); }}
                     className="flex flex-col items-center gap-1 p-2 bg-[var(--color-success)]/10 text-[var(--color-success)] rounded-xl hover:bg-[var(--color-success)]/20 transition-colors"
                   >
                     <CheckCircle size={20} />
@@ -261,7 +285,6 @@ export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenPro
         )}
       </div>
 
-      {/* Modal Baixa */}
       {selectedPendencia && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] w-full max-w-md rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom-10 duration-200">
@@ -288,7 +311,7 @@ export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenPro
                     type="date" 
                     value={dataPagamento}
                     onChange={e => setDataPagamento(e.target.value)}
-                    className="w-full px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)] border border-gray-100 dark:border-gray-800"
+                    className="w-full px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none border border-gray-100 dark:border-gray-800"
                   />
                 </div>
                 <div>
@@ -298,7 +321,7 @@ export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenPro
                     step="0.01"
                     value={valorFinal}
                     onChange={e => setValorFinal(parseFloat(e.target.value) || 0)}
-                    className="w-full px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)] border border-gray-100 dark:border-gray-800 font-bold"
+                    className="w-full px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none border border-gray-100 dark:border-gray-800 font-bold"
                   />
                 </div>
               </div>
@@ -331,7 +354,7 @@ export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenPro
                     placeholder="Ex: Nubank, Itaú..."
                     value={banco}
                     onChange={e => setBanco(e.target.value)}
-                    className="w-full px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)] border border-gray-100 dark:border-gray-800"
+                    className="w-full px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none border border-gray-100 dark:border-gray-800"
                   />
                 </div>
               )}

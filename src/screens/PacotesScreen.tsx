@@ -6,7 +6,7 @@ import { AsyncStorage } from '../utils/storage';
 import { useAppContext } from '../AppContext';
 
 export default function PacotesScreen() {
-  const { showNotification, confirmAction } = useAppContext();
+  const { showNotification, confirmAction, session } = useAppContext();
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [terapias, setTerapias] = useState<Terapia[]>([]);
   const [pacotes, setPacotes] = useState<Pacote[]>([]);
@@ -62,26 +62,28 @@ export default function PacotesScreen() {
     }
   };
 
-  const handleEdit = (pacote: Pacote) => {
+  const handleEdit = async (pacote: Pacote) => {
+    await loadData();
     setEditingPacoteId(String(pacote.id));
     setClienteId(String(pacote.clienteId));
     setMesReferencia(pacote.mesReferencia);
     setItens(Array.isArray(pacote.itens) ? pacote.itens : JSON.parse(pacote.itens || '[]'));
     setTipoPacote(pacote.tipoPacote);
     setObservacoes(pacote.observacoes || '');
-    setValorFinal(pacote.valorFinal);
+    setValorManual(pacote.valorFinal != null ? Number(pacote.valorFinal) : null);
     setHistoricoPagamento(typeof pacote.historicoPagamento === 'string' 
       ? JSON.parse(pacote.historicoPagamento) 
       : (pacote.historicoPagamento || { status: 'Pendente', valor: 0 }));
     setViewMode('form');
   };
 
-  const handleNew = () => {
+  const handleNew = async () => {
+    await loadData();
     setEditingPacoteId(null);
     setClienteId('');
     setItens([]);
     setTipoPacote('Mensal Fixo');
-    setValorFinal(null);
+    setValorManual(null);
     setHistoricoPagamento({ status: 'Pendente', valor: 0, data: undefined, forma: undefined, banco: undefined });
     setViewMode('form');
   };
@@ -105,45 +107,81 @@ export default function PacotesScreen() {
     }, { isDanger: true });
   };
 
-  const handleSave = async () => {
-    if (!clienteId) {
-      showNotification('Selecione um cliente.', 'error');
-      return;
-    }
-
-    if (itens.length === 0) {
-      showNotification('Adicione terapias ao pacote.', 'error');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const novoPacote: Pacote = {
-        id: editingPacoteId || `pac_${Date.now()}`,
-        clienteId: String(clienteId),
-        mesReferencia,
-        itens,
-        valorFinal: valorManual !== null ? valorManual : totais.final,
-        tipoPacote,
-        historicoPagamento,
-        observacoes,
-      };
-
-      if (editingPacoteId) {
-        await StorageService.updateItem(StorageKeys.PACOTES, novoPacote);
-      } else {
-        await StorageService.saveItem(StorageKeys.PACOTES, novoPacote);
+    const handleSave = async () => {
+      if (!clienteId) {
+        showNotification('Selecione um cliente.', 'error');
+        return;
       }
 
-      showNotification('Pacote salvo com sucesso!', 'success');
-      setViewMode('list');
-      await loadData();
-    } catch (error: any) {
-      showNotification('Erro ao salvar: ' + error.message, 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
+      try {
+        setLoading(true);
+        // Garante que o ID seja consistente
+        const pacoteId = editingPacoteId || `pac_${Date.now()}`;
+        const valorCalculado = valorManual !== null ? valorManual : totais.final;
+
+        const novoPacote: Pacote = {
+          id: pacoteId,
+          userId: session?.user?.id || '',
+          clienteId: String(clienteId),
+          mesReferencia,
+          price: valorCalculado,
+          payment_method: historicoPagamento.forma || 'PIX',
+          payment_date: historicoPagamento.data || new Date().toISOString().split('T')[0],
+          itens: JSON.stringify(itens),
+          tipoPacote,
+          observacoes,
+        };
+        
+        console.log("Salvando pacote:", novoPacote);
+        if (itens.length === 0) {
+          console.warn("Atenção: A lista de terapias está vazia.");
+        }
+
+        if (editingPacoteId) {
+          await StorageService.updateItem(StorageKeys.PACOTES, novoPacote);
+        } else {
+          await StorageService.saveItem(StorageKeys.PACOTES, novoPacote);
+        }
+
+        // Sincronização Financeira Otimizada
+        if (historicoPagamento.status === 'Pago') {
+          const clienteNome = clientes.find(c => String(c.id) === String(clienteId))?.name || 'Cliente';
+          
+          const transacao = {
+            id: `trans_${Date.now()}`,
+            pacoteId: pacoteId,
+            clienteId: String(clienteId),
+            user_id: session?.user?.id,
+            tipo: 'Ganho',
+            descricao: `Pacote - ${clienteNome}`,
+            valor: Number(valorCalculado),
+            data: historicoPagamento.data || new Date().toISOString().split('T')[0],
+            metodo: historicoPagamento.forma || 'PIX',
+            banco: historicoPagamento.banco || null,
+            categoria: 'Terapias'
+          };
+
+          // Tenta atualizar ou criar a transação baseada no pacoteId
+          const transacoes = await StorageService.getItems<any>(StorageKeys.TRANSACOES);
+          const transacaoExistente = transacoes.find(t => t.pacoteId === pacoteId);
+
+          if (transacaoExistente) {
+            await StorageService.updateItem(StorageKeys.TRANSACOES, { ...transacao, id: transacaoExistente.id });
+          } else {
+            await StorageService.saveItem(StorageKeys.TRANSACOES, transacao);
+          }
+        }
+
+        showNotification('Pacote salvo com sucesso!', 'success');
+        setViewMode('list');
+        await loadData();
+        window.dispatchEvent(new Event('storage-sync'));
+      } catch (error: any) {
+        showNotification('Erro ao salvar: ' + error.message, 'error');
+      } finally {
+        setLoading(false);
+      }
+    };
 
   // Drag and Drop
   const handleDragStart = (e: React.DragEvent, terapiaId: string) => {
@@ -172,8 +210,8 @@ export default function PacotesScreen() {
     const newItem: ItemPacote = {
       id: `item_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
       terapiaId: tId,
-      quantidadeTotal: 4,
-      quantidadeRestante: 4,
+      quantidadeTotal: 1,
+      quantidadeRestante: 1,
       valorSessao: terapiaObj?.price || 0,
       valorDesconto: 0,
     };
@@ -181,7 +219,17 @@ export default function PacotesScreen() {
   };
 
   const updateItem = (id: string, field: keyof ItemPacote, value: any) => {
-    setItens(itens.map(item => item.id === id ? { ...item, [field]: value } : item));
+    setItens(itens.map(item => {
+      if (item.id === id) {
+        const updated = { ...item, [field]: value };
+        if (field === 'quantidadeTotal') {
+          const diff = Number(value) - Number(item.quantidadeTotal);
+          updated.quantidadeRestante = Number(item.quantidadeRestante) + diff;
+        }
+        return updated;
+      }
+      return item;
+    }));
   };
 
   const removeItem = (id: string) => {
@@ -307,14 +355,14 @@ export default function PacotesScreen() {
                 Cliente
               </label>
               <select 
-                value={clienteId}
+                value={clienteId || ''}
                 onChange={(e) => setClienteId(e.target.value)}
                 disabled={!!editingPacoteId}
                 className="w-full bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50"
               >
                 <option value="" disabled>Selecione o Cliente...</option>
                 {clientes.map(c => (
-                  <option key={c.id} value={c.id}>{c.name || c.nome || 'Sem Nome'}</option>
+                  <option key={c.id} value={c.id || ''}>{c.name || c.nome || 'Sem Nome'}</option>
                 ))}
               </select>
             </div>
@@ -324,7 +372,7 @@ export default function PacotesScreen() {
               </label>
               <input 
                 type="month"
-                value={mesReferencia}
+                value={mesReferencia || ''}
                 onChange={(e) => setMesReferencia(e.target.value)}
                 className="w-full bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
               />
@@ -430,33 +478,13 @@ export default function PacotesScreen() {
                         <input 
                           type="number" 
                           min="1"
-                          value={item.quantidadeTotal}
+                          value={item.quantidadeTotal || ''}
                           onChange={(e) => {
                             const novaQtd = parseInt(e.target.value) || 1;
                             updateItem(item.id, 'quantidadeTotal', novaQtd);
-                            if (item.quantidadeRestante > novaQtd) {
-                              updateItem(item.id, 'quantidadeRestante', novaQtd);
-                            }
+                            updateItem(item.id, 'quantidadeRestante', novaQtd);
                           }}
                           className="w-full bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] border border-gray-100 dark:border-gray-800 rounded-xl px-2 py-2 text-sm outline-none text-center font-bold"
-                        />
-                      </div>
-                      <div className="w-20">
-                        <label className="block text-[10px] font-bold text-[var(--color-text-sec-light)] uppercase mb-1">Saldo</label>
-                        <input 
-                          type="number" 
-                          min="0"
-                          max={item.quantidadeTotal}
-                          value={item.quantidadeRestante}
-                          onChange={(e) => {
-                            const novoSaldo = parseInt(e.target.value) || 0;
-                            if (novoSaldo > item.quantidadeTotal) {
-                              showNotification("O saldo não pode exceder o total", "error");
-                              return;
-                            }
-                            updateItem(item.id, 'quantidadeRestante', novoSaldo);
-                          }}
-                          className="w-full bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] border border-gray-100 dark:border-gray-800 rounded-xl px-2 py-2 text-sm outline-none text-center font-bold text-[var(--color-primary)]"
                         />
                       </div>
                       <div className="flex-1">
@@ -465,7 +493,7 @@ export default function PacotesScreen() {
                           type="number" 
                           min="0"
                           step="0.01"
-                          value={item.valorDesconto}
+                          value={item.valorDesconto || ''}
                           onChange={(e) => updateItem(item.id, 'valorDesconto', parseFloat(e.target.value) || 0)}
                           className="w-full bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] border border-gray-100 dark:border-gray-800 rounded-xl px-3 py-2 text-sm outline-none font-bold text-[var(--color-success)]"
                         />
@@ -484,7 +512,7 @@ export default function PacotesScreen() {
             <div className="mb-4">
               <label className="block text-xs font-bold text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] uppercase mb-2">Observações</label>
               <textarea 
-                value={observacoes}
+                value={observacoes || ''}
                 onChange={(e) => setObservacoes(e.target.value)}
                 className="w-full bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                 rows={3}
@@ -552,7 +580,7 @@ export default function PacotesScreen() {
           <span className="font-bold text-[var(--color-text-main-light)]">VALOR FINAL</span>
           <input 
             type="number"
-            value={valorManual !== null ? valorManual : totais.final}
+            value={valorManual !== null ? valorManual : (totais.final || '')}
             onChange={(e) => setValorManual(parseFloat(e.target.value) || 0)}
             className="text-2xl font-black text-[var(--color-primary)] bg-transparent w-32 text-right outline-none border-b border-dashed border-[var(--color-primary)]"
           />

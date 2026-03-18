@@ -33,7 +33,7 @@ export default function AgendaScreen() {
   const [isBloqueiosOpen, setIsBloqueiosOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [isDayAgendaOpen, setIsDayAgendaOpen] = useState(false);
-  const [barraMinimizada, setBarraMinimizada] = useState(false);
+  const [minimizado, setMinimizado] = useState(false);
   const [showOrfaos, setShowOrfaos] = useState(false);
   const [expandedClienteId, setExpandedClienteId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -585,115 +585,118 @@ export default function AgendaScreen() {
 
       {/* Draggable Clients Area */}
       <div className="absolute bottom-0 left-0 right-0 bg-[var(--color-surface-light)]/95 dark:bg-[var(--color-surface-dark)]/95 backdrop-blur-md border-t border-gray-200 dark:border-gray-800 p-4 pb-10 shadow-[0_-15px_30px_-5px_rgba(0,0,0,0.15)] z-20 rounded-t-[2.5rem]">
-        <div className="w-12 h-1.5 bg-gray-300 dark:bg-gray-700 rounded-full mx-auto mb-4 opacity-50"></div>
-        <h3 className="text-[10px] font-black text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] uppercase tracking-widest mb-4 flex items-center justify-center gap-2">
-          <GripVertical size={14} className="animate-pulse" /> Arraste a terapia para agendar
-        </h3>
-        <div className="flex overflow-x-auto pb-4 gap-3 snap-x scroll-smooth no-scrollbar">
-          {(clientes || []).filter(cliente => (pacotes || []).some(p => p.clienteId === cliente.id)).map(cliente => {
-            const isExpanded = expandedClienteId === cliente.id;
-            const clientePacotes = (pacotes || []).filter(p => p.clienteId === cliente.id);
-            const terapiasContratadas = clientePacotes.flatMap(p => {
-              return p.itens.map(item => ({
-                pacoteId: p.id,
-                itemPacoteId: item.id,
-                terapiaId: item.terapiaId,
-                nome: (terapias || []).find(t => t.id === item.terapiaId)?.nome || 'Desconhecida',
-                restante: item.quantidadeRestante,
-                total: item.quantidadeTotal
-              }));
-            });
-
-            return (
-              <div key={cliente.id} className={`snap-start shrink-0 flex flex-col gap-2 transition-all duration-300 ${isExpanded ? 'min-w-[180px]' : 'min-w-[120px]'}`}>
-                <div 
-                  onClick={() => setExpandedClienteId(isExpanded ? null : cliente.id)}
-                  className={`px-4 py-3 rounded-2xl border shadow-sm cursor-pointer transition-all flex items-center justify-between ${
-                    isExpanded 
-                      ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]' 
-                      : 'bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] border-gray-100 dark:border-gray-700 text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]'
-                  }`}
-                >
-                  <span className="text-xs font-bold truncate">
-                    {cliente.nome?.split(' ')[0] || "Sem Nome"}
-                  </span>
-                  {terapiasContratadas.length > 0 && <div className={`w-2 h-2 rounded-full ${isExpanded ? 'bg-white' : 'bg-[var(--color-primary)]'}`}></div>}
-                </div>
-                
-                {isExpanded && (
-                  <div className="flex flex-col gap-2 mt-1 animate-in fade-in zoom-in-95 duration-200">
-                    {terapiasContratadas.length > 0 ? (
-                      terapiasContratadas.map((tc, idx) => (
-                        <div 
-                          key={`${tc.pacoteId}-${tc.itemPacoteId}-${idx}`}
-                          draggable={tc.restante > 0}
-                          onDragStart={(e) => {
-                            if (tc.restante <= 0) { e.preventDefault(); return; }
-                            e.stopPropagation();
-                            isDragging.current = true;
-                            const target = e.currentTarget;
-                            setTimeout(() => {
-                              target.style.opacity = '0.4';
-                              target.style.transform = 'scale(1.05)';
-                              target.style.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)';
-                            }, 0);
-                            handleDragStart(e, {
-                              id: tc.terapiaId,
-                              type: 'terapia',
-                              clienteId: cliente.id,
-                              terapiaId: tc.terapiaId,
-                              pacoteId: tc.pacoteId,
-                              itemPacoteId: tc.itemPacoteId,
-                              name: cliente.nome || 'Cliente',
-                              time: 'Novo'
-                            });
-                          }}
-                          onDragEnd={(e) => {
-                            e.stopPropagation();
-                            isDragging.current = false;
-                            setDraggingId(null);
-                            e.currentTarget.style.opacity = '1';
-                            e.currentTarget.style.transform = 'scale(1)';
-                            e.currentTarget.style.boxShadow = 'none';
-                          }}
-                          style={{ userSelect: 'none', touchAction: 'none' }}
-                          className={`px-3 py-2.5 rounded-xl border text-[10px] font-black flex justify-between items-center transition-all ${
-                            tc.restante > 0 
-                              ? 'bg-white dark:bg-gray-800 border-[var(--color-primary)]/20 text-[var(--color-primary)] cursor-grab active:cursor-grabbing hover:shadow-md' 
-                              : 'bg-gray-100 dark:bg-gray-900 border-transparent text-gray-400 opacity-50 grayscale cursor-not-allowed'
-                          }`}
-                        >
-                          <span className="truncate mr-2">{tc.nome}</span>
-                          <span className={`px-1.5 rounded-md ${tc.restante > 0 ? 'bg-[var(--color-primary)]/10' : 'bg-gray-200'}`}>{tc.restante}/{tc.total}</span>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="px-3 py-4 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 text-[10px] text-center text-gray-400 italic">
-                        Sem sessões disponíveis
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+        <div className="flex justify-between items-center mb-4">
+          <div className="w-12 h-1.5 bg-gray-300 dark:bg-gray-700 rounded-full mx-auto opacity-50"></div>
+          <button 
+            onClick={() => setMinimizado(!minimizado)}
+            className="text-[10px] font-bold text-[var(--color-primary)] bg-[var(--color-primary)]/10 px-3 py-1 rounded-full uppercase tracking-tighter transition-all active:scale-95"
+          >
+            {minimizado ? 'Expandir' : 'Minimizar'}
+          </button>
         </div>
 
-        {/* Sessões Disponíveis (Drop Zone) */}
-        <div className="mt-6">
-          <div className="flex justify-between items-center mb-3">
-            <h3 className="text-[10px] font-black text-[var(--color-primary)] uppercase tracking-widest flex items-center gap-2">
-              <Trash2 size={14} /> Solte aqui para desmarcar (Sessões Disponíveis)
-            </h3>
-            <button 
-              onClick={() => setBarraMinimizada(!barraMinimizada)}
-              className="text-[10px] font-bold text-[var(--color-primary)] bg-[var(--color-primary)]/10 px-3 py-1 rounded-full uppercase tracking-tighter transition-all active:scale-95"
-            >
-              {barraMinimizada ? 'Expandir' : 'Minimizar'}
-            </button>
+        <div className={`transition-all duration-300 overflow-hidden ${minimizado ? 'max-h-0 opacity-0' : 'max-h-[1000px] opacity-100'}`}>
+          <h3 className="text-[10px] font-black text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] uppercase tracking-widest mb-4 flex items-center justify-center gap-2">
+            <GripVertical size={14} className="animate-pulse" /> Arraste a terapia para agendar
+          </h3>
+          <div className="flex overflow-x-auto pb-4 gap-3 snap-x scroll-smooth no-scrollbar">
+            {(clientes || []).filter(cliente => (pacotes || []).some(p => p.clienteId === cliente.id)).map(cliente => {
+              const isExpanded = expandedClienteId === cliente.id;
+              const clientePacotes = (pacotes || []).filter(p => p.clienteId === cliente.id);
+              const terapiasContratadas = clientePacotes.flatMap(p => {
+                return p.itens.map(item => ({
+                  pacoteId: p.id,
+                  itemPacoteId: item.id,
+                  terapiaId: item.terapiaId,
+                  nome: (terapias || []).find(t => t.id === item.terapiaId)?.nome || 'Desconhecida',
+                  restante: item.quantidadeRestante,
+                  total: item.quantidadeTotal
+                }));
+              });
+
+              return (
+                <div key={cliente.id} className={`snap-start shrink-0 flex flex-col gap-2 transition-all duration-300 ${isExpanded ? 'min-w-[180px]' : 'min-w-[120px]'}`}>
+                  <div 
+                    onClick={() => setExpandedClienteId(isExpanded ? null : cliente.id)}
+                    className={`px-4 py-3 rounded-2xl border shadow-sm cursor-pointer transition-all flex items-center justify-between ${
+                      isExpanded 
+                        ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]' 
+                        : 'bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] border-gray-100 dark:border-gray-700 text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]'
+                    }`}
+                  >
+                    <span className="text-xs font-bold truncate">
+                      {cliente.nome?.split(' ')[0] || "Sem Nome"}
+                    </span>
+                    {terapiasContratadas.length > 0 && <div className={`w-2 h-2 rounded-full ${isExpanded ? 'bg-white' : 'bg-[var(--color-primary)]'}`}></div>}
+                  </div>
+                  
+                  {isExpanded && (
+                    <div className="flex flex-col gap-2 mt-1 animate-in fade-in zoom-in-95 duration-200">
+                      {terapiasContratadas.length > 0 ? (
+                        terapiasContratadas.map((tc, idx) => (
+                          <div 
+                            key={`${tc.pacoteId}-${tc.itemPacoteId}-${idx}`}
+                            draggable={tc.restante > 0}
+                            onDragStart={(e) => {
+                              if (tc.restante <= 0) { e.preventDefault(); return; }
+                              e.stopPropagation();
+                              isDragging.current = true;
+                              const target = e.currentTarget;
+                              setTimeout(() => {
+                                target.style.opacity = '0.4';
+                                target.style.transform = 'scale(1.05)';
+                                target.style.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)';
+                              }, 0);
+                              handleDragStart(e, {
+                                id: tc.terapiaId,
+                                type: 'terapia',
+                                clienteId: cliente.id,
+                                terapiaId: tc.terapiaId,
+                                pacoteId: tc.pacoteId,
+                                itemPacoteId: tc.itemPacoteId,
+                                name: cliente.nome || 'Cliente',
+                                time: 'Novo'
+                              });
+                            }}
+                            onDragEnd={(e) => {
+                              e.stopPropagation();
+                              isDragging.current = false;
+                              setDraggingId(null);
+                              e.currentTarget.style.opacity = '1';
+                              e.currentTarget.style.transform = 'scale(1)';
+                              e.currentTarget.style.boxShadow = 'none';
+                            }}
+                            style={{ userSelect: 'none', touchAction: 'none' }}
+                            className={`px-3 py-2.5 rounded-xl border text-[10px] font-black flex justify-between items-center transition-all ${
+                              tc.restante > 0 
+                                ? 'bg-white dark:bg-gray-800 border-[var(--color-primary)]/20 text-[var(--color-primary)] cursor-grab active:cursor-grabbing hover:shadow-md' 
+                                : 'bg-gray-100 dark:bg-gray-900 border-transparent text-gray-400 opacity-50 grayscale cursor-not-allowed'
+                            }`}
+                          >
+                            <span className="truncate mr-2">{tc.nome}</span>
+                            <span className={`px-1.5 rounded-md ${tc.restante > 0 ? 'bg-[var(--color-primary)]/10' : 'bg-gray-200'}`}>{tc.restante}/{tc.total}</span>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="px-3 py-4 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 text-[10px] text-center text-gray-400 italic">
+                          Sem sessões disponíveis
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
-          
-          <div className={`transition-all duration-300 overflow-hidden ${barraMinimizada ? 'max-h-0 opacity-0' : 'max-h-[500px] opacity-100'}`}>
+
+          {/* Sessões Disponíveis (Drop Zone) */}
+          <div className="mt-6">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-[10px] font-black text-[var(--color-primary)] uppercase tracking-widest flex items-center gap-2">
+                <Trash2 size={14} /> Solte aqui para desmarcar (Sessões Disponíveis)
+              </h3>
+            </div>
+            
             <div 
               onDragOver={handleDragOver}
               onDrop={handleDropToFooter}

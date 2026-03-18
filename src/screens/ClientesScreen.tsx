@@ -137,6 +137,12 @@ export default function ClientesScreen() {
   return (
     <div className="h-[calc(100vh-80px)] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 pb-10">
       <div className="p-4 bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] sticky top-0 z-10">
+        <div className="header-clientes mb-4">
+          <h2 className="text-2xl font-bold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">Clientes</h2>
+          <button onClick={() => openModal()} className="btn-add-topo">
+            +
+          </button>
+        </div>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-sec-light)]" size={20} />
           <input 
@@ -179,10 +185,6 @@ export default function ClientesScreen() {
           </div>
         )}
       </div>
-
-      <button onClick={() => openModal()} className="fixed bottom-6 right-6 w-14 h-14 bg-[var(--color-primary)] text-white rounded-full flex items-center justify-center shadow-lg z-20">
-        <Plus size={28} />
-      </button>
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm">

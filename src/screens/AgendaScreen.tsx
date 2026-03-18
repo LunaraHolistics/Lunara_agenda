@@ -4,6 +4,11 @@ import { Cliente, Terapia, Agendamento, Bloqueio, Pacote } from '../types';
 import { StorageService } from '../utils/storage';
 import { useAppContext } from '../AppContext';
 
+type DiaBloqueado = {
+  data: string;
+  motivo?: string;
+};
+
 export default function AgendaScreen() {
   const { 
     completeAppointment, 
@@ -27,6 +32,7 @@ export default function AgendaScreen() {
   
   // State
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [diasBloqueados, setDiasBloqueados] = useState<DiaBloqueado[]>([]);
   
   // UI State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -83,6 +89,20 @@ export default function AgendaScreen() {
   const getFirstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay();
   const prevMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
   const nextMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
+
+  const bloquearDia = (data: string) => {
+    promptAction('Motivo do bloqueio (opcional):', '', (motivo) => {
+      setDiasBloqueados(prev => [...prev, { data, motivo }]);
+      showNotification('Dia bloqueado!', 'success');
+    });
+  };
+
+  const desbloquearDia = (data: string) => {
+    confirmAction('Deseja desbloquear este dia?', () => {
+      setDiasBloqueados(prev => prev.filter(d => d.data !== data));
+      showNotification('Dia desbloqueado!', 'info');
+    });
+  };
 
   const year = currentMonth.getFullYear();
   const month = currentMonth.getMonth();
@@ -165,6 +185,13 @@ export default function AgendaScreen() {
     const type = e.dataTransfer.getData('type');
     const id = e.dataTransfer.getData('id');
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const diaEstaBloqueado = diasBloqueados.some(d => d.data === dateStr);
+
+    if (diaEstaBloqueado) {
+      showNotification('Este dia está bloqueado.', 'error');
+      setDraggingId(null);
+      return;
+    }
 
     console.log('DROP:', type, id, dateStr);
 
@@ -230,6 +257,12 @@ export default function AgendaScreen() {
   const handleSaveAgendamento = async () => {
     if (!formClienteId || formTerapiaIds.length === 0 || !formData || !formHora) {
       setErrorMessage('Preencha todos os campos obrigatórios.');
+      return;
+    }
+
+    const diaEstaBloqueado = diasBloqueados.some(d => d.data === formData);
+    if (diaEstaBloqueado) {
+      setErrorMessage('Este dia está bloqueado.');
       return;
     }
 
@@ -470,6 +503,7 @@ export default function AgendaScreen() {
                     if (day === null) return <div key={`empty-${weekIdx}-${dayIdx}`} className="aspect-square opacity-20" />;
                     
                     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                    const diaEstaBloqueado = diasBloqueados.some(d => d.data === dateStr);
                     const dayAgendamentos = (agendamentos || [])
                       .filter(a => String(a.data).slice(0, 10) === dateStr && (a.statusAtendimento === 'Agendado' || a.statusAtendimento === 'Concluido'))
                       .sort((a, b) => a.hora.localeCompare(b.hora));
@@ -482,30 +516,43 @@ export default function AgendaScreen() {
                         onClick={(e) => {
                           e.stopPropagation();
                           if (isDragging.current) return;
-                          openDayAgenda(day);
+                          if (diaEstaBloqueado) {
+                            desbloquearDia(dateStr);
+                          } else {
+                            if (dayAgendamentos.length === 0 && !hasBloqueio) {
+                              confirmAction('Deseja bloquear este dia?', () => bloquearDia(dateStr));
+                            } else {
+                              openDayAgenda(day);
+                            }
+                          }
                         }}
                         onDragOver={(e) => {
+                          if (diaEstaBloqueado) return;
                           handleDragOver(e);
                           setDragOverDay(day);
                         }}
                         onDragLeave={() => setDragOverDay(null)}
                         onDrop={(e) => {
+                          if (diaEstaBloqueado) return;
                           setDragOverDay(null);
                           console.log('--- DROP DETECTED ---');
                           console.log('Target Day:', day);
                           handleDrop(e, day);
                         }}
                         className={`min-h-[110px] h-auto rounded-xl flex flex-col p-1.5 relative cursor-pointer transition-all border ${
-                          dragOverDay === day
-                            ? 'ring-2 ring-[var(--color-primary)] bg-[var(--color-primary)]/10 border-dashed scale-105 z-10'
-                            : isToday 
-                              ? 'bg-[var(--color-primary)]/5 border-[var(--color-primary)]' 
-                              : 'bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] border-gray-100 dark:border-gray-800'
+                          diaEstaBloqueado 
+                            ? 'bg-red-100 dark:bg-red-900/30 border-red-200 dark:border-red-800'
+                            : dragOverDay === day
+                              ? 'ring-2 ring-[var(--color-primary)] bg-[var(--color-primary)]/10 border-dashed scale-105 z-10'
+                              : isToday 
+                                ? 'bg-[var(--color-primary)]/5 border-[var(--color-primary)]' 
+                                : 'bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] border-gray-100 dark:border-gray-800'
                         } hover:shadow-md hover:border-[var(--color-primary)]/30`}
                       >
                         <div className="flex justify-between items-center mb-1">
                           <span className={`text-[11px] font-black ${isToday ? 'text-[var(--color-primary)]' : 'text-[var(--color-text-sec-light)] opacity-50'}`}>{day}</span>
                           {hasBloqueio && <ShieldAlert size={10} className="text-[var(--color-error)]" />}
+                          {diaEstaBloqueado && <span className="text-[9px] font-black text-red-600 dark:text-red-400">🔒</span>}
                         </div>
                         
                         {/* Debug Info */}
@@ -514,11 +561,12 @@ export default function AgendaScreen() {
                           <span>Total: {dayAgendamentos.length}</span>
                         </div>
 
-                        <div className="flex flex-col gap-1">
-                          {dayAgendamentos.map(ag => {
-                            const cliente = (clientes || []).find(c => c.id === ag.clienteId);
-                            const isConcluido = ag.statusAtendimento === 'Concluido';
-                            return (
+                        { !diaEstaBloqueado && (
+                          <div className="flex flex-col gap-1">
+                            {dayAgendamentos.map(ag => {
+                              const cliente = (clientes || []).find(c => c.id === ag.clienteId);
+                              const isConcluido = ag.statusAtendimento === 'Concluido';
+                              return (
                                 <div 
                                   key={ag.id}
                                   draggable={!isConcluido}
@@ -564,16 +612,17 @@ export default function AgendaScreen() {
                                     isConcluido ? 'bg-gray-100 text-gray-400 border-gray-200' : 'bg-white dark:bg-gray-700 text-[var(--color-primary)] border-[var(--color-primary)]/30'
                                   }`}
                                 >
-                                <div className="flex justify-between items-center font-black">
-                                  <span>{ag.hora}</span>
-                                  {isConcluido && <CheckCircle2 size={8} />}
+                                  <div className="flex justify-between items-center font-black">
+                                    <span>{ag.hora}</span>
+                                    {isConcluido && <CheckCircle2 size={8} />}
+                                  </div>
+                                  <div className="truncate">{cliente?.nome?.split(' ')[0]}</div>
                                 </div>
-                                <div className="truncate">{cliente?.nome?.split(' ')[0]}</div>
-                              </div>
-                            );
-                          })}
+                              );
+                            })}
+                          </div>
+                        )}
                         </div>
-                      </div>
                     );
                   })}
                 </div>

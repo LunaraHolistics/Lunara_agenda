@@ -46,3 +46,53 @@ body {
   border: none;
 }
 
+.botao-salvar-mobile {
+  position: fixed;
+  bottom: 70px;
+  left: 16px;
+  right: 16px;
+
+  padding: 14px;
+  border-radius: 12px;
+
+  background-color: #4CAF50;
+  color: white;
+  font-size: 16px;
+  font-weight: 600;
+
+  border: none;
+
+  z-index: 999;
+  
+  transition: all 0.3s ease;
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.botao-salvar-mobile.botao-hidden {
+  transform: translateY(100px);
+  opacity: 0;
+}
+
+.botao-salvar-mobile:disabled {
+  background-color: #a5d6a7;
+  cursor: not-allowed;
+}
+
+.toast-sucesso {
+  position: fixed;
+  bottom: 120px;
+  left: 50%;
+  transform: translateX(-50%);
+
+  background: #333;
+  color: #fff;
+
+  padding: 10px 16px;
+  border-radius: 8px;
+
+  opacity: 0.95;
+
+  z-index: 9999;
+}
+

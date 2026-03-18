@@ -16,6 +16,9 @@ export default function ClientesScreen() {
   const [telefone, setTelefone] = useState('');
   const [status, setStatus] = useState(true);
   const [observacoes, setObservacoes] = useState('');
+  const [alterado, setAlterado] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+  const [toast, setToast] = useState(false);
 
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const { showNotification, handleImportContacts, addCliente, updateCliente, deleteCliente, clientes: contextClientes } = useAppContext();
@@ -36,12 +39,17 @@ export default function ClientesScreen() {
       observacoes,
     };
 
+    setSalvando(true);
     if (editingCliente) {
       updateCliente({ ...editingCliente, ...clienteData });
     } else {
       addCliente(clienteData);
     }
 
+    setSalvando(false);
+    setAlterado(false);
+    setToast(true);
+    setTimeout(() => setToast(false), 3000);
     closeModal();
   };
 
@@ -78,6 +86,7 @@ export default function ClientesScreen() {
       setObservacoes('');
     }
     setIsModalOpen(true);
+    setAlterado(false);
   };
 
   const closeModal = () => {
@@ -203,7 +212,7 @@ export default function ClientesScreen() {
 
               <div>
                 <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Nome *</label>
-                <input type="text" value={nome} onChange={(e) => setNome(e.target.value)} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
+                <input type="text" value={nome} onChange={(e) => { setNome(e.target.value); setAlterado(true); }} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
               </div>
 
               <div>
@@ -215,6 +224,7 @@ export default function ClientesScreen() {
                       const newDdi = e.target.value;
                       setDdi(newDdi);
                       applyPhoneMask(telefone, newDdi); // Re-aplica a máscara ao trocar DDI
+                      setAlterado(true);
                     }}
                     className="w-24 px-2 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)] font-bold"
                   >
@@ -226,7 +236,7 @@ export default function ClientesScreen() {
                   <input 
                     type="tel" 
                     value={telefone} 
-                    onChange={(e) => applyPhoneMask(e.target.value, ddi)} 
+                    onChange={(e) => { applyPhoneMask(e.target.value, ddi); setAlterado(true); }} 
                     className="flex-1 px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" 
                     placeholder={ddi === '+55' ? '(00) 00000-0000' : 'Número completo'} 
                   />
@@ -235,14 +245,26 @@ export default function ClientesScreen() {
 
               <div>
                 <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Observações</label>
-                <textarea value={observacoes} onChange={(e) => setObservacoes(e.target.value)} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none min-h-[80px] resize-none" />
+                <textarea value={observacoes} onChange={(e) => { setObservacoes(e.target.value); setAlterado(true); }} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none min-h-[80px] resize-none" />
               </div>
-
-              <button onClick={handleSave} className="w-full py-4 mt-2 bg-[var(--color-primary)] text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform">
-                {editingCliente ? 'Atualizar' : 'Salvar Cliente'}
-              </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {isModalOpen && (
+        <button 
+          onClick={handleSave} 
+          disabled={salvando}
+          className={`botao-salvar-mobile ${alterado ? '' : 'botao-hidden'} ${salvando ? 'opacity-80' : ''}`}
+        >
+          {salvando ? 'Salvando...' : 'Salvar'}
+        </button>
+      )}
+
+      {toast && (
+        <div className="toast-sucesso">
+          Salvo com sucesso!
         </div>
       )}
     </div>

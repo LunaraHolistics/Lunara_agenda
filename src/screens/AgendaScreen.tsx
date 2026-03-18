@@ -36,6 +36,7 @@ export default function AgendaScreen() {
   const [expandedWeekIndex, setExpandedWeekIndex] = useState<number | null>(null);
   const [expandedClienteId, setExpandedClienteId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dragOverDay, setDragOverDay] = useState<number | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const dragPreviewRef = useRef<HTMLDivElement>(null);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
@@ -383,15 +384,24 @@ export default function AgendaScreen() {
                       <div 
                         key={idx} 
                         draggable
-                        onDragStart={(e) => handleDragStart(e, {
-                          clienteId: cliente.id,
-                          terapiaId: o.terapiaId,
-                          pacoteId: o.pacoteId,
-                          itemPacoteId: o.itemPacoteId,
-                          name: cliente.nome || 'Cliente',
-                          time: 'Novo'
-                        })}
-                        className="flex justify-between items-center gap-2 cursor-grab active:cursor-grabbing bg-orange-50 dark:bg-orange-900/20 p-1 rounded"
+                        onDragStart={(e) => {
+                          e.currentTarget.style.opacity = '0.5';
+                          e.currentTarget.style.transform = 'scale(0.95)';
+                          handleDragStart(e, {
+                            clienteId: cliente.id,
+                            terapiaId: o.terapiaId,
+                            pacoteId: o.pacoteId,
+                            itemPacoteId: o.itemPacoteId,
+                            name: cliente.nome || 'Cliente',
+                            time: 'Novo'
+                          });
+                        }}
+                        onDragEnd={(e) => {
+                          e.currentTarget.style.opacity = '1';
+                          e.currentTarget.style.transform = 'scale(1)';
+                        }}
+                        style={{ userSelect: 'none', touchAction: 'none' }}
+                        className="flex justify-between items-center gap-2 cursor-grab active:cursor-grabbing bg-orange-50 dark:bg-orange-900/20 p-1 rounded transition-all"
                       >
                         <span className="text-[10px] text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] truncate">{o.nome}</span>
                         <span className="text-[10px] font-black text-white bg-orange-500 px-2 py-0.5 rounded-full">{o.restante}</span>
@@ -457,12 +467,21 @@ export default function AgendaScreen() {
                             openDayAgenda(day);
                           }
                         }}
-                        onDragOver={handleDragOver}
-                        onDrop={(e) => handleDrop(e, day)}
+                        onDragOver={(e) => {
+                          handleDragOver(e);
+                          setDragOverDay(day);
+                        }}
+                        onDragLeave={() => setDragOverDay(null)}
+                        onDrop={(e) => {
+                          setDragOverDay(null);
+                          handleDrop(e, day);
+                        }}
                         className={`min-h-[65px] rounded-xl flex flex-col p-1.5 relative cursor-pointer transition-all border ${
-                          isToday 
-                            ? 'bg-[var(--color-primary)]/5 border-[var(--color-primary)]' 
-                            : 'bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] border-gray-100 dark:border-gray-800'
+                          dragOverDay === day
+                            ? 'ring-2 ring-[var(--color-primary)] bg-[var(--color-primary)]/10 border-dashed scale-105 z-10'
+                            : isToday 
+                              ? 'bg-[var(--color-primary)]/5 border-[var(--color-primary)]' 
+                              : 'bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] border-gray-100 dark:border-gray-800'
                         } ${isExpanded ? 'h-auto shadow-lg ring-1 ring-primary' : 'aspect-square overflow-hidden'}`}
                       >
                         <div className="flex justify-between items-center mb-1">
@@ -481,13 +500,20 @@ export default function AgendaScreen() {
                                   draggable
                                   onDragStart={(e) => {
                                     e.stopPropagation();
+                                    e.currentTarget.style.opacity = '0.5';
+                                    e.currentTarget.style.transform = 'scale(0.95)';
                                     handleDragStart(e, {
                                       id: ag.id,
                                       name: cliente?.nome || 'Cliente',
                                       time: ag.hora
                                     });
                                   }}
-                                  className={`text-[9px] p-1 rounded border leading-tight ${
+                                  onDragEnd={(e) => {
+                                    e.currentTarget.style.opacity = '1';
+                                    e.currentTarget.style.transform = 'scale(1)';
+                                  }}
+                                  style={{ userSelect: 'none', touchAction: 'none' }}
+                                  className={`text-[9px] p-1 rounded border leading-tight transition-all cursor-grab active:cursor-grabbing ${
                                     isRealizado ? 'bg-gray-100 text-gray-400' : 'bg-white dark:bg-gray-700 text-[var(--color-primary)] border-[var(--color-primary)]/30'
                                   }`}
                                 >
@@ -570,6 +596,8 @@ export default function AgendaScreen() {
                           draggable={tc.restante > 0}
                           onDragStart={(e) => {
                             if (tc.restante <= 0) { e.preventDefault(); return; }
+                            e.currentTarget.style.opacity = '0.5';
+                            e.currentTarget.style.transform = 'scale(0.95)';
                             handleDragStart(e, {
                               clienteId: cliente.id,
                               terapiaId: tc.terapiaId,
@@ -579,6 +607,11 @@ export default function AgendaScreen() {
                               time: 'Novo'
                             });
                           }}
+                          onDragEnd={(e) => {
+                            e.currentTarget.style.opacity = '1';
+                            e.currentTarget.style.transform = 'scale(1)';
+                          }}
+                          style={{ userSelect: 'none', touchAction: 'none' }}
                           className={`px-3 py-2.5 rounded-xl border text-[10px] font-black flex justify-between items-center transition-all ${
                             tc.restante > 0 
                               ? 'bg-white dark:bg-gray-800 border-[var(--color-primary)]/20 text-[var(--color-primary)] cursor-grab active:cursor-grabbing' 

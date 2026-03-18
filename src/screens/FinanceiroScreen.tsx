@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ArrowLeft, Filter, TrendingUp, TrendingDown, DollarSign, Calendar } from 'lucide-react';
+import { ArrowLeft, Filter, TrendingUp, TrendingDown, DollarSign, Calendar, X, Save } from 'lucide-react';
 import { useAppContext } from '../AppContext';
 import { Transacao } from '../types';
 
@@ -21,6 +21,25 @@ export default function FinanceiroScreen({ onBack }: FinanceiroProps) {
   const [filtroMes, setFiltroMes] = useState(String(new Date().getMonth()));
   const [filtroAno, setFiltroAno] = useState(String(new Date().getFullYear()));
   const [filtroTipo, setFiltroTipo] = useState<'Todos' | 'Receita' | 'Despesa'>('Todos');
+
+  // Modal de Edição
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState<Partial<Transacao>>({});
+
+  const handleEditClick = (t: Transacao) => {
+    setEditingTransaction({ ...t });
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingTransaction.id || !editingTransaction.descricao || !editingTransaction.valor) {
+      showNotification('Preencha os campos obrigatórios.', 'error');
+      return;
+    }
+    updateTransacao(editingTransaction as Transacao);
+    showNotification('Transação atualizada com sucesso!', 'success');
+    setIsEditModalOpen(false);
+  };
 
   const meses = [
     'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -196,7 +215,7 @@ export default function FinanceiroScreen({ onBack }: FinanceiroProps) {
                   <p className="text-[10px] text-gray-400">{t.categoria}</p>
                   <div className="flex gap-2 mt-2">
                     <button 
-                      onClick={() => showNotification('Edição de transação em breve.', 'info')}
+                      onClick={() => handleEditClick(t)}
                       className="text-[10px] text-blue-500 font-bold uppercase"
                     >
                       Editar
@@ -219,6 +238,115 @@ export default function FinanceiroScreen({ onBack }: FinanceiroProps) {
           </div>
         )}
       </div>
+
+      {/* Modal de Edição */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] w-full max-w-md rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom-10 duration-200">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">
+                Editar Transação
+              </h2>
+              <button onClick={() => setIsEditModalOpen(false)} className="text-gray-400 p-1">
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-[var(--color-text-sec-light)] uppercase mb-1">Descrição</label>
+                <input 
+                  type="text" 
+                  value={editingTransaction.descricao || ''}
+                  onChange={e => setEditingTransaction({...editingTransaction, descricao: e.target.value})}
+                  className="w-full px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none border border-gray-100 dark:border-gray-800"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[var(--color-text-sec-light)] uppercase mb-1">Valor (R$)</label>
+                  <input 
+                    type="number" 
+                    step="0.01"
+                    value={editingTransaction.valor || ''}
+                    onChange={e => setEditingTransaction({...editingTransaction, valor: parseFloat(e.target.value) || 0})}
+                    className="w-full px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none border border-gray-100 dark:border-gray-800 font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-[var(--color-text-sec-light)] uppercase mb-1">Data</label>
+                  <input 
+                    type="date" 
+                    value={editingTransaction.data || ''}
+                    onChange={e => setEditingTransaction({...editingTransaction, data: e.target.value})}
+                    className="w-full px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none border border-gray-100 dark:border-gray-800"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[var(--color-text-sec-light)] uppercase mb-1">Categoria</label>
+                  <input 
+                    type="text" 
+                    value={editingTransaction.categoria || ''}
+                    onChange={e => setEditingTransaction({...editingTransaction, categoria: e.target.value})}
+                    className="w-full px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none border border-gray-100 dark:border-gray-800"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-[var(--color-text-sec-light)] uppercase mb-1">Método</label>
+                  <select 
+                    value={editingTransaction.metodo || 'PIX'}
+                    onChange={e => setEditingTransaction({...editingTransaction, metodo: e.target.value})}
+                    className="w-full px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none border border-gray-100 dark:border-gray-800"
+                  >
+                    <option value="PIX">PIX</option>
+                    <option value="Dinheiro">Dinheiro</option>
+                    <option value="Transferência">Transferência</option>
+                    <option value="Crédito">Crédito</option>
+                    <option value="Débito">Débito</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[var(--color-text-sec-light)] uppercase mb-1">Tipo</label>
+                  <select 
+                    value={editingTransaction.tipo || 'Receita'}
+                    onChange={e => setEditingTransaction({...editingTransaction, tipo: e.target.value as 'Receita' | 'Despesa'})}
+                    className="w-full px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none border border-gray-100 dark:border-gray-800"
+                  >
+                    <option value="Receita">Receita</option>
+                    <option value="Despesa">Despesa</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-[var(--color-text-sec-light)] uppercase mb-1">Status</label>
+                  <select 
+                    value={editingTransaction.status || 'Pago'}
+                    onChange={e => setEditingTransaction({...editingTransaction, status: e.target.value as 'Pago' | 'Pendente'})}
+                    className="w-full px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none border border-gray-100 dark:border-gray-800"
+                  >
+                    <option value="Pago">Pago</option>
+                    <option value="Pendente">Pendente</option>
+                  </select>
+                </div>
+              </div>
+
+              <button 
+                onClick={handleSaveEdit}
+                className="w-full py-4 bg-[var(--color-primary)] text-white font-bold rounded-2xl shadow-lg hover:opacity-90 transition-opacity mt-4 flex items-center justify-center gap-2"
+              >
+                <Save size={20} />
+                Salvar Alterações
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

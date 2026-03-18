@@ -173,11 +173,12 @@ export default function PacotesScreen() {
       quantidadeTotal: 1,
       quantidadeRestante: 1
     };
-    setItens([...itens, newItem]);
+    setItens(prev => [...prev, newItem]);
+    setValorManual(null); // Força o recálculo do valor total
   };
 
   const updateItem = (id: string, field: keyof ItemPacote, value: any) => {
-    setItens((itens || []).map(item => {
+    setItens(prev => (prev || []).map(item => {
       if (item.id === id) {
         const updated = { ...item, [field]: value };
         if (field === 'quantidadeTotal') {
@@ -188,10 +189,12 @@ export default function PacotesScreen() {
       }
       return item;
     }));
+    setValorManual(null); // Força o recálculo do valor total
   };
 
   const removeItem = (id: string) => {
-    setItens((itens || []).filter(item => item.id !== id));
+    setItens(prev => (prev || []).filter(item => item.id !== id));
+    setValorManual(null); // Força o recálculo do valor total
   };
 
   const getTerapia = (id: string) => (terapias || []).find(t => t.id === id);
@@ -427,19 +430,38 @@ export default function PacotesScreen() {
                     </div>
                     
                     <div className="flex gap-3 items-end">
-                      <div className="w-20">
-                        <label className="block text-[10px] font-bold text-[var(--color-text-sec-light)] uppercase mb-1">Qtd</label>
-                        <input 
-                          type="number" 
-                          min="1"
-                          value={item.quantidadeTotal || ''}
-                          onChange={(e) => {
-                            const novaQtd = parseInt(e.target.value) || 1;
-                            updateItem(item.id, 'quantidadeTotal', novaQtd);
-                            updateItem(item.id, 'quantidadeRestante', novaQtd);
-                          }}
-                          className="w-full bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] border border-gray-100 dark:border-gray-800 rounded-xl px-2 py-2 text-sm outline-none text-center font-bold"
-                        />
+                      <div>
+                        <label className="block text-[10px] font-bold text-[var(--color-text-sec-light)] uppercase mb-1 text-center">Qtd</label>
+                        <div className="flex items-center gap-1">
+                          <button 
+                            onClick={() => {
+                              const novaQtd = Math.max(1, (item.quantidadeTotal || 1) - 1);
+                              updateItem(item.id, 'quantidadeTotal', novaQtd);
+                            }}
+                            className="w-8 h-8 flex items-center justify-center bg-gray-100 dark:bg-gray-800 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 font-bold transition-colors"
+                          >
+                            -
+                          </button>
+                          <input 
+                            type="number" 
+                            min="1"
+                            value={item.quantidadeTotal || ''}
+                            onChange={(e) => {
+                              const novaQtd = Math.max(1, parseInt(e.target.value) || 1);
+                              updateItem(item.id, 'quantidadeTotal', novaQtd);
+                            }}
+                            className="w-12 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] border border-gray-100 dark:border-gray-800 rounded-lg px-1 py-1.5 text-sm outline-none text-center font-bold"
+                          />
+                          <button 
+                            onClick={() => {
+                              const novaQtd = (item.quantidadeTotal || 1) + 1;
+                              updateItem(item.id, 'quantidadeTotal', novaQtd);
+                            }}
+                            className="w-8 h-8 flex items-center justify-center bg-gray-100 dark:bg-gray-800 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 font-bold transition-colors"
+                          >
+                            +
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { DollarSign, Clock, Tag, Plus, ChevronRight, PieChart, Settings, Check, Trash2, AlertTriangle, CheckCircle } from 'lucide-react';
+import { DollarSign, Clock, Tag, Plus, ChevronRight, PieChart, Settings, Check, Trash2, AlertTriangle, CheckCircle, Calendar, Package } from 'lucide-react';
 import { Agendamento } from '../types';
 import FinanceiroScreen from './FinanceiroScreen';
 import ConfiguracoesScreen from './ConfiguracoesScreen';
@@ -84,6 +84,24 @@ export default function HomeScreen() {
       .filter(t => t.status === 'Pago' && t.tipo === 'Receita' && !t.descricao.toLowerCase().includes('pacote'))
       .reduce((acc, t) => acc + Number(t.valor), 0);
   }, [transacoesMes]);
+
+  // Resumo do Dia
+  const hojeStr = new Date().toISOString().split('T')[0];
+  const atendimentosHoje = useMemo(() => {
+    return (agendamentos || []).filter(ag => ag.data === hojeStr && ag.statusAtendimento !== 'Cancelado');
+  }, [agendamentos, hojeStr]);
+
+  const totalHoje = useMemo(() => {
+    return atendimentosHoje.reduce((acc, ag) => acc + Number(ag.valorCobrado || 0), 0);
+  }, [atendimentosHoje]);
+
+  // Alerta de Pacotes (1 sessão restante)
+  const pacotesTerminando = useMemo(() => {
+    return (pacotes || []).filter(p => {
+      const totalRestante = (p.itens || []).reduce((acc, item) => acc + Number(item.quantidadeRestante || 0), 0);
+      return totalRestante === 1;
+    });
+  }, [pacotes]);
 
   // Próximos Atendimentos (Futuros e do dia atual)
   const proximosAtendimentos = useMemo(() => {
@@ -211,6 +229,25 @@ export default function HomeScreen() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 pb-24">
+        {/* Resumo do Dia */}
+        <div className="mt-4 bg-[var(--color-primary)]/10 border border-[var(--color-primary)]/20 p-4 rounded-2xl flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-[var(--color-primary)] text-white flex items-center justify-center shrink-0">
+              <Calendar size={20} />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-[var(--color-primary)] uppercase tracking-wider">Resumo de Hoje</p>
+              <p className="text-sm font-medium text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">
+                {atendimentosHoje.length} atendimento{atendimentosHoje.length !== 1 ? 's' : ''}
+              </p>
+            </div>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] uppercase font-bold">Total Previsto</p>
+            <p className="text-lg font-black text-[var(--color-primary)]">{formatCurrency(totalHoje)}</p>
+          </div>
+        </div>
+
         {/* Weekly Conference Alert */}
         {pastPendingCount > 0 && (
           <button 
@@ -229,6 +266,29 @@ export default function HomeScreen() {
             <ChevronRight size={20} className="text-orange-400" />
           </button>
         )}
+
+        {/* Alerta de Pacotes a Terminar */}
+        {pacotesTerminando.length > 0 && (
+          <div className="mt-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-4 rounded-2xl">
+            <div className="flex items-center gap-2 mb-3">
+              <Package size={18} className="text-blue-500" />
+              <h3 className="text-xs font-bold text-blue-800 dark:text-blue-300 uppercase tracking-wider">Pacotes a Terminar (1 sessão)</h3>
+            </div>
+            <div className="space-y-2">
+              {pacotesTerminando.map(p => (
+                <div key={p.id} className="flex justify-between items-center bg-white dark:bg-gray-800 p-2.5 rounded-xl shadow-sm border border-blue-100 dark:border-blue-900/50">
+                  <span className="text-sm font-bold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] truncate">
+                    {getClienteNome(p.clienteId)}
+                  </span>
+                  <span className="text-[10px] font-black bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-2 py-1 rounded-md">
+                    RENOVAR
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Financial Cards */}
         <div className="space-y-3 mt-4">
           {/* Recebido */}

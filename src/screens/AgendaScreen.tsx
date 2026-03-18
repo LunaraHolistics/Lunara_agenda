@@ -33,6 +33,7 @@ export default function AgendaScreen() {
   const [isBloqueiosOpen, setIsBloqueiosOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [isDayAgendaOpen, setIsDayAgendaOpen] = useState(false);
+  const [barraMinimizada, setBarraMinimizada] = useState(false);
   const [showOrfaos, setShowOrfaos] = useState(false);
   const [expandedClienteId, setExpandedClienteId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -88,6 +89,30 @@ export default function AgendaScreen() {
   const daysInMonth = getDaysInMonth(year, month);
   const firstDay = getFirstDayOfMonth(year, month);
   const monthName = new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(currentMonth);
+
+  useEffect(() => {
+    const handleAutoScroll = (e: DragEvent) => {
+      const threshold = 80;
+      const scrollSpeed = 20;
+
+      const y = e.clientY;
+      const height = window.innerHeight;
+
+      if (y < threshold) {
+        window.scrollBy({ top: -scrollSpeed, behavior: 'auto' });
+      }
+
+      if (y > height - threshold) {
+        window.scrollBy({ top: scrollSpeed, behavior: 'auto' });
+      }
+    };
+
+    window.addEventListener('dragover', handleAutoScroll);
+
+    return () => {
+      window.removeEventListener('dragover', handleAutoScroll);
+    };
+  }, []);
 
   // Handlers
   const handleDragOver = (e: React.DragEvent) => {
@@ -146,14 +171,21 @@ export default function AgendaScreen() {
     if (!id) return;
 
     if (type === 'agendamento') {
+      const item = (agendamentos || []).find(a => String(a.id) === String(id));
+      if (item?.statusAtendimento === 'Concluido') {
+        showNotification('Não é possível mover uma sessão concluída.', 'error');
+        setDraggingId(null);
+        return;
+      }
+
       setAgendamentos(prev =>
         prev.map(item =>
           String(item.id) === String(id)
-            ? { ...item, data: dateStr }
+            ? { ...item, data: dateStr, statusAtendimento: 'Agendado' }
             : item
         )
       );
-      showNotification('Agendamento reagendado!', 'success');
+      showNotification('Agendamento agendado!', 'success');
     }
 
     if (type === 'terapia') {
@@ -166,6 +198,32 @@ export default function AgendaScreen() {
       setIsModalOpen(true);
     }
 
+    setDraggingId(null);
+  };
+
+  const handleDropToFooter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const type = e.dataTransfer.getData('type');
+    const id = e.dataTransfer.getData('id');
+
+    if (type === 'agendamento' && id) {
+      const item = (agendamentos || []).find(a => String(a.id) === String(id));
+      if (item?.statusAtendimento === 'Concluido') {
+        showNotification('Não é possível mover uma sessão concluída.', 'error');
+        setDraggingId(null);
+        return;
+      }
+
+      setAgendamentos(prev =>
+        prev.map(item =>
+          String(item.id) === String(id)
+            ? { ...item, data: '', hora: '', statusAtendimento: 'Disponivel' }
+            : item
+        )
+      );
+      showNotification('Agendamento movido para disponíveis!', 'success');
+    }
     setDraggingId(null);
   };
 
@@ -237,9 +295,19 @@ export default function AgendaScreen() {
   };
 
   const handleDeleteAgendamento = (agendamentoId: string) => {
-    confirmAction('Deseja realmente excluir este agendamento?', () => {
-      setAgendamentos(prev => (prev || []).filter(a => String(a.id) !== String(agendamentoId)));
-      showNotification('Agendamento excluído!', 'success');
+    const item = (agendamentos || []).find(a => String(a.id) === String(agendamentoId));
+    if (item?.statusAtendimento === 'Concluido') {
+      showNotification('Não é possível remover uma sessão concluída.', 'error');
+      return;
+    }
+
+    confirmAction('Deseja realmente remover este agendamento da agenda? Ele ficará disponível para reagendamento.', () => {
+      setAgendamentos(prev => (prev || []).map(a => 
+        String(a.id) === String(agendamentoId) 
+          ? { ...a, data: '', hora: '', statusAtendimento: 'Disponivel' } 
+          : a
+      ));
+      showNotification('Agendamento movido para disponíveis!', 'success');
     }, { isDanger: true });
   };
 
@@ -403,7 +471,7 @@ export default function AgendaScreen() {
                     
                     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                     const dayAgendamentos = (agendamentos || [])
-                      .filter(a => String(a.data).slice(0, 10) === dateStr && a.statusAtendimento !== 'Cancelado')
+                      .filter(a => String(a.data).slice(0, 10) === dateStr && (a.statusAtendimento === 'Agendado' || a.statusAtendimento === 'Concluido'))
                       .sort((a, b) => a.hora.localeCompare(b.hora));
                     const hasBloqueio = (bloqueios || []).some(b => b.data === dateStr);
                     const isToday = new Date().toISOString().startsWith(dateStr);
@@ -449,14 +517,19 @@ export default function AgendaScreen() {
                         <div className="flex flex-col gap-1">
                           {dayAgendamentos.map(ag => {
                             const cliente = (clientes || []).find(c => c.id === ag.clienteId);
-                            const isRealizado = ag.statusAtendimento === 'Realizado';
+                            const isConcluido = ag.statusAtendimento === 'Concluido';
                             return (
                                 <div 
                                   key={ag.id}
-                                  draggable={true}
+                                  draggable={!isConcluido}
                                   data-id={ag.id}
                                   onClick={(e) => openAppointmentModal(e, ag)}
                                   onDragStart={(e) => {
+                                    if (ag.statusAtendimento === 'Concluido') {
+                                      e.preventDefault();
+                                      showNotification('Não é possível mover uma sessão concluída.', 'error');
+                                      return;
+                                    }
                                     e.stopPropagation();
                                     isDragging.current = true;
                                     const target = e.currentTarget;
@@ -483,17 +556,17 @@ export default function AgendaScreen() {
                                   style={{ 
                                     userSelect: 'none', 
                                     touchAction: 'none', 
-                                    WebkitUserDrag: 'element'
+                                    WebkitUserDrag: isConcluido ? 'none' : 'element'
                                   } as any}
-                                  className={`text-[9px] p-1 rounded border leading-tight transition-all cursor-grab active:cursor-grabbing ${
+                                  className={`text-[9px] p-1 rounded border leading-tight transition-all ${isConcluido ? '' : 'cursor-grab active:cursor-grabbing'} ${
                                     draggingId === ag.id ? 'opacity-50' : ''
                                   } ${
-                                    isRealizado ? 'bg-gray-100 text-gray-400' : 'bg-white dark:bg-gray-700 text-[var(--color-primary)] border-[var(--color-primary)]/30'
+                                    isConcluido ? 'bg-gray-100 text-gray-400 border-gray-200' : 'bg-white dark:bg-gray-700 text-[var(--color-primary)] border-[var(--color-primary)]/30'
                                   }`}
                                 >
                                 <div className="flex justify-between items-center font-black">
                                   <span>{ag.hora}</span>
-                                  {isRealizado && <CheckCircle2 size={8} />}
+                                  {isConcluido && <CheckCircle2 size={8} />}
                                 </div>
                                 <div className="truncate">{cliente?.nome?.split(' ')[0]}</div>
                               </div>
@@ -604,6 +677,66 @@ export default function AgendaScreen() {
               </div>
             );
           })}
+        </div>
+
+        {/* Sessões Disponíveis (Drop Zone) */}
+        <div className="mt-6">
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="text-[10px] font-black text-[var(--color-primary)] uppercase tracking-widest flex items-center gap-2">
+              <Trash2 size={14} /> Solte aqui para desmarcar (Sessões Disponíveis)
+            </h3>
+            <button 
+              onClick={() => setBarraMinimizada(!barraMinimizada)}
+              className="text-[10px] font-bold text-[var(--color-primary)] bg-[var(--color-primary)]/10 px-3 py-1 rounded-full uppercase tracking-tighter transition-all active:scale-95"
+            >
+              {barraMinimizada ? 'Expandir' : 'Minimizar'}
+            </button>
+          </div>
+          
+          <div className={`transition-all duration-300 overflow-hidden ${barraMinimizada ? 'max-h-0 opacity-0' : 'max-h-[500px] opacity-100'}`}>
+            <div 
+              onDragOver={handleDragOver}
+              onDrop={handleDropToFooter}
+              className="p-4 rounded-3xl border-2 border-dashed border-[var(--color-primary)]/20 bg-[var(--color-primary)]/5 min-h-[100px] transition-all hover:bg-[var(--color-primary)]/10"
+            >
+              <div className="flex overflow-x-auto gap-3 pb-2 no-scrollbar">
+                {(() => {
+                  const pacotesIds = new Set((pacotes || []).map(p => p.id));
+                  return (agendamentos || [])
+                    .filter(a => a.statusAtendimento === 'Disponivel' && pacotesIds.has(a.pacoteId || ''))
+                    .map(ag => {
+                      const cliente = (clientes || []).find(c => c.id === ag.clienteId);
+                      const terapia = (terapias || []).find(t => t.id === ag.terapiaId);
+                      return (
+                        <div 
+                          key={ag.id}
+                          draggable={true}
+                          onDragStart={(e) => {
+                            e.stopPropagation();
+                            isDragging.current = true;
+                            handleDragStart(e, {
+                              id: ag.id,
+                              type: 'agendamento',
+                              name: cliente?.nome || 'Cliente',
+                              time: 'Reagendar'
+                            });
+                          }}
+                          onDragEnd={(e) => {
+                            e.stopPropagation();
+                            isDragging.current = false;
+                            setDraggingId(null);
+                          }}
+                          className="bg-white dark:bg-gray-800 p-2 rounded-xl border border-[var(--color-primary)]/30 shadow-sm shrink-0 min-w-[120px] cursor-grab active:cursor-grabbing"
+                        >
+                          <p className="text-[10px] font-bold truncate">{cliente?.nome}</p>
+                          <p className="text-[8px] opacity-60 truncate">{terapias?.find(t => t.id === ag.terapiaId)?.nome}</p>
+                        </div>
+                      );
+                    });
+                })()}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -749,22 +882,22 @@ export default function AgendaScreen() {
 
             <div className="space-y-4 pb-8">
               {(agendamentos || [])
-                .filter(a => a.data === selectedDate && a.statusAtendimento !== 'Cancelado')
+                .filter(a => a.data === selectedDate && (a.statusAtendimento === 'Agendado' || a.statusAtendimento === 'Concluido'))
                 .sort((a, b) => a.hora.localeCompare(b.hora))
                 .map(ag => {
                   const cliente = (clientes || []).find(c => c.id === ag.clienteId);
                   const terapia = (terapias || []).find(t => t.id === ag.terapiaId);
-                  const isRealizado = ag.statusAtendimento === 'Realizado';
+                  const isConcluido = ag.statusAtendimento === 'Concluido';
                   const isPago = ag.statusPagamento === 'Pago' || !!ag.pacoteId;
                   const pagoViaPacote = !!ag.pacoteId;
 
                   return (
-                    <div key={ag.id} className={`p-4 rounded-2xl border transition-all ${isRealizado ? 'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-800 opacity-70' : 'bg-white dark:bg-gray-800 border-[var(--color-primary)]/20 shadow-sm'}`}>
+                    <div key={ag.id} className={`p-4 rounded-2xl border transition-all ${isConcluido ? 'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-800 opacity-70' : 'bg-white dark:bg-gray-800 border-[var(--color-primary)]/20 shadow-sm'}`}>
                       <div className="flex justify-between items-start mb-3">
                         <div>
                           <div className="flex items-center gap-2 mb-1">
                             <span className="text-lg font-black text-[var(--color-primary)]">{ag.hora}</span>
-                            {isRealizado && <span className="bg-gray-200 text-gray-600 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Realizado</span>}
+                            {isConcluido && <span className="bg-gray-200 text-gray-600 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Concluído</span>}
                           </div>
                           <h3 className="font-bold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">{cliente?.nome || 'Cliente'}</h3>
                           <p className="text-xs text-[var(--color-text-sec-light)]">{terapia?.nome || 'Terapia'}</p>
@@ -776,8 +909,8 @@ export default function AgendaScreen() {
                         </div>
                       </div>
 
-                      <div className="flex gap-2 mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
-                        {!isRealizado && (
+                      <div className="flex gap-2 mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+                        {!isConcluido && (
                           <button 
                             onClick={() => handleCompleteAppointment(ag.id)}
                             className="flex-1 py-2 bg-[var(--color-primary)]/10 text-[var(--color-primary)] font-bold text-xs rounded-xl hover:bg-[var(--color-primary)]/20 transition-colors"
@@ -786,7 +919,7 @@ export default function AgendaScreen() {
                           </button>
                         )}
                         
-                        {!isPago && (
+                        {!isPago && !isConcluido && (
                           <button 
                             onClick={() => {
                               promptAction('Forma de Pagamento (PIX, Crédito, Débito, Transferência, Dinheiro):', 'PIX', (forma) => {

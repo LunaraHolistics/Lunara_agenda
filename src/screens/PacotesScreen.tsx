@@ -72,11 +72,10 @@ export default function PacotesScreen() {
   };
 
   const handleDeleteTotal = async (pacoteId: string) => {
-    confirmAction('Deseja realmente excluir este pacote? Os agendamentos futuros serão desvinculados automaticamente.', async () => {
+    confirmAction('Deseja realmente excluir este pacote? Todos os agendamentos e registros financeiros vinculados a este pacote serão removidos permanentemente.', async () => {
       try {
         setLoading(true);
         await deletePacote(pacoteId);
-        showNotification('Pacote excluído com sucesso!', 'success');
         setViewMode('list');
       } catch (error: any) {
         showNotification('Erro ao excluir: ' + error.message, 'error');

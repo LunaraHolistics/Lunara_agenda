@@ -278,10 +278,12 @@ export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenPro
                     </button>
                     <button 
                       onClick={() => {
-                        confirmAction('Tem certeza que deseja excluir esta pendência?', () => {
+                        const msg = p.tipo === 'pacote' 
+                          ? 'Tem certeza que deseja excluir este pacote? Todos os agendamentos e registros financeiros vinculados serão removidos.'
+                          : 'Tem certeza que deseja excluir esta pendência?';
+                        confirmAction(msg, () => {
                           if (p.tipo === 'pacote') deletePacote(p.id);
                           else deleteAgendamento(p.id);
-                          showNotification('Pendência excluída!', 'success');
                         }, { isDanger: true });
                       }}
                       className="flex flex-col items-center gap-1 p-2 bg-red-100 text-red-600 rounded-xl hover:bg-red-200 transition-colors"

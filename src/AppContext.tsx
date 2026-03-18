@@ -1,5 +1,5 @@
 import React, { createContext, useContext, ReactNode, useState, useEffect } from 'react';
-import { Agendamento, Cliente, Terapia, Pacote, Bloqueio, ImportedContact, Transacao } from './types';
+import { Agendamento, Cliente, Terapia, Pacote, Bloqueio, ImportedContact, Transacao, Despesa } from './types';
 import { StorageService, StorageKeys } from './services/StorageService';
 import { INITIAL_CLIENTES, INITIAL_TERAPIAS, INITIAL_PACOTES, INITIAL_AGENDAMENTOS, INITIAL_TRANSACOES } from './initialData';
 
@@ -32,6 +32,7 @@ interface AppContextType {
   pacotes: Pacote[];
   bloqueios: Bloqueio[];
   transacoes: Transacao[];
+  despesas: Despesa[];
 
   addCliente: (cliente: Omit<Cliente, 'id'>) => void;
   updateCliente: (cliente: Cliente) => void;
@@ -56,6 +57,9 @@ interface AppContextType {
   addTransacao: (transacao: Partial<Transacao>) => void;
   updateTransacao: (transacao: Transacao) => void;
   deleteTransacao: (id: string) => void;
+
+  addDespesa: (despesa: Omit<Despesa, 'id'>) => void;
+  deleteDespesa: (id: string) => void;
 
   showNotification: (message: string, type?: 'success' | 'error' | 'info') => void;
   confirmAction: (message: string, onConfirm: () => void, options?: any) => void;
@@ -102,6 +106,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const saved = StorageService.getData(StorageKeys.TRANSACOES);
     return Array.isArray(saved) ? filterBlacklist(saved) : INITIAL_TRANSACOES;
   });
+  const [despesas, setDespesas] = useState<Despesa[]>(() => {
+    const saved = StorageService.getData(StorageKeys.DESPESAS);
+    return Array.isArray(saved) ? saved : [];
+  });
 
   const agendamentosSincronizados = React.useMemo(() => {
     console.log('AppContext: recalculating agendamentosSincronizados', agendamentos.length);
@@ -142,6 +150,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setAgendamentos(INITIAL_AGENDAMENTOS);
       setTransacoes(INITIAL_TRANSACOES);
       setBloqueios([]);
+      setDespesas([]);
       
       StorageService.saveData(StorageKeys.CLIENTES, INITIAL_CLIENTES);
       StorageService.saveData(StorageKeys.TERAPIAS, INITIAL_TERAPIAS);
@@ -149,6 +158,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       StorageService.saveData(StorageKeys.AGENDAMENTOS, INITIAL_AGENDAMENTOS);
       StorageService.saveData(StorageKeys.TRANSACOES, INITIAL_TRANSACOES);
       StorageService.saveData(StorageKeys.BLOQUEIOS, []);
+      StorageService.saveData(StorageKeys.DESPESAS, []);
     }
   }, []);
 
@@ -163,6 +173,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => StorageService.saveData(StorageKeys.PACOTES, pacotes), [pacotes]);
   useEffect(() => StorageService.saveData(StorageKeys.BLOQUEIOS, bloqueios), [bloqueios]);
   useEffect(() => StorageService.saveData(StorageKeys.TRANSACOES, transacoes), [transacoes]);
+  useEffect(() => StorageService.saveData(StorageKeys.DESPESAS, despesas), [despesas]);
 
   const [notifications, setNotifications] = useState<{ id: string; message: string; type: 'success' | 'error' | 'info' }[]>([]);
   const [confirmation, setConfirmation] = useState<any>(null);
@@ -214,12 +225,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const deleteAgendamento = (id: string) => {
-    setAgendamentos(prev => prev.filter(a => a.id !== id));
-    showNotification("Agendamento removido", "info");
+    setAgendamentos(prev => prev.map(a => a.id === id ? { ...a, data: '', hora: '', statusAtendimento: 'Disponivel' } : a));
+    showNotification("Agendamento movido para disponíveis", "info");
   };
 
   const completeAppointment = (id: string) => {
-    setAgendamentos(prev => prev.map(a => a.id === id ? { ...a, statusAtendimento: 'Realizado' } : a));
+    setAgendamentos(prev => prev.map(a => a.id === id ? { ...a, statusAtendimento: 'Concluido' } : a));
     showNotification("Atendimento concluído!", "success");
   };
 
@@ -251,9 +262,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const deletePacote = (id: string) => {
-    setPacotes(prev => prev.filter(p => p.id !== id));
-    setAgendamentos(prev => prev.filter(a => a.pacoteId !== id));
-    showNotification("Pacote e agendamentos removidos!", "info");
+    // 1. Remover agendamentos vinculados ao pacote
+    setAgendamentos(prev => (prev || []).filter(a => a.pacoteId !== id));
+    
+    // 2. Remover financeiro (receber e recebidos) vinculado ao pacote
+    setTransacoes(prev => (prev || []).filter(t => t.pacoteId !== id));
+    
+    // 3. Remover o pacote
+    setPacotes(prev => (prev || []).filter(p => p.id !== id));
+    
+    showNotification("Pacote e todos os registros vinculados (agenda e financeiro) foram removidos!", "info");
   };
 
   const addBloqueio = (data: Omit<Bloqueio, 'id'>) => {
@@ -287,8 +305,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setTransacoes(prev => prev.filter(t => t.id !== id));
   };
 
+  const addDespesa = (data: Omit<Despesa, 'id'>) => {
+    const novo = { ...data, id: crypto.randomUUID() } as Despesa;
+    setDespesas(prev => [novo, ...prev]);
+    showNotification("Despesa registrada!", "success");
+  };
+
+  const deleteDespesa = (id: string) => {
+    setDespesas(prev => prev.filter(d => d.id !== id));
+    showNotification("Despesa removida", "info");
+  };
+
   const exportarBackup = () => {
-    const data = { clientes, agendamentos, terapias, pacotes, bloqueios, transacoes };
+    const data = { clientes, agendamentos, terapias, pacotes, bloqueios, transacoes, despesas };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -331,6 +360,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setTransacoes(filtered);
         StorageService.saveData(StorageKeys.TRANSACOES, filtered);
       }
+      if (json.despesas) {
+        setDespesas(json.despesas);
+        StorageService.saveData(StorageKeys.DESPESAS, json.despesas);
+      }
       showNotification("Dados restaurados!", "success");
     } catch (e) {
       showNotification("Erro na importação", "error");
@@ -372,13 +405,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   return (
     <AppContext.Provider value={{
-      clientes, agendamentos: agendamentosSincronizados, terapias, pacotes, bloqueios, transacoes,
+      clientes, agendamentos: agendamentosSincronizados, terapias, pacotes, bloqueios, transacoes, despesas,
       addCliente, updateCliente, deleteCliente,
       addAgendamento, updateAgendamento, deleteAgendamento, completeAppointment,
       addTerapia, updateTerapia, deleteTerapia,
       addPacote, updatePacote, deletePacote,
       addBloqueio, deleteBloqueio,
       addTransacao, updateTransacao, deleteTransacao,
+      addDespesa, deleteDespesa,
       showNotification, confirmAction, promptAction,
       handleImportContacts, exportarBackup, importarBackup, repairDatabase,
       resetSystem,

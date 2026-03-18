@@ -6,13 +6,11 @@ import TerapiasScreen from './screens/TerapiasScreen';
 import PacotesScreen from './screens/PacotesScreen';
 import AgendaScreen from './screens/AgendaScreen';
 import FinanceiroScreen from './screens/FinanceiroScreen';
-import RelatoriosScreen from './screens/RelatoriosScreen';
-import ConferenciaScreen from './screens/ConferenciaScreen';
 import ConfiguracoesScreen from './screens/ConfiguracoesScreen';
 import Login from './screens/Login';
 import { AppProvider, useAppContext } from './AppContext';
 
-type Tab = 'home' | 'clientes' | 'terapias' | 'pacotes' | 'agenda' | 'financeiro' | 'relatorios' | 'configuracoes';
+type Tab = 'home' | 'clientes' | 'terapias' | 'pacotes' | 'agenda' | 'financeiro' | 'configuracoes';
 
 function AppContent() {
   const [activeTab, setActiveTab] = useState<Tab>('home');
@@ -22,6 +20,12 @@ function AppContent() {
       if (Notification.permission === 'default') {
         Notification.requestPermission();
       }
+    }
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/service-worker.js')
+        .then(reg => console.log('Service Worker registrado', reg))
+        .catch(err => console.error('Erro ao registrar SW', err));
     }
   }, []);
 
@@ -33,7 +37,6 @@ function AppContent() {
       case 'pacotes': return <PacotesScreen />;
       case 'agenda': return <AgendaScreen />;
       case 'financeiro': return <FinanceiroScreen onBack={() => setActiveTab('home')} />;
-      case 'relatorios': return <RelatoriosScreen onBack={() => setActiveTab('home')} />;
       case 'configuracoes': return <ConfiguracoesScreen onBack={() => setActiveTab('home')} />;
       default: return <HomeScreen />;
     }
@@ -46,7 +49,6 @@ function AppContent() {
     { id: 'pacotes', label: 'Pacotes', icon: Package },
     { id: 'agenda', label: 'Agenda', icon: Calendar },
     { id: 'financeiro', label: 'Finanças', icon: Wallet },
-    { id: 'relatorios', label: 'Relatórios', icon: BarChart2 },
     { id: 'configuracoes', label: 'Config', icon: Settings },
   ] as const;
 

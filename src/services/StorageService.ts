@@ -5,6 +5,7 @@ export const StorageKeys = {
   TRANSACOES: '@lunara_financeiro',
   PACOTES: '@lunara_pacotes',
   BLOQUEIOS: '@lunara_bloqueios',
+  DESPESAS: '@lunara_despesas',
 };
 
 export const StorageService = {

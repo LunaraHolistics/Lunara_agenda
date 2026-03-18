@@ -4,7 +4,6 @@ import { Agendamento } from '../types';
 import FinanceiroScreen from './FinanceiroScreen';
 import ConfiguracoesScreen from './ConfiguracoesScreen';
 import ContasAReceberScreen from './ContasAReceberScreen';
-import ConferenciaScreen from './ConferenciaScreen';
 import { useAppContext } from '../AppContext';
 
 export default function HomeScreen() {
@@ -19,13 +18,13 @@ export default function HomeScreen() {
     clientes,
     terapias,
     pacotes,
-    transacoes
+    transacoes,
+    despesas
   } = useAppContext();
 
   const [showFinanceiro, setShowFinanceiro] = useState(false);
   const [showConfiguracoes, setShowConfiguracoes] = useState(false);
   const [showContasAReceber, setShowContasAReceber] = useState(false);
-  const [showConferencia, setShowConferencia] = useState(false);
 
   const currentMonth = new Date().getMonth();
   const currentYear = new Date().getFullYear();
@@ -33,33 +32,59 @@ export default function HomeScreen() {
   // Filtra agendamentos do mês atual (não cancelados)
   const agendamentosMes = useMemo(() => {
     return (agendamentos || []).filter(ag => {
+      // Orphan filter: se tiver pacoteId, o pacote deve existir
+      if (ag.pacoteId && !(pacotes || []).some(p => p.id === ag.pacoteId)) return false;
+
       const date = safeDate(`${ag.data}T${ag.hora}`);
       return date.getMonth() === currentMonth && 
              date.getFullYear() === currentYear &&
              ag.statusAtendimento !== 'Cancelado';
     });
-  }, [agendamentos, currentMonth, currentYear, safeDate]);
+  }, [agendamentos, pacotes, currentMonth, currentYear, safeDate]);
 
   // Cálculos dos Cards
   const transacoesMes = useMemo(() => {
-    return (transacoes || []).filter(t => {
+    const periodTransacoes = (transacoes || []).filter(t => {
+      // Orphan filter: se tiver pacoteId, o pacote deve existir
+      if (t.pacoteId && !(pacotes || []).some(p => p.id === t.pacoteId)) return false;
+
       if (!t.data) return false;
       const date = safeDate(`${t.data}T00:00:00`);
       return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
     });
-  }, [transacoes, currentMonth, currentYear, safeDate]);
+
+    const periodDespesas = (despesas || []).filter(d => {
+      const date = safeDate(`${d.data}T00:00:00`);
+      return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
+    });
+
+    return { transacoes: periodTransacoes, despesas: periodDespesas };
+  }, [transacoes, despesas, pacotes, currentMonth, currentYear, safeDate]);
 
   const totalRecebido = useMemo(() => {
-    return (transacoesMes || [])
+    return (transacoesMes.transacoes || [])
       .filter(t => t.status === 'Pago' && t.tipo === 'Receita' && t.valor != null)
       .reduce((acc, t) => acc + Number(t.valor), 0);
   }, [transacoesMes]);
 
   const totalPendente = useMemo(() => {
-    return (transacoesMes || [])
+    return (transacoesMes.transacoes || [])
       .filter(t => t.status === 'Pendente' && t.tipo === 'Receita' && t.valor != null)
       .reduce((acc, t) => acc + Number(t.valor), 0);
   }, [transacoesMes]);
+
+  const totalDespesas = useMemo(() => {
+    const despesasTransacoes = (transacoesMes.transacoes || [])
+      .filter(t => t.status === 'Pago' && t.tipo === 'Despesa' && t.valor != null)
+      .reduce((acc, t) => acc + Number(t.valor), 0);
+    
+    const despesasState = (transacoesMes.despesas || [])
+      .reduce((acc, d) => acc + Number(d.valor), 0);
+      
+    return despesasTransacoes + despesasState;
+  }, [transacoesMes]);
+
+  const saldoLiquido = useMemo(() => totalRecebido - totalDespesas, [totalRecebido, totalDespesas]);
 
   const pacotesMes = useMemo(() => {
     return (pacotes || []).filter(p => {
@@ -74,13 +99,13 @@ export default function HomeScreen() {
   }, []);
 
   const totalRecebidoFixo = useMemo(() => {
-    return (transacoesMes || [])
+    return (transacoesMes.transacoes || [])
       .filter(t => t.status === 'Pago' && t.tipo === 'Receita' && t.descricao.toLowerCase().includes('pacote'))
       .reduce((acc, t) => acc + Number(t.valor), 0);
   }, [transacoesMes]);
 
   const totalRecebidoAvulso = useMemo(() => {
-    return (transacoesMes || [])
+    return (transacoesMes.transacoes || [])
       .filter(t => t.status === 'Pago' && t.tipo === 'Receita' && !t.descricao.toLowerCase().includes('pacote'))
       .reduce((acc, t) => acc + Number(t.valor), 0);
   }, [transacoesMes]);
@@ -195,19 +220,9 @@ export default function HomeScreen() {
     return <ConfiguracoesScreen onBack={() => setShowConfiguracoes(false)} />;
   }
 
-  if (showConferencia) {
-    return <ConferenciaScreen onBack={() => setShowConferencia(false)} />;
-  }
-
   if (showContasAReceber) {
     return <ContasAReceberScreen onBack={() => setShowContasAReceber(false)} />;
   }
-
-  const pastPendingCount = (agendamentos || []).filter(ag => 
-    ag.statusAtendimento === 'Realizado' && 
-    ag.statusPagamento === 'Pendente' &&
-    safeDate(`${ag.data}T${ag.hora}`) < new Date()
-  ).length;
 
   return (
     <div className="flex flex-col h-full relative">
@@ -226,13 +241,6 @@ export default function HomeScreen() {
       <div className="flex-1 overflow-y-auto px-4 pb-24">
         {/* Ações Rápidas */}
         <div className="mt-2 mb-2 flex gap-3 overflow-x-auto no-scrollbar pb-2">
-          <button 
-            onClick={() => setShowConferencia(true)}
-            className="flex items-center gap-2 px-4 py-3 bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 rounded-2xl font-bold text-xs shrink-0 transition-transform active:scale-95 border border-orange-100 dark:border-orange-800/50 shadow-sm"
-          >
-            <CheckCircle size={18} />
-            Conferência
-          </button>
           <button 
             onClick={() => setShowFinanceiro(true)}
             className="flex items-center gap-2 px-4 py-3 bg-[var(--color-primary)]/10 text-[var(--color-primary)] rounded-2xl font-bold text-xs shrink-0 transition-transform active:scale-95 border border-[var(--color-primary)]/20 shadow-sm"
@@ -287,23 +295,7 @@ export default function HomeScreen() {
         </div>
 
         {/* Weekly Conference Alert */}
-        {pastPendingCount > 0 && (
-          <button 
-            onClick={() => setShowConferencia(true)}
-            className="mt-4 w-full bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 p-3 rounded-2xl flex items-center gap-3 animate-pulse"
-          >
-            <div className="w-10 h-10 rounded-full bg-orange-500 text-white flex items-center justify-center shrink-0">
-              <AlertTriangle size={20} />
-            </div>
-            <div className="flex-1 text-left">
-              <p className="text-xs font-bold text-orange-800 dark:text-orange-300 uppercase tracking-wider">Conferência Necessária</p>
-              <p className="text-sm text-orange-700 dark:text-orange-400">
-                Existem <strong>{pastPendingCount}</strong> atendimentos passados aguardando pagamento.
-              </p>
-            </div>
-            <ChevronRight size={20} className="text-orange-400" />
-          </button>
-        )}
+        {/* Removed Conference Alert */}
 
         {/* Alerta de Pacotes a Terminar */}
         {pacotesTerminando.length > 0 && (
@@ -329,28 +321,28 @@ export default function HomeScreen() {
 
         {/* Financial Cards */}
         <div className="space-y-3 mt-4">
-          {/* Recebido */}
-          <div className="bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] p-5 rounded-2xl shadow-sm border-l-4 border-[var(--color-success)]">
+          {/* Saldo Líquido */}
+          <div className="bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] p-5 rounded-2xl shadow-sm border-l-4 border-[var(--color-primary)]">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <p className="text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] text-sm font-medium mb-1">Total Recebido</p>
+                <p className="text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] text-sm font-medium mb-1">Saldo Líquido</p>
                 <h3 className="text-2xl font-bold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">
-                  {formatCurrency(totalRecebido)}
+                  {formatCurrency(saldoLiquido)}
                 </h3>
               </div>
-              <div className="w-12 h-12 rounded-full bg-[var(--color-success)]/10 flex items-center justify-center text-[var(--color-success)]">
-                <DollarSign size={24} />
+              <div className="w-12 h-12 rounded-full bg-[var(--color-primary)]/10 flex items-center justify-center text-[var(--color-primary)]">
+                <PieChart size={24} />
               </div>
             </div>
             
             <div className="grid grid-cols-2 gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
               <div className="bg-emerald-50 dark:bg-emerald-900/20 p-3 rounded-xl">
-                <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase mb-1">Pacotes Fixos</p>
-                <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{formatCurrency(totalRecebidoFixo)}</p>
+                <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase mb-1">Recebido</p>
+                <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{formatCurrency(totalRecebido)}</p>
               </div>
-              <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-xl">
-                <p className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase mb-1">Avulsos</p>
-                <p className="text-sm font-bold text-blue-700 dark:text-blue-300">{formatCurrency(totalRecebidoAvulso)}</p>
+              <div className="bg-red-50 dark:bg-red-900/20 p-3 rounded-xl">
+                <p className="text-[10px] font-bold text-red-600 dark:text-red-400 uppercase mb-1">Despesas</p>
+                <p className="text-sm font-bold text-red-700 dark:text-red-300">{formatCurrency(totalDespesas)}</p>
               </div>
             </div>
           </div>

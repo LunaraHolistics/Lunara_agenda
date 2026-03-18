@@ -66,7 +66,7 @@ export interface Agendamento {
   terapiaId: string;
   data: string;
   hora: string;
-  statusAtendimento: 'Agendado' | 'Realizado' | 'Cancelado';
+  statusAtendimento: 'Agendado' | 'Concluido' | 'Cancelado' | 'Disponivel';
   statusPagamento: 'Pendente' | 'Pago';
   valorCobrado: number;
   dataPagamento?: string;
@@ -77,6 +77,18 @@ export interface Agendamento {
 // ======================
 // FINANCEIRO
 // ======================
+
+export type CategoriaDespesa = 'Material' | 'Ferramenta' | 'Fixo' | 'Outros';
+
+export interface Despesa {
+  id: string;
+  descricao: string;
+  valor: number;
+  data: string;
+  categoria: CategoriaDespesa;
+  formaPagamento?: string;
+  observacao?: string;
+}
 
 export interface Transacao {
   id: string;

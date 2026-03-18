@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ArrowLeft, Filter, TrendingUp, TrendingDown, DollarSign, Calendar, X, Save } from 'lucide-react';
+import { ArrowLeft, Filter, TrendingUp, TrendingDown, DollarSign, Calendar, X, Save, Plus } from 'lucide-react';
 import { useAppContext } from '../AppContext';
 import { Transacao } from '../types';
 
@@ -10,9 +10,13 @@ interface FinanceiroProps {
 export default function FinanceiroScreen({ onBack }: FinanceiroProps) {
   const { 
     transacoes, 
+    despesas,
     clientes, 
+    pacotes,
     updateTransacao, 
     deleteTransacao, 
+    addDespesa,
+    deleteDespesa,
     confirmAction, 
     showNotification 
   } = useAppContext();
@@ -22,9 +26,18 @@ export default function FinanceiroScreen({ onBack }: FinanceiroProps) {
   const [filtroAno, setFiltroAno] = useState(String(new Date().getFullYear()));
   const [filtroTipo, setFiltroTipo] = useState<'Todos' | 'Receita' | 'Despesa'>('Todos');
 
-  // Modal de Edição
+  // Modais
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isAddDespesaModalOpen, setIsAddDespesaModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Partial<Transacao>>({});
+  const [newDespesa, setNewDespesa] = useState({
+    descricao: '',
+    valor: 0,
+    data: new Date().toISOString().split('T')[0],
+    categoria: 'Outros' as any,
+    formaPagamento: 'PIX',
+    observacao: ''
+  });
 
   const handleEditClick = (t: Transacao) => {
     setEditingTransaction({ ...t });
@@ -41,21 +54,59 @@ export default function FinanceiroScreen({ onBack }: FinanceiroProps) {
     setIsEditModalOpen(false);
   };
 
+  const handleSaveDespesa = () => {
+    if (!newDespesa.descricao || !newDespesa.valor || !newDespesa.data) {
+      showNotification('Preencha os campos obrigatórios.', 'error');
+      return;
+    }
+    addDespesa(newDespesa);
+    showNotification('Despesa registrada com sucesso!', 'success');
+    setIsAddDespesaModalOpen(false);
+    setNewDespesa({
+      descricao: '',
+      valor: 0,
+      data: new Date().toISOString().split('T')[0],
+      categoria: 'Outros',
+      formaPagamento: 'PIX',
+      observacao: ''
+    });
+  };
+
   const meses = [
     'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
     'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
   ];
 
   const filteredTransacoes = useMemo(() => {
-    return (transacoes || []).filter(t => {
+    const combined = [
+      ...(transacoes || []).map(t => ({ ...t, isDespesaState: false })),
+      ...(despesas || []).map(d => ({ ...d, tipo: 'Despesa' as const, status: 'Pago' as const, isDespesaState: true }))
+    ];
+
+    return combined.filter(t => {
+      // Orphan filter: se tiver pacoteId, o pacote deve existir
+      if ('pacoteId' in t && t.pacoteId && !(pacotes || []).some(p => p.id === t.pacoteId)) return false;
+
       const date = new Date(t.data + 'T12:00:00'); // Evitar problemas de fuso horário
       const matchMes = String(date.getMonth()) === filtroMes;
       const matchAno = String(date.getFullYear()) === filtroAno;
       const matchTipo = filtroTipo === 'Todos' || t.tipo === filtroTipo;
       
       return matchMes && matchAno && matchTipo;
-    }).sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
-  }, [transacoes, filtroMes, filtroAno, filtroTipo]);
+    }).sort((a, b) => {
+      // 1. Priorizar Pendentes (Contas a Receber)
+      if (a.status === 'Pendente' && b.status !== 'Pendente') return -1;
+      if (a.status !== 'Pendente' && b.status === 'Pendente') return 1;
+
+      // 2. Se ambos forem Pendentes, ordenar por data ASC (mais antigo/vencido primeiro)
+      if (a.status === 'Pendente' && b.status === 'Pendente') {
+        return new Date(a.data).getTime() - new Date(b.data).getTime();
+      }
+
+      // 3. Se ambos forem Pagos/Despesas, ordenar por data DESC (mais recente primeiro)
+      return new Date(b.data).getTime() - new Date(a.data).getTime();
+    });
+  }, [transacoes, despesas, pacotes, filtroMes, filtroAno, filtroTipo]);
 
   const stats = useMemo(() => {
     const receitas = filteredTransacoes
@@ -89,9 +140,16 @@ export default function FinanceiroScreen({ onBack }: FinanceiroProps) {
         <button onClick={onBack} className="p-2 -ml-2 text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">
           <ArrowLeft size={24} />
         </button>
-        <h1 className="text-xl font-semibold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">
+        <h1 className="text-xl font-semibold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] flex-1">
           Fluxo de Caixa
         </h1>
+        <button 
+          onClick={() => setIsAddDespesaModalOpen(true)}
+          className="bg-[var(--color-error)] text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm flex items-center gap-2"
+        >
+          <Plus size={16} />
+          Despesa
+        </button>
       </div>
 
       {/* Resumo de Cards */}
@@ -222,10 +280,17 @@ export default function FinanceiroScreen({ onBack }: FinanceiroProps) {
                     </button>
                     <button 
                       onClick={() => {
-                        confirmAction('Tem certeza que deseja excluir esta transação?', () => {
-                          deleteTransacao(t.id);
-                          showNotification('Transação excluída!', 'success');
-                        }, { isDanger: true });
+                        if ((t as any).isDespesaState) {
+                          confirmAction('Deseja excluir esta despesa?', () => {
+                            deleteDespesa(t.id);
+                            showNotification('Despesa excluída!', 'success');
+                          }, { isDanger: true });
+                        } else {
+                          confirmAction('Tem certeza que deseja excluir esta transação?', () => {
+                            deleteTransacao(t.id);
+                            showNotification('Transação excluída!', 'success');
+                          }, { isDanger: true });
+                        }
                       }}
                       className="text-[10px] text-red-500 font-bold uppercase"
                     >
@@ -238,6 +303,95 @@ export default function FinanceiroScreen({ onBack }: FinanceiroProps) {
           </div>
         )}
       </div>
+
+      {/* Modal Adicionar Despesa */}
+      {isAddDespesaModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] w-full max-w-md rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom-10 duration-200">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">
+                Nova Despesa
+              </h2>
+              <button onClick={() => setIsAddDespesaModalOpen(false)} className="text-gray-400 p-1">
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-[var(--color-text-sec-light)] uppercase mb-1">Descrição</label>
+                <input 
+                  type="text" 
+                  placeholder="Ex: Aluguel, Materiais..."
+                  value={newDespesa.descricao}
+                  onChange={e => setNewDespesa({...newDespesa, descricao: e.target.value})}
+                  className="w-full px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none border border-gray-100 dark:border-gray-800"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[var(--color-text-sec-light)] uppercase mb-1">Valor (R$)</label>
+                  <input 
+                    type="number" 
+                    step="0.01"
+                    placeholder="0,00"
+                    value={newDespesa.valor || ''}
+                    onChange={e => setNewDespesa({...newDespesa, valor: parseFloat(e.target.value) || 0})}
+                    className="w-full px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none border border-gray-100 dark:border-gray-800 font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-[var(--color-text-sec-light)] uppercase mb-1">Data</label>
+                  <input 
+                    type="date" 
+                    value={newDespesa.data}
+                    onChange={e => setNewDespesa({...newDespesa, data: e.target.value})}
+                    className="w-full px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none border border-gray-100 dark:border-gray-800"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[var(--color-text-sec-light)] uppercase mb-1">Categoria</label>
+                  <select 
+                    value={newDespesa.categoria}
+                    onChange={e => setNewDespesa({...newDespesa, categoria: e.target.value as any})}
+                    className="w-full px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none border border-gray-100 dark:border-gray-800"
+                  >
+                    <option value="Material">Material</option>
+                    <option value="Ferramenta">Ferramenta</option>
+                    <option value="Fixo">Fixo</option>
+                    <option value="Outros">Outros</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-[var(--color-text-sec-light)] uppercase mb-1">Pagamento</label>
+                  <select 
+                    value={newDespesa.formaPagamento}
+                    onChange={e => setNewDespesa({...newDespesa, formaPagamento: e.target.value})}
+                    className="w-full px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none border border-gray-100 dark:border-gray-800"
+                  >
+                    <option value="PIX">PIX</option>
+                    <option value="Dinheiro">Dinheiro</option>
+                    <option value="Cartão">Cartão</option>
+                    <option value="Boleto">Boleto</option>
+                  </select>
+                </div>
+              </div>
+
+              <button 
+                onClick={handleSaveDespesa}
+                className="w-full py-4 bg-[var(--color-error)] text-white font-bold rounded-2xl shadow-lg hover:opacity-90 transition-opacity mt-4 flex items-center justify-center gap-2"
+              >
+                <Save size={20} />
+                Cadastrar Despesa
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de Edição */}
       {isEditModalOpen && (

@@ -32,7 +32,7 @@ export default function HomeScreen() {
 
   // Filtra agendamentos do mês atual (não cancelados)
   const agendamentosMes = useMemo(() => {
-    return agendamentos.filter(ag => {
+    return (agendamentos || []).filter(ag => {
       const date = safeDate(`${ag.data}T${ag.hora}`);
       return date.getMonth() === currentMonth && 
              date.getFullYear() === currentYear &&
@@ -42,7 +42,7 @@ export default function HomeScreen() {
 
   // Cálculos dos Cards
   const transacoesMes = useMemo(() => {
-    return transacoes.filter(t => {
+    return (transacoes || []).filter(t => {
       if (!t.data) return false;
       const date = safeDate(`${t.data}T00:00:00`);
       return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
@@ -50,19 +50,19 @@ export default function HomeScreen() {
   }, [transacoes, currentMonth, currentYear, safeDate]);
 
   const totalRecebido = useMemo(() => {
-    return transacoesMes
+    return (transacoesMes || [])
       .filter(t => t.status === 'Pago' && t.tipo === 'Receita' && t.valor != null)
       .reduce((acc, t) => acc + Number(t.valor), 0);
   }, [transacoesMes]);
 
   const totalPendente = useMemo(() => {
-    return transacoesMes
+    return (transacoesMes || [])
       .filter(t => t.status === 'Pendente' && t.tipo === 'Receita' && t.valor != null)
       .reduce((acc, t) => acc + Number(t.valor), 0);
   }, [transacoesMes]);
 
   const pacotesMes = useMemo(() => {
-    return pacotes.filter(p => {
+    return (pacotes || []).filter(p => {
       const pDate = safeDate(`${p.mesReferencia}-01T00:00:00`);
       return pDate.getMonth() === currentMonth && pDate.getFullYear() === currentYear;
     });
@@ -74,13 +74,13 @@ export default function HomeScreen() {
   }, []);
 
   const totalRecebidoFixo = useMemo(() => {
-    return transacoesMes
+    return (transacoesMes || [])
       .filter(t => t.status === 'Pago' && t.tipo === 'Receita' && t.descricao.toLowerCase().includes('pacote'))
       .reduce((acc, t) => acc + Number(t.valor), 0);
   }, [transacoesMes]);
 
   const totalRecebidoAvulso = useMemo(() => {
-    return transacoesMes
+    return (transacoesMes || [])
       .filter(t => t.status === 'Pago' && t.tipo === 'Receita' && !t.descricao.toLowerCase().includes('pacote'))
       .reduce((acc, t) => acc + Number(t.valor), 0);
   }, [transacoesMes]);
@@ -90,7 +90,7 @@ export default function HomeScreen() {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     
-    return agendamentos
+    return (agendamentos || [])
       .filter(ag => {
         const agDate = safeDate(`${ag.data}T${ag.hora}`);
         return agDate.getTime() >= todayStart.getTime() && ag.statusAtendimento === 'Agendado';
@@ -106,9 +106,9 @@ export default function HomeScreen() {
   const handleExcluir = (agendamento: Agendamento) => {
     if (agendamento.pacoteId) {
       confirmAction('Deseja excluir este agendamento e devolver a sessão ao pacote do cliente?', () => {
-        const pacote = pacotes.find(p => p.id === agendamento.pacoteId);
+        const pacote = (pacotes || []).find(p => p.id === agendamento.pacoteId);
         if (pacote) {
-          const updatedItens = pacote.itens.map(item => {
+          const updatedItens = (pacote.itens || []).map(item => {
             if (item.terapiaId === agendamento.terapiaId) {
               return { ...item, quantidadeRestante: (Number(item.quantidadeRestante) || 0) + 1 };
             }
@@ -141,12 +141,12 @@ export default function HomeScreen() {
   };
 
   const getClienteNome = (id: string) => {
-    const cli = clientes.find(c => c.id === id);
+    const cli = (clientes || []).find(c => c.id === id);
     return cli?.nome || 'Desconhecido';
   };
 
   const getTerapiaNome = (ag: Agendamento) => {
-    const terapia = terapias.find(t => t.id === ag.terapiaId);
+    const terapia = (terapias || []).find(t => t.id === ag.terapiaId);
     return terapia?.nome || 'Sem nome';
   };
 
@@ -166,7 +166,7 @@ export default function HomeScreen() {
     return <ContasAReceberScreen onBack={() => setShowContasAReceber(false)} />;
   }
 
-  const pastPendingCount = agendamentos.filter(ag => 
+  const pastPendingCount = (agendamentos || []).filter(ag => 
     ag.statusAtendimento === 'Realizado' && 
     ag.statusPagamento === 'Pendente' &&
     safeDate(`${ag.data}T${ag.hora}`) < new Date()

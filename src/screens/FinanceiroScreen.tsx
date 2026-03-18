@@ -8,7 +8,14 @@ interface FinanceiroProps {
 }
 
 export default function FinanceiroScreen({ onBack }: FinanceiroProps) {
-  const { transacoes, clientes } = useAppContext();
+  const { 
+    transacoes, 
+    clientes, 
+    updateTransacao, 
+    deleteTransacao, 
+    confirmAction, 
+    showNotification 
+  } = useAppContext();
   
   // Filtros
   const [filtroMes, setFiltroMes] = useState(String(new Date().getMonth()));
@@ -21,7 +28,7 @@ export default function FinanceiroScreen({ onBack }: FinanceiroProps) {
   ];
 
   const filteredTransacoes = useMemo(() => {
-    return transacoes.filter(t => {
+    return (transacoes || []).filter(t => {
       const date = new Date(t.data + 'T12:00:00'); // Evitar problemas de fuso horário
       const matchMes = String(date.getMonth()) === filtroMes;
       const matchAno = String(date.getFullYear()) === filtroAno;
@@ -182,11 +189,30 @@ export default function FinanceiroScreen({ onBack }: FinanceiroProps) {
                     </div>
                   </div>
                 </div>
-                <div className="text-right">
+                <div className="text-right flex flex-col items-end">
                   <p className={`font-bold ${t.tipo === 'Receita' ? 'text-[var(--color-success)]' : 'text-[var(--color-error)]'}`}>
                     {t.tipo === 'Receita' ? '+' : '-'}{formatCurrency(t.valor)}
                   </p>
                   <p className="text-[10px] text-gray-400">{t.categoria}</p>
+                  <div className="flex gap-2 mt-2">
+                    <button 
+                      onClick={() => showNotification('Edição de transação em breve.', 'info')}
+                      className="text-[10px] text-blue-500 font-bold uppercase"
+                    >
+                      Editar
+                    </button>
+                    <button 
+                      onClick={() => {
+                        confirmAction('Tem certeza que deseja excluir esta transação?', () => {
+                          deleteTransacao(t.id);
+                          showNotification('Transação excluída!', 'success');
+                        }, { isDanger: true });
+                      }}
+                      className="text-[10px] text-red-500 font-bold uppercase"
+                    >
+                      Excluir
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}

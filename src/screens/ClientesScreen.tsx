@@ -129,7 +129,7 @@ export default function ClientesScreen() {
     }
   };
 
-  const filteredClientes = contextClientes.filter(c => 
+  const filteredClientes = (contextClientes || []).filter(c => 
     (c.nome?.toLowerCase() || '').includes(searchQuery.toLowerCase()) || 
     (c.telefone || '').includes(searchQuery)
   );

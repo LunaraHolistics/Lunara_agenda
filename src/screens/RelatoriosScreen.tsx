@@ -33,12 +33,12 @@ export default function RelatoriosScreen({ onBack }: RelatoriosScreenProps) {
   ];
 
   // Filtering logic using formatSafe
-  const filteredAgendamentos = agendamentos.filter(ag => {
+  const filteredAgendamentos = (agendamentos || []).filter(ag => {
     const date = formatSafe(ag.date);
     return String(date.getMonth()) === filtroMes && String(date.getFullYear()) === filtroAno;
   });
 
-  const filteredPacotes = pacotes.filter(p => {
+  const filteredPacotes = (pacotes || []).filter(p => {
     // mesReferencia is YYYY-MM
     if (!p.mesReferencia) return false;
     const [year, month] = p.mesReferencia.split('-');
@@ -50,18 +50,18 @@ export default function RelatoriosScreen({ onBack }: RelatoriosScreenProps) {
   const totalAvulsos = filteredAgendamentos
     .filter(ag => !ag.package_id)
     .reduce((acc, ag) => {
-      const terapia = terapias.find(t => t.id === ag.therapy_item_id);
+      const terapia = (terapias || []).find(t => t.id === ag.therapy_item_id);
       return acc + (Number(terapia?.price) || Number(ag.valorCobrado) || 0);
     }, 0);
 
   const totalGeral = totalPacotes + totalAvulsos;
 
   const getClienteNome = (id: string) => {
-    const cli = clientes.find(c => String(c.id) === String(id));
+    const cli = (clientes || []).find(c => String(c.id) === String(id));
     return cli?.name || cli?.nome || 'Desconhecido';
   };
   const getTerapiaNome = (ag: any) => {
-    const terapia = terapias.find(t => String(t.id) === String(ag.therapy_item_id));
+    const terapia = (terapias || []).find(t => String(t.id) === String(ag.therapy_item_id));
     return terapia?.name || terapia?.nome || ag.therapy_name || "Sem nome";
   };
 
@@ -158,7 +158,7 @@ export default function RelatoriosScreen({ onBack }: RelatoriosScreenProps) {
         {/* Bloqueios do Período */}
         <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mt-8 mb-4 px-1">Bloqueios do Período</h3>
         <div className="space-y-3">
-          {bloqueios.filter(b => {
+          {(bloqueios || []).filter(b => {
              const date = formatSafe(b.data); // Using 'data' field as requested
              return String(date.getMonth()) === filtroMes && String(date.getFullYear()) === filtroAno;
           }).length === 0 ? (
@@ -166,7 +166,7 @@ export default function RelatoriosScreen({ onBack }: RelatoriosScreenProps) {
               Nenhum bloqueio encontrado para este período.
             </div>
           ) : (
-            bloqueios.filter(b => {
+            (bloqueios || []).filter(b => {
               const date = formatSafe(b.data);
               return String(date.getMonth()) === filtroMes && String(date.getFullYear()) === filtroAno;
             }).map(b => (

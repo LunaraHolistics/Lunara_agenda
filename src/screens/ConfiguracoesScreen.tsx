@@ -16,7 +16,7 @@ export default function ConfiguracoesScreen({ onBack }: ConfiguracoesProps) {
   const [status, setStatus] = useState<StatusType>({ type: 'none', message: '' });
   const [showConfirmReset, setShowConfirmReset] = useState(false);
   const [confirmText, setConfirmText] = useState('');
-  const { confirmAction, repairDatabase, exportarBackup, importarBackup } = useAppContext();
+  const { confirmAction, repairDatabase, exportarBackup, importarBackup, resetSystem, clientes } = useAppContext();
 
   const showStatus = (type: StatusType['type'], message: string) => {
     setStatus({ type, message });
@@ -101,6 +101,17 @@ export default function ConfiguracoesScreen({ onBack }: ConfiguracoesProps) {
           </p>
 
           <div className="space-y-4">
+            {/* Status do Banco de Dados */}
+            <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-2xl border border-blue-200 dark:border-blue-800 flex items-center gap-3">
+              <ShieldCheck size={24} className="text-blue-600 dark:text-blue-400" />
+              <div>
+                <h3 className="text-sm font-bold text-blue-800 dark:text-blue-300">Status do Banco de Dados</h3>
+                <p className="text-xs text-blue-600 dark:text-blue-400">
+                  {clientes?.length || 0} clientes carregados na memória local.
+                </p>
+              </div>
+            </div>
+
             {/* Botão de Backup */}
             <div className="bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] p-4 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm">
               <div className="flex items-start gap-3 mb-4">
@@ -177,6 +188,20 @@ export default function ConfiguracoesScreen({ onBack }: ConfiguracoesProps) {
 
             {/* Danger Zone */}
             <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-800">
+              {/* Reset Total */}
+              <div className="bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] p-4 rounded-2xl border border-red-200 dark:border-red-900/30 shadow-sm mt-4">
+                <h3 className="font-medium text-red-600 dark:text-red-400 mb-2">Reset Total do Sistema</h3>
+                <p className="text-xs text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] mb-4">
+                  Limpa todos os dados salvos. Após clicar, recarregue a página (F5).
+                </p>
+                <button 
+                  onClick={resetSystem}
+                  className="w-full py-2.5 bg-red-600 text-white font-medium rounded-xl hover:bg-red-700 transition-colors"
+                >
+                  Reset Total do Sistema
+                </button>
+              </div>
+
               <h3 className="text-xs font-bold text-red-600 uppercase tracking-widest mb-4">Zona de Risco</h3>
               
               {!showConfirmReset ? (

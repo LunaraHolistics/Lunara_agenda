@@ -83,16 +83,23 @@ export default function TerapiasScreen() {
 
       {/* List */}
       <div className="flex-1 overflow-y-auto px-4 pb-24">
-        {terapias.length === 0 ? (
+        {(terapias || []).length === 0 ? (
           <div className="text-center text-[var(--color-text-sec-light)] mt-10">
             Nenhuma terapia cadastrada.
           </div>
         ) : (
           <div className="space-y-3">
-            {terapias.map(terapia => (
+            {(terapias || []).map(terapia => (
               <div 
                 key={terapia.id}
-                className="bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] p-4 rounded-2xl shadow-sm flex items-center justify-between"
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.effectAllowed = 'move';
+                  e.dataTransfer.setData('terapiaId', terapia.id);
+                  e.dataTransfer.setData('name', terapia.nome);
+                  e.dataTransfer.setData('time', `${terapia.duracao} min`);
+                }}
+                className="bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] p-4 rounded-2xl shadow-sm flex items-center justify-between cursor-grab active:cursor-grabbing"
               >
                 <div>
                   <h3 className="font-medium text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] text-lg">

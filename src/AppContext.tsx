@@ -64,6 +64,7 @@ interface AppContextType {
   exportarBackup: () => void;
   importarBackup: (data: any) => void;
   repairDatabase: () => void;
+  resetSystem: () => void;
   safeDate: (d: any) => Date;
   ddiList: CountryDDI[];
   setAgendamentos: React.Dispatch<React.SetStateAction<Agendamento[]>>;
@@ -72,13 +73,78 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+const BLACKLISTED_ID = '1773410735962';
+const filterBlacklist = <T extends { id: string }>(data: T[]): T[] => data.filter(item => item.id !== BLACKLISTED_ID);
+const filterAgendamentos = (data: Agendamento[]) => data.filter(a => a.pacoteId !== BLACKLISTED_ID);
+
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [clientes, setClientes] = useState<Cliente[]>(() => StorageService.getData(StorageKeys.CLIENTES) || INITIAL_CLIENTES);
-  const [agendamentos, setAgendamentos] = useState<Agendamento[]>(() => StorageService.getData(StorageKeys.AGENDAMENTOS) || INITIAL_AGENDAMENTOS);
-  const [terapias, setTerapias] = useState<Terapia[]>(() => StorageService.getData(StorageKeys.TERAPIAS) || INITIAL_TERAPIAS);
-  const [pacotes, setPacotes] = useState<Pacote[]>(() => StorageService.getData(StorageKeys.PACOTES) || INITIAL_PACOTES);
-  const [bloqueios, setBloqueios] = useState<Bloqueio[]>(() => StorageService.getData(StorageKeys.BLOQUEIOS) || []);
-  const [transacoes, setTransacoes] = useState<Transacao[]>(() => StorageService.getData(StorageKeys.TRANSACOES) || INITIAL_TRANSACOES);
+  const [clientes, setClientes] = useState<Cliente[]>(() => {
+    const saved = StorageService.getData(StorageKeys.CLIENTES);
+    return Array.isArray(saved) ? filterBlacklist(saved) : filterBlacklist(INITIAL_CLIENTES);
+  });
+  const [agendamentos, setAgendamentos] = useState<Agendamento[]>(() => {
+    const saved = StorageService.getData(StorageKeys.AGENDAMENTOS);
+    return Array.isArray(saved) ? filterAgendamentos(saved) : INITIAL_AGENDAMENTOS;
+  });
+  const [terapias, setTerapias] = useState<Terapia[]>(() => {
+    const saved = StorageService.getData(StorageKeys.TERAPIAS);
+    return Array.isArray(saved) ? filterBlacklist(saved) : filterBlacklist(INITIAL_TERAPIAS);
+  });
+  const [pacotes, setPacotes] = useState<Pacote[]>(() => {
+    const saved = StorageService.getData(StorageKeys.PACOTES);
+    return Array.isArray(saved) ? filterBlacklist(saved) : INITIAL_PACOTES;
+  });
+  const [bloqueios, setBloqueios] = useState<Bloqueio[]>(() => {
+    const saved = StorageService.getData(StorageKeys.BLOQUEIOS);
+    return Array.isArray(saved) ? filterBlacklist(saved) : [];
+  });
+  const [transacoes, setTransacoes] = useState<Transacao[]>(() => {
+    const saved = StorageService.getData(StorageKeys.TRANSACOES);
+    return Array.isArray(saved) ? filterBlacklist(saved) : INITIAL_TRANSACOES;
+  });
+
+  useEffect(() => {
+    const isCorruptedOrEmpty = () => {
+      try {
+        const c = localStorage.getItem(StorageKeys.CLIENTES);
+        const t = localStorage.getItem(StorageKeys.TERAPIAS);
+        
+        if (!c || !t) return true;
+        
+        const parsedC = JSON.parse(c);
+        const parsedT = JSON.parse(t);
+        
+        if (!Array.isArray(parsedC) || !Array.isArray(parsedT)) return true;
+        if (parsedC.length === 0 && parsedT.length === 0) return true; // Both empty means likely reset or empty
+        
+        return false;
+      } catch (e) {
+        return true;
+      }
+    };
+
+    if (isCorruptedOrEmpty()) {
+      console.log("Storage vazio ou corrompido detectado. Forçando inicialização limpa.");
+      setClientes(INITIAL_CLIENTES);
+      setTerapias(INITIAL_TERAPIAS);
+      setPacotes(INITIAL_PACOTES);
+      setAgendamentos(INITIAL_AGENDAMENTOS);
+      setTransacoes(INITIAL_TRANSACOES);
+      setBloqueios([]);
+      
+      StorageService.saveData(StorageKeys.CLIENTES, INITIAL_CLIENTES);
+      StorageService.saveData(StorageKeys.TERAPIAS, INITIAL_TERAPIAS);
+      StorageService.saveData(StorageKeys.PACOTES, INITIAL_PACOTES);
+      StorageService.saveData(StorageKeys.AGENDAMENTOS, INITIAL_AGENDAMENTOS);
+      StorageService.saveData(StorageKeys.TRANSACOES, INITIAL_TRANSACOES);
+      StorageService.saveData(StorageKeys.BLOQUEIOS, []);
+    }
+  }, []);
+
+  const resetSystem = () => {
+    Object.values(StorageKeys).forEach(key => localStorage.removeItem(key));
+    alert("Sistema resetado! Por favor, recarregue a página (F5).");
+  };
 
   useEffect(() => StorageService.saveData(StorageKeys.CLIENTES, clientes), [clientes]);
   useEffect(() => StorageService.saveData(StorageKeys.AGENDAMENTOS, agendamentos), [agendamentos]);
@@ -221,28 +287,34 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const importarBackup = (json: any) => {
     try {
       if (json.clientes) {
-        setClientes(json.clientes);
-        StorageService.saveData(StorageKeys.CLIENTES, json.clientes);
+        const filtered = filterBlacklist(json.clientes);
+        setClientes(filtered);
+        StorageService.saveData(StorageKeys.CLIENTES, filtered);
       }
       if (json.agendamentos) {
-        setAgendamentos(json.agendamentos);
-        StorageService.saveData(StorageKeys.AGENDAMENTOS, json.agendamentos);
+        const filtered = filterAgendamentos(json.agendamentos);
+        setAgendamentos(filtered);
+        StorageService.saveData(StorageKeys.AGENDAMENTOS, filtered);
       }
       if (json.terapias) {
-        setTerapias(json.terapias);
-        StorageService.saveData(StorageKeys.TERAPIAS, json.terapias);
+        const filtered = filterBlacklist(json.terapias);
+        setTerapias(filtered);
+        StorageService.saveData(StorageKeys.TERAPIAS, filtered);
       }
       if (json.pacotes) {
-        setPacotes(json.pacotes);
-        StorageService.saveData(StorageKeys.PACOTES, json.pacotes);
+        const filtered = filterBlacklist(json.pacotes);
+        setPacotes(filtered);
+        StorageService.saveData(StorageKeys.PACOTES, filtered);
       }
       if (json.bloqueios) {
-        setBloqueios(json.bloqueios);
-        StorageService.saveData(StorageKeys.BLOQUEIOS, json.bloqueios);
+        const filtered = filterBlacklist(json.bloqueios);
+        setBloqueios(filtered);
+        StorageService.saveData(StorageKeys.BLOQUEIOS, filtered);
       }
       if (json.transacoes) {
-        setTransacoes(json.transacoes);
-        StorageService.saveData(StorageKeys.TRANSACOES, json.transacoes);
+        const filtered = filterBlacklist(json.transacoes);
+        setTransacoes(filtered);
+        StorageService.saveData(StorageKeys.TRANSACOES, filtered);
       }
       showNotification("Dados restaurados!", "success");
     } catch (e) {
@@ -251,13 +323,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const repairDatabase = () => {
-    const validAgendamentos = agendamentos.filter(a => 
-      clientes.some(c => c.id === a.clienteId) && 
-      terapias.some(t => t.id === a.terapiaId)
+    const validAgendamentos = (agendamentos || []).filter(a => 
+      (clientes || []).some(c => c.id === a.clienteId) && 
+      (terapias || []).some(t => t.id === a.terapiaId)
     );
     setAgendamentos(validAgendamentos);
     
-    const validPacotes = pacotes.filter(p => clientes.some(c => c.id === p.clienteId));
+    const validPacotes = (pacotes || []).filter(p => (clientes || []).some(c => c.id === p.clienteId));
     setPacotes(validPacotes);
     
     showNotification("Banco de dados reparado!", "success");
@@ -294,6 +366,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       addTransacao, updateTransacao, deleteTransacao,
       showNotification, confirmAction, promptAction,
       handleImportContacts, exportarBackup, importarBackup, repairDatabase,
+      resetSystem,
       safeDate, ddiList: DDI_LIST,
       setAgendamentos, setPacotes
     }}>

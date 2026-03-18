@@ -20,7 +20,8 @@ export const StorageService = {
       const data = localStorage.getItem(key);
       return data ? JSON.parse(data) : null;
     } catch (e) {
-      console.error('Erro ao ler dados', e);
+      console.error(`Erro ao ler dados da chave ${key}. Limpando chave para evitar corrupção.`, e);
+      localStorage.removeItem(key);
       return null;
     }
   },

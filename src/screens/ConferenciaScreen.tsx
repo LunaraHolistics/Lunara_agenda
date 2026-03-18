@@ -25,7 +25,7 @@ export default function ConferenciaScreen({ onBack }: ConferenciaScreenProps) {
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     sevenDaysAgo.setHours(0, 0, 0, 0);
 
-    return allAgendamentos.filter(ag => {
+    return (allAgendamentos || []).filter(ag => {
       const agDate = safeDate(`${ag.data}T${ag.hora}:00`);
       return agDate >= sevenDaysAgo && agDate <= new Date() && ag.statusAtendimento !== 'Cancelado';
     }).sort((a, b) => safeDate(`${b.data}T${b.hora}:00`).getTime() - safeDate(`${a.data}T${a.hora}:00`).getTime());
@@ -70,12 +70,12 @@ export default function ConferenciaScreen({ onBack }: ConferenciaScreenProps) {
   };
 
   const getClienteNome = (id: string) => {
-    const cli = clientes.find(c => c.id === id);
+    const cli = (clientes || []).find(c => c.id === id);
     return cli?.nome || 'Desconhecido';
   };
 
   const getTerapiaNome = (ag: Agendamento) => {
-    const terapia = terapias.find(t => t.id === ag.terapiaId);
+    const terapia = (terapias || []).find(t => t.id === ag.terapiaId);
     return terapia?.nome || 'Sem nome';
   };
 

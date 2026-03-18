@@ -117,11 +117,11 @@ export default function PacotesScreen() {
     }
 
     // Sincronização Financeira
-    const cliente = clientes.find(c => c.id === clienteId);
+    const cliente = (clientes || []).find(c => c.id === clienteId);
     const clienteNome = cliente?.nome || 'Cliente';
     
     const transacaoData: Transacao = {
-      id: transacoes.find(t => t.pacoteId === pacoteId)?.id || crypto.randomUUID(),
+      id: (transacoes || []).find(t => t.pacoteId === pacoteId)?.id || crypto.randomUUID(),
       descricao: `Pacote - ${clienteNome}`,
       valor: Number(valorCalculado),
       data: dataPagamento || new Date().toISOString().split('T')[0],
@@ -132,7 +132,7 @@ export default function PacotesScreen() {
       tipo: 'Receita'
     };
 
-    const transacaoExistente = transacoes.find(t => t.pacoteId === pacoteId);
+    const transacaoExistente = (transacoes || []).find(t => t.pacoteId === pacoteId);
     if (transacaoExistente) {
       updateTransacao(transacaoData);
     } else {
@@ -162,11 +162,11 @@ export default function PacotesScreen() {
 
   const addTerapiaToPacote = (terapiaId: string) => {
     const tId = String(terapiaId);
-    if (itens.some(item => item.terapiaId === tId)) {
+    if ((itens || []).some(item => item.terapiaId === tId)) {
       showNotification('Terapia já inclusa', 'info');
       return;
     }
-    const terapiaObj = terapias.find(t => t.id === tId);
+    const terapiaObj = (terapias || []).find(t => t.id === tId);
     const newItem: ItemPacote = {
       id: crypto.randomUUID(),
       terapiaId: tId,
@@ -177,7 +177,7 @@ export default function PacotesScreen() {
   };
 
   const updateItem = (id: string, field: keyof ItemPacote, value: any) => {
-    setItens(itens.map(item => {
+    setItens((itens || []).map(item => {
       if (item.id === id) {
         const updated = { ...item, [field]: value };
         if (field === 'quantidadeTotal') {
@@ -191,14 +191,14 @@ export default function PacotesScreen() {
   };
 
   const removeItem = (id: string) => {
-    setItens(itens.filter(item => item.id !== id));
+    setItens((itens || []).filter(item => item.id !== id));
   };
 
-  const getTerapia = (id: string) => terapias.find(t => t.id === id);
+  const getTerapia = (id: string) => (terapias || []).find(t => t.id === id);
 
   const calcularTotais = () => {
     let bruto = 0;
-    itens.forEach(item => {
+    (itens || []).forEach(item => {
       const terapia = getTerapia(item.terapiaId);
       if (terapia) {
         bruto += terapia.valor * item.quantidadeTotal;
@@ -238,14 +238,14 @@ export default function PacotesScreen() {
         <div className="p-4 space-y-3">
           {loading ? (
             <div className="flex justify-center py-10"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--color-primary)]"></div></div>
-          ) : pacotes.length === 0 ? (
+          ) : (pacotes || []).length === 0 ? (
             <div className="text-center py-12 bg-[var(--color-surface-light)] rounded-3xl border border-dashed border-gray-300">
               <PackageOpen size={48} className="mx-auto text-gray-300 mb-3" />
               <p className="text-gray-500">Nenhum pacote ativo.</p>
             </div>
           ) : (
-            pacotes.map(p => {
-              const cliente = clientes.find(c => c.id === p.clienteId);
+            (pacotes || []).map(p => {
+              const cliente = (clientes || []).find(c => c.id === p.clienteId);
               return (
                 <div key={p.id} className="bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 flex items-center justify-between">
                   <div className="flex items-center gap-4">
@@ -315,7 +315,7 @@ export default function PacotesScreen() {
                 className="w-full bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50"
               >
                 <option value="" disabled>Selecione o Cliente...</option>
-                {clientes.map(c => (
+                {(clientes || []).map(c => (
                   <option key={c.id} value={c.id || ''}>{c.nome || 'Sem Nome'}</option>
                 ))}
               </select>
@@ -360,7 +360,7 @@ export default function PacotesScreen() {
             Adicionar Terapias
           </h3>
           <div className="flex overflow-x-auto pb-2 gap-3 snap-x">
-            {terapias.map(terapia => (
+            {(terapias || []).map(terapia => (
               <div 
                 key={terapia.id}
                 draggable
@@ -411,7 +411,7 @@ export default function PacotesScreen() {
             </div>
           ) : (
             <div className="space-y-3">
-              {itens.map((item, index) => {
+              {(itens || []).map((item, index) => {
                 const terapia = getTerapia(item.terapiaId);
                 if (!terapia) return null;
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Search, CheckCircle, Calendar, DollarSign, CreditCard, Banknote, Landmark, User, X } from 'lucide-react';
+import { ChevronLeft, Search, CheckCircle, Calendar, DollarSign, CreditCard, Banknote, Landmark, User, X, Settings as SettingsIcon } from 'lucide-react';
 import { Agendamento, Cliente, Terapia, Pacote, Transacao } from '../types';
 import { useAppContext } from '../AppContext';
 
@@ -21,6 +21,7 @@ type Pendencia = {
 export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenProps) {
   const { 
     showNotification, 
+    confirmAction,
     clientes,
     terapias,
     agendamentos,
@@ -29,7 +30,9 @@ export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenPro
     updatePacote,
     updateAgendamento,
     addTransacao,
-    updateTransacao
+    updateTransacao,
+    deletePacote,
+    deleteAgendamento
   } = useAppContext();
   
   const [pendencias, setPendencias] = useState<Pendencia[]>([]);
@@ -53,11 +56,11 @@ export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenPro
       const list: Pendencia[] = [];
 
       // Pacotes Pendentes
-      pacotes.forEach(p => {
+      (pacotes || []).forEach(p => {
         // Se o statusPagamento for Pendente ou não existir (default para pacotes novos se não marcado como pago)
         // No PacotesScreen, se não for pago, ele não tem statusPagamento ou é Pendente.
         if (p.statusPagamento === 'Pendente' || !p.statusPagamento) {
-          const cliente = clientes.find(c => c.id === p.clienteId);
+          const cliente = (clientes || []).find(c => c.id === p.clienteId);
           list.push({
             id: p.id,
             tipo: 'pacote',
@@ -72,15 +75,15 @@ export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenPro
       });
 
       // Agendamentos Pendentes
-      agendamentos.forEach(ag => {
+      (agendamentos || []).forEach(ag => {
         if (ag.statusPagamento === 'Pendente') {
           // Se for de um pacote mensal fixo, o pagamento é pelo pacote, não pelo agendamento
-          const pacote = ag.pacoteId ? pacotes.find(p => p.id === ag.pacoteId) : null;
+          const pacote = ag.pacoteId ? (pacotes || []).find(p => p.id === ag.pacoteId) : null;
           const isFromTotalPackage = pacote?.tipoPacote === 'Mensal Fixo';
           
           if (!isFromTotalPackage) {
-            const cliente = clientes.find(c => c.id === ag.clienteId);
-            const terapia = terapias.find(t => t.id === ag.terapiaId);
+            const cliente = (clientes || []).find(c => c.id === ag.clienteId);
+            const terapia = (terapias || []).find(t => t.id === ag.terapiaId);
             list.push({
               id: ag.id,
               tipo: 'agendamento',
@@ -113,9 +116,9 @@ export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenPro
       let transacaoExistente = null;
 
       if (selectedPendencia.tipo === 'pacote') {
-        transacaoExistente = transacoes.find(t => t.pacoteId === selectedPendencia.id);
+        transacaoExistente = (transacoes || []).find(t => t.pacoteId === selectedPendencia.id);
       } else {
-        transacaoExistente = transacoes.find(t => t.agendamentoId === selectedPendencia.id);
+        transacaoExistente = (transacoes || []).find(t => t.agendamentoId === selectedPendencia.id);
       }
 
       const transacaoFinanceira: Transacao = {
@@ -256,13 +259,37 @@ export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenPro
                       </div>
                     </div>
                   </div>
-                  <button 
-                    onClick={() => { setSelectedPendencia(p); setValorFinal(p.valor); }}
-                    className="flex flex-col items-center gap-1 p-2 bg-[var(--color-success)]/10 text-[var(--color-success)] rounded-xl hover:bg-[var(--color-success)]/20 transition-colors"
-                  >
-                    <CheckCircle size={20} />
-                    <span className="text-[10px] font-bold uppercase">Baixa</span>
-                  </button>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => {
+                        showNotification('Para editar, acesse a tela de Pacotes ou Agenda.', 'info');
+                      }}
+                      className="flex flex-col items-center gap-1 p-2 bg-blue-100 text-blue-600 rounded-xl hover:bg-blue-200 transition-colors"
+                    >
+                      <SettingsIcon size={20} />
+                      <span className="text-[10px] font-bold uppercase">Editar</span>
+                    </button>
+                    <button 
+                      onClick={() => { setSelectedPendencia(p); setValorFinal(p.valor); }}
+                      className="flex flex-col items-center gap-1 p-2 bg-[var(--color-success)]/10 text-[var(--color-success)] rounded-xl hover:bg-[var(--color-success)]/20 transition-colors"
+                    >
+                      <CheckCircle size={20} />
+                      <span className="text-[10px] font-bold uppercase">Baixa</span>
+                    </button>
+                    <button 
+                      onClick={() => {
+                        confirmAction('Tem certeza que deseja excluir esta pendência?', () => {
+                          if (p.tipo === 'pacote') deletePacote(p.id);
+                          else deleteAgendamento(p.id);
+                          showNotification('Pendência excluída!', 'success');
+                        }, { isDanger: true });
+                      }}
+                      className="flex flex-col items-center gap-1 p-2 bg-red-100 text-red-600 rounded-xl hover:bg-red-200 transition-colors"
+                    >
+                      <X size={20} />
+                      <span className="text-[10px] font-bold uppercase">Excluir</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}

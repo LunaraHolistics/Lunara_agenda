@@ -46,7 +46,7 @@ export default function AgendaScreen() {
 
   useEffect(() => {
     if (formClienteId) {
-      const active = pacotes.find(p => p.clienteId === formClienteId);
+      const active = (pacotes || []).find(p => p.clienteId === formClienteId);
       setActivePackage(active || null);
     } else {
       setActivePackage(null);
@@ -121,14 +121,14 @@ export default function AgendaScreen() {
     const agendamentoId = e.dataTransfer.getData('agendamentoId');
     if (!agendamentoId) return;
 
-    const agendamento = agendamentos.find(a => String(a.id) === String(agendamentoId));
+    const agendamento = (agendamentos || []).find(a => String(a.id) === String(agendamentoId));
     if (!agendamento) return;
 
     // Se for pacote, incrementa
     if (agendamento.pacoteId) {
-      setPacotes(prev => prev.map(p => {
+      setPacotes(prev => (prev || []).map(p => {
         if (String(p.id) === String(agendamento.pacoteId)) {
-          const updatedItens = p.itens.map((item) => {
+          const updatedItens = (p.itens || []).map((item) => {
             if (String(item.terapiaId) === String(agendamento.terapiaId)) {
               return { ...item, quantidadeRestante: (item.quantidadeRestante || 0) + 1 };
             }
@@ -141,7 +141,7 @@ export default function AgendaScreen() {
     }
 
     // Remove do calendário
-    setAgendamentos(prev => prev.filter(a => String(a.id) !== String(agendamentoId)));
+    setAgendamentos(prev => (prev || []).filter(a => String(a.id) !== String(agendamentoId)));
     showNotification("Sessão devolvida ao pacote do cliente", "info");
   };
 
@@ -173,7 +173,7 @@ export default function AgendaScreen() {
     console.log('Drop data:', { agendamentoId, clienteId, terapiaId, pacoteId, itemPacoteId, dateStr });
 
     if (agendamentoId) {
-      const itemToUpdate = agendamentos.find(a => String(a.id) === String(agendamentoId));
+      const itemToUpdate = (agendamentos || []).find(a => String(a.id) === String(agendamentoId));
       
       if (itemToUpdate) {
         // Optimistic UI: Update local state immediately
@@ -185,8 +185,8 @@ export default function AgendaScreen() {
       return;
     }
 
-    if (clienteId && terapiaId) {
-      setFormClienteId(clienteId);
+    if (terapiaId) {
+      setFormClienteId(clienteId || '');
       setFormData(dateStr);
       setFormTerapiaIds(prev => [...prev, terapiaId]);
       setFormPacoteId(pacoteId || undefined);
@@ -239,9 +239,9 @@ export default function AgendaScreen() {
 
       // Handle package updates if applicable
       if (formPacoteId && formItemPacoteId) {
-        setPacotes(prev => prev.map(p => {
+        setPacotes(prev => (prev || []).map(p => {
           if (p.id === formPacoteId) {
-            const updatedItens = p.itens.map((item) => {
+            const updatedItens = (p.itens || []).map((item) => {
               if (item.id === formItemPacoteId) {
                 return { ...item, quantidadeRestante: Math.max(0, Number(item.quantidadeRestante || 0) - formTerapiaIds.length * datesToSchedule.length) };
               }
@@ -254,7 +254,7 @@ export default function AgendaScreen() {
       }
 
       // Update Agendamentos
-      setAgendamentos(prev => [...prev, ...newAgendamentos]);
+      setAgendamentos(prev => [...(prev || []), ...newAgendamentos]);
 
       // Handle Transactions if Paid
       if (formStatusPagamento === 'Pago') {
@@ -286,12 +286,12 @@ export default function AgendaScreen() {
 
   const handleDeleteAgendamento = (agendamentoId: string) => {
     confirmAction('Deseja realmente excluir este agendamento?', () => {
-      const agendamento = agendamentos.find(a => String(a.id) === String(agendamentoId));
+      const agendamento = (agendamentos || []).find(a => String(a.id) === String(agendamentoId));
       
       if (agendamento?.pacoteId) {
-        setPacotes(prev => prev.map(p => {
+        setPacotes(prev => (prev || []).map(p => {
           if (String(p.id) === String(agendamento.pacoteId)) {
-            const updatedItens = p.itens.map((item) => {
+            const updatedItens = (p.itens || []).map((item) => {
               if (String(item.terapiaId) === String(agendamento.terapiaId)) {
                 return { ...item, quantidadeRestante: (item.quantidadeRestante || 0) + 1 };
               }
@@ -303,7 +303,7 @@ export default function AgendaScreen() {
         }));
       }
 
-      setAgendamentos(prev => prev.filter(a => String(a.id) !== String(agendamentoId)));
+      setAgendamentos(prev => (prev || []).filter(a => String(a.id) !== String(agendamentoId)));
       showNotification('Agendamento excluído!', 'success');
     }, { isDanger: true });
   };
@@ -361,14 +361,14 @@ export default function AgendaScreen() {
             <AlertCircle size={14} /> Pacotes Aguardando Agendamento
           </h3>
           <div className="flex overflow-x-auto gap-3 pb-2 no-scrollbar">
-            {clientes.map(cliente => {
-              const clientePacotes = pacotes.filter(p => p.clienteId === cliente.id);
+            {(clientes || []).map(cliente => {
+              const clientePacotes = (pacotes || []).filter(p => p.clienteId === cliente.id);
               const orfaos = clientePacotes.flatMap(p => {
                 return p.itens.filter(item => Number(item.quantidadeRestante || 0) > 0).map(item => ({
                   pacoteId: p.id,
                   itemPacoteId: item.id,
                   terapiaId: item.terapiaId,
-                  nome: terapias.find(t => t.id === item.terapiaId)?.nome || 'Desconhecida',
+                  nome: (terapias || []).find(t => t.id === item.terapiaId)?.nome || 'Desconhecida',
                   restante: item.quantidadeRestante
                 }));
               });
@@ -440,10 +440,10 @@ export default function AgendaScreen() {
                     if (day === null) return <div key={`empty-${weekIdx}-${dayIdx}`} className="aspect-square opacity-20" />;
                     
                     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                    const dayAgendamentos = agendamentos
+                    const dayAgendamentos = (agendamentos || [])
                       .filter(a => a.data === dateStr && a.statusAtendimento !== 'Cancelado')
                       .sort((a, b) => a.hora.localeCompare(b.hora));
-                    const hasBloqueio = bloqueios.some(b => b.data === dateStr);
+                    const hasBloqueio = (bloqueios || []).some(b => b.data === dateStr);
                     const isToday = new Date().toISOString().startsWith(dateStr);
 
                     return (
@@ -473,7 +473,7 @@ export default function AgendaScreen() {
                         <div className="flex flex-col gap-1">
                           {isExpanded ? (
                             dayAgendamentos.map(ag => {
-                              const cliente = clientes.find(c => c.id === ag.clienteId);
+                              const cliente = (clientes || []).find(c => c.id === ag.clienteId);
                               const isRealizado = ag.statusAtendimento === 'Realizado';
                               return (
                                 <div 
@@ -503,7 +503,7 @@ export default function AgendaScreen() {
                             dayAgendamentos.length > 0 && (
                               <>
                                 <div className="text-[9px] px-1 py-0.5 rounded bg-[var(--color-primary)] text-white font-bold leading-tight truncate">
-                                  {clientes.find(c => c.id === dayAgendamentos[0].clienteId)?.nome?.split(' ')[0]}
+                                  {(clientes || []).find(c => c.id === dayAgendamentos[0].clienteId)?.nome?.split(' ')[0]}
                                 </div>
                                 {dayAgendamentos.length > 1 && (
                                   <div className="text-[8px] font-black text-[var(--color-primary)] mt-0.5 bg-[var(--color-primary)]/10 px-1 rounded-sm w-fit">
@@ -531,15 +531,15 @@ export default function AgendaScreen() {
           <GripVertical size={14} className="animate-pulse" /> Arraste a terapia para agendar
         </h3>
         <div className="flex overflow-x-auto pb-4 gap-3 snap-x scroll-smooth no-scrollbar">
-          {clientes.filter(cliente => pacotes.some(p => p.clienteId === cliente.id)).map(cliente => {
+          {(clientes || []).filter(cliente => (pacotes || []).some(p => p.clienteId === cliente.id)).map(cliente => {
             const isExpanded = expandedClienteId === cliente.id;
-            const clientePacotes = pacotes.filter(p => p.clienteId === cliente.id);
+            const clientePacotes = (pacotes || []).filter(p => p.clienteId === cliente.id);
             const terapiasContratadas = clientePacotes.flatMap(p => {
               return p.itens.map(item => ({
                 pacoteId: p.id,
                 itemPacoteId: item.id,
                 terapiaId: item.terapiaId,
-                nome: terapias.find(t => t.id === item.terapiaId)?.nome || 'Desconhecida',
+                nome: (terapias || []).find(t => t.id === item.terapiaId)?.nome || 'Desconhecida',
                 restante: item.quantidadeRestante,
                 total: item.quantidadeTotal
               }));
@@ -637,16 +637,23 @@ export default function AgendaScreen() {
             <div className="space-y-5 pb-8">
               <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-800">
                 <label className="block text-[10px] font-black uppercase tracking-widest text-[var(--color-text-sec-light)] mb-2">Cliente</label>
-                <div className="text-lg font-bold text-[var(--color-primary)]">
-                  {clientes.find(c => c.id === formClienteId)?.nome || "Cliente"}
-                </div>
+                {formClienteId ? (
+                  <div className="text-lg font-bold text-[var(--color-primary)]">
+                    {(clientes || []).find(c => c.id === formClienteId)?.nome || "Cliente"}
+                  </div>
+                ) : (
+                  <select value={formClienteId} onChange={e => setFormClienteId(e.target.value)} className="w-full bg-transparent font-bold text-sm outline-none cursor-pointer">
+                    <option value="">Selecione um cliente</option>
+                    {(clientes || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                  </select>
+                )}
               </div>
 
               <div>
                 <label className="block text-[10px] font-black uppercase tracking-widest text-[var(--color-text-sec-light)] mb-3">Terapias Selecionadas</label>
                 <div className="space-y-2 mb-3">
                   {formTerapiaIds.map((tid, index) => {
-                    const t = terapias.find(x => x.id === tid);
+                    const t = (terapias || []).find(x => x.id === tid);
                     return (
                       <div key={`${tid}-${index}`} className="flex items-center justify-between bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] px-4 py-3 rounded-2xl border border-[var(--color-primary)]/10 shadow-sm">
                         <span className="text-sm font-bold">{t?.nome || "Terapia"} <span className="text-xs font-normal opacity-60 ml-1">({t?.duracao || 0}m)</span></span>

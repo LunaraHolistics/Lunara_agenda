@@ -91,9 +91,28 @@ export default function HomeScreen() {
     return (agendamentos || []).filter(ag => ag.data === hojeStr && ag.statusAtendimento !== 'Cancelado');
   }, [agendamentos, hojeStr]);
 
-  const totalHoje = useMemo(() => {
-    return atendimentosHoje.reduce((acc, ag) => acc + Number(ag.valorCobrado || 0), 0);
-  }, [atendimentosHoje]);
+  const tempoTotalOcupacao = useMemo(() => {
+    const tempoEfetivo = atendimentosHoje.reduce((acc, ag) => {
+      const terapia = (terapias || []).find(t => t.id === ag.terapiaId);
+      return acc + (terapia?.duracao || 0);
+    }, 0);
+    
+    const intervalosFixos = atendimentosHoje.length * 10;
+    const descansoProlongado = Math.floor(tempoEfetivo / 60) * 15;
+    
+    return tempoEfetivo + intervalosFixos + descansoProlongado;
+  }, [atendimentosHoje, terapias]);
+
+  const isCargaAlta = tempoTotalOcupacao > 240; // 4 horas
+
+  const formatarTempo = (minutos: number) => {
+    const h = Math.floor(minutos / 60);
+    const m = minutos % 60;
+    if (h > 0) {
+      return `${h}h${m > 0 ? ` ${m}min` : ''}`;
+    }
+    return `${m}min`;
+  };
 
   // Alerta de Pacotes (1 sessão restante)
   const pacotesTerminando = useMemo(() => {
@@ -202,49 +221,68 @@ export default function HomeScreen() {
             Resumo de {new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(new Date())}
           </p>
         </div>
-        <div className="flex gap-2">
-          <button 
-            onClick={() => setShowConferencia(true)}
-            className="p-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] rounded-full text-orange-500 shadow-sm"
-            aria-label="Conferência Semanal"
-            title="Conferência Semanal"
-          >
-            <CheckCircle size={24} />
-          </button>
-          <button 
-            onClick={() => setShowFinanceiro(true)}
-            className="p-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] rounded-full text-[var(--color-primary)] shadow-sm"
-            aria-label="Controle Financeiro"
-          >
-            <PieChart size={24} />
-          </button>
-          <button 
-            onClick={() => setShowConfiguracoes(true)}
-            className="p-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] rounded-full text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] shadow-sm"
-            aria-label="Configurações"
-          >
-            <Settings size={24} />
-          </button>
-        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 pb-24">
+        {/* Ações Rápidas */}
+        <div className="mt-2 mb-2 flex gap-3 overflow-x-auto no-scrollbar pb-2">
+          <button 
+            onClick={() => setShowConferencia(true)}
+            className="flex items-center gap-2 px-4 py-3 bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 rounded-2xl font-bold text-xs shrink-0 transition-transform active:scale-95 border border-orange-100 dark:border-orange-800/50 shadow-sm"
+          >
+            <CheckCircle size={18} />
+            Conferência
+          </button>
+          <button 
+            onClick={() => setShowFinanceiro(true)}
+            className="flex items-center gap-2 px-4 py-3 bg-[var(--color-primary)]/10 text-[var(--color-primary)] rounded-2xl font-bold text-xs shrink-0 transition-transform active:scale-95 border border-[var(--color-primary)]/20 shadow-sm"
+          >
+            <PieChart size={18} />
+            Financeiro
+          </button>
+          <button 
+            onClick={() => setShowContasAReceber(true)}
+            className="flex items-center gap-2 px-4 py-3 bg-[var(--color-warning)]/10 text-[var(--color-warning)] rounded-2xl font-bold text-xs shrink-0 transition-transform active:scale-95 border border-[var(--color-warning)]/20 shadow-sm"
+          >
+            <DollarSign size={18} />
+            A Receber
+          </button>
+          <button 
+            onClick={() => setShowConfiguracoes(true)}
+            className="flex items-center gap-2 px-4 py-3 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-2xl font-bold text-xs shrink-0 transition-transform active:scale-95 border border-gray-200 dark:border-gray-700 shadow-sm"
+          >
+            <Settings size={18} />
+            Ajustes
+          </button>
+        </div>
+
         {/* Resumo do Dia */}
         <div className="mt-4 bg-[var(--color-primary)]/10 border border-[var(--color-primary)]/20 p-4 rounded-2xl flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-[var(--color-primary)] text-white flex items-center justify-center shrink-0">
               <Calendar size={20} />
             </div>
-            <div>
-              <p className="text-xs font-bold text-[var(--color-primary)] uppercase tracking-wider">Resumo de Hoje</p>
-              <p className="text-sm font-medium text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">
-                {atendimentosHoje.length} atendimento{atendimentosHoje.length !== 1 ? 's' : ''}
-              </p>
+            <div className="flex-1">
+              <div className="flex justify-between items-center mb-1">
+                <p className="text-xs font-bold text-[var(--color-primary)] uppercase tracking-wider">Resumo do Dia</p>
+                <div className="group relative">
+                  <AlertTriangle size={14} className="text-gray-400 cursor-help" />
+                  <div className="absolute bottom-full right-0 mb-2 w-48 p-2 bg-gray-900 text-white text-[10px] rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-xl">
+                    Inclui 10min entre sessões e 15min de pausa a cada hora de trabalho efetivo.
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <p className="text-sm font-medium text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">
+                  Hoje tem {atendimentosHoje.length} atendimento{atendimentosHoje.length !== 1 ? 's' : ''}
+                </p>
+                <div className={`flex items-center gap-1.5 text-xs font-bold ${isCargaAlta ? 'text-orange-500 dark:text-orange-400' : 'text-[var(--color-primary)]'}`}>
+                  <Clock size={14} />
+                  <span>Tempo Total (Terapias + Intervalos): {formatarTempo(tempoTotalOcupacao)}</span>
+                  {isCargaAlta && <span className="text-[10px] bg-orange-100 dark:bg-orange-900/30 px-1.5 py-0.5 rounded-md uppercase">Carga Alta</span>}
+                </div>
+              </div>
             </div>
-          </div>
-          <div className="text-right">
-            <p className="text-[10px] text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] uppercase font-bold">Total Previsto</p>
-            <p className="text-lg font-black text-[var(--color-primary)]">{formatCurrency(totalHoje)}</p>
           </div>
         </div>
 

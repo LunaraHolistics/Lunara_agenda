@@ -103,6 +103,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return Array.isArray(saved) ? filterBlacklist(saved) : INITIAL_TRANSACOES;
   });
 
+  const agendamentosSincronizados = React.useMemo(() => {
+    console.log('AppContext: recalculating agendamentosSincronizados', agendamentos.length);
+    return agendamentos.map(ag => {
+      const transacao = transacoes.find(t => t.agendamentoId === ag.id);
+      if (transacao && transacao.status === 'Pago') {
+        return { ...ag, statusPagamento: 'Pago' as const };
+      }
+      return ag;
+    });
+  }, [agendamentos, transacoes]);
+
   useEffect(() => {
     const isCorruptedOrEmpty = () => {
       try {
@@ -194,7 +205,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const updateAgendamento = (data: Agendamento) => {
-    setAgendamentos(prev => prev.map(a => a.id === data.id ? data : a).sort((a, b) => a.data.localeCompare(b.data) || a.hora.localeCompare(b.hora)));
+    setAgendamentos(prev => {
+      const next = prev.map(a => a.id === data.id ? data : a).sort((a, b) => a.data.localeCompare(b.data) || a.hora.localeCompare(b.hora));
+      console.log('AppContext: updateAgendamento', data.id, 'New Date:', data.data);
+      return next;
+    });
     showNotification("Agendamento atualizado!", "success");
   };
 
@@ -357,7 +372,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   return (
     <AppContext.Provider value={{
-      clientes, agendamentos, terapias, pacotes, bloqueios, transacoes,
+      clientes, agendamentos: agendamentosSincronizados, terapias, pacotes, bloqueios, transacoes,
       addCliente, updateCliente, deleteCliente,
       addAgendamento, updateAgendamento, deleteAgendamento, completeAppointment,
       addTerapia, updateTerapia, deleteTerapia,

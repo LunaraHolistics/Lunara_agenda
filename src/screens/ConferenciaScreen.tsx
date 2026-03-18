@@ -16,7 +16,8 @@ export default function ConferenciaScreen({ onBack }: ConferenciaScreenProps) {
     agendamentos: allAgendamentos, 
     clientes, 
     terapias,
-    updateAgendamento
+    updateAgendamento,
+    addTransacao
   } = useAppContext();
 
   // Filtra atendimentos dos últimos 7 dias
@@ -49,6 +50,16 @@ export default function ConferenciaScreen({ onBack }: ConferenciaScreenProps) {
           dataPagamento: today,
           formaPagamento: 'PIX'
         });
+        
+        const cliente = clientes.find(c => c.id === ag.clienteId);
+        addTransacao({
+          descricao: `Atendimento - ${cliente?.nome || 'Cliente'}`,
+          valor: ag.valorCobrado || 0,
+          data: today,
+          status: 'Pago',
+          agendamentoId: ag.id,
+          metodo: 'PIX'
+        });
       });
       
       showNotification('Pagamentos confirmados com sucesso!', 'success');
@@ -58,12 +69,24 @@ export default function ConferenciaScreen({ onBack }: ConferenciaScreenProps) {
   const handleConfirmPaid = (ag: Agendamento) => {
     promptAction('Forma de Pagamento (PIX, Crédito, Débito, Transferência, Dinheiro):', 'PIX', (forma) => {
       if (forma) {
+        const today = new Date().toISOString().split('T')[0];
         updateAgendamento({
           ...ag,
           statusPagamento: 'Pago',
-          dataPagamento: new Date().toISOString().split('T')[0],
+          dataPagamento: today,
           formaPagamento: forma
         });
+        
+        const cliente = clientes.find(c => c.id === ag.clienteId);
+        addTransacao({
+          descricao: `Atendimento - ${cliente?.nome || 'Cliente'}`,
+          valor: ag.valorCobrado || 0,
+          data: today,
+          status: 'Pago',
+          agendamentoId: ag.id,
+          metodo: forma
+        });
+        
         showNotification('Pagamento registrado com sucesso!', 'success');
       }
     }, { title: 'Registrar Pagamento', placeholder: 'PIX, Dinheiro, etc.' });

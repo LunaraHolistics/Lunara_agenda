@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon, ShieldAlert, X, GripVertical, Clock, AlertCircle, CheckCircle2, Calendar } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon, ShieldAlert, X, GripVertical, Clock, AlertCircle, CheckCircle2, Calendar, Trash2 } from 'lucide-react';
 import { Cliente, Terapia, Agendamento, Bloqueio, Pacote } from '../types';
 import { StorageService } from '../utils/storage';
 import { useAppContext } from '../AppContext';
-import { DropZoneRetorno } from '../components/DropZoneRetorno';
 
 export default function AgendaScreen() {
   const { 
@@ -21,7 +20,9 @@ export default function AgendaScreen() {
     updatePacote,
     setAgendamentos,
     setPacotes,
-    addTransacao
+    addTransacao,
+    addBloqueio,
+    deleteBloqueio
   } = useAppContext();
   
   // State
@@ -33,7 +34,6 @@ export default function AgendaScreen() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [isDayAgendaOpen, setIsDayAgendaOpen] = useState(false);
   const [showOrfaos, setShowOrfaos] = useState(false);
-  const [expandedWeekIndex, setExpandedWeekIndex] = useState<number | null>(null);
   const [expandedClienteId, setExpandedClienteId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverDay, setDragOverDay] = useState<number | null>(null);
@@ -65,6 +65,7 @@ export default function AgendaScreen() {
   const [frequencia, setFrequencia] = useState<'semanal' | 'quinzenal'>('semanal');
   const [dataFim, setDataFim] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const isDragging = useRef(false);
 
   // Form State - Bloqueio
   const [blockData, setBlockData] = useState('');
@@ -95,9 +96,18 @@ export default function AgendaScreen() {
     e.dataTransfer.dropEffect = 'move';
   };
 
-  const handleDragStart = (e: React.DragEvent, data: { id?: string; clienteId?: string; terapiaId?: string; pacoteId?: string; itemPacoteId?: string; name: string; time: string }) => {
+  const handleDragStart = (e: React.DragEvent, data: { id?: string; type: 'agendamento' | 'terapia'; clienteId?: string; terapiaId?: string; pacoteId?: string; itemPacoteId?: string; name: string; time: string }) => {
+    e.stopPropagation();
     e.dataTransfer.effectAllowed = 'move';
-    if (data.id) e.dataTransfer.setData('agendamentoId', String(data.id));
+    
+    const id = data.id || e.currentTarget.getAttribute('data-id');
+    if (id) {
+      e.dataTransfer.setData('id', String(id));
+      e.dataTransfer.setData('type', data.type);
+      setDraggingId(String(id));
+      console.log('DRAG START:', id, data.type);
+    }
+    
     if (data.clienteId) e.dataTransfer.setData('clienteId', String(data.clienteId));
     if (data.terapiaId) e.dataTransfer.setData('terapiaId', String(data.terapiaId));
     if (data.pacoteId) e.dataTransfer.setData('pacoteId', String(data.pacoteId));
@@ -110,40 +120,8 @@ export default function AgendaScreen() {
       if (nameEl) nameEl.textContent = data.name;
       if (timeEl) timeEl.textContent = data.time;
       
-      // Create a ghost image
-      preview.style.opacity = '0.7';
-      e.dataTransfer.setDragImage(preview, 40, 20);
+      e.dataTransfer.setDragImage(preview, 70, 30);
     }
-  };
-
-  const handleDropRetorno = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const agendamentoId = e.dataTransfer.getData('agendamentoId');
-    if (!agendamentoId) return;
-
-    const agendamento = (agendamentos || []).find(a => String(a.id) === String(agendamentoId));
-    if (!agendamento) return;
-
-    // Se for pacote, incrementa
-    if (agendamento.pacoteId) {
-      setPacotes(prev => (prev || []).map(p => {
-        if (String(p.id) === String(agendamento.pacoteId)) {
-          const updatedItens = (p.itens || []).map((item) => {
-            if (String(item.terapiaId) === String(agendamento.terapiaId)) {
-              return { ...item, quantidadeRestante: (item.quantidadeRestante || 0) + 1 };
-            }
-            return item;
-          });
-          return { ...p, itens: updatedItens };
-        }
-        return p;
-      }));
-    }
-
-    // Remove do calendário
-    setAgendamentos(prev => (prev || []).filter(a => String(a.id) !== String(agendamentoId)));
-    showNotification("Sessão devolvida ao pacote do cliente", "info");
   };
 
   useEffect(() => {
@@ -157,44 +135,38 @@ export default function AgendaScreen() {
   const handleDrop = (e: React.DragEvent, day: number) => {
     e.preventDefault();
     e.stopPropagation();
-    console.log('Drop event triggered on day:', day);
-    
-    // Cleanup drag preview if needed (though browser usually handles this)
-    if (dragPreviewRef.current) {
-      dragPreviewRef.current.style.top = '-1000px';
-    }
+    isDragging.current = false;
 
-    const agendamentoId = e.dataTransfer.getData('agendamentoId');
-    const clienteId = e.dataTransfer.getData('clienteId');
-    const terapiaId = e.dataTransfer.getData('terapiaId');
-    const pacoteId = e.dataTransfer.getData('pacoteId');
-    const itemPacoteId = e.dataTransfer.getData('itemPacoteId');
+    const type = e.dataTransfer.getData('type');
+    const id = e.dataTransfer.getData('id');
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
-    console.log('Drop data:', { agendamentoId, clienteId, terapiaId, pacoteId, itemPacoteId, dateStr });
+    console.log('DROP:', type, id, dateStr);
 
-    if (agendamentoId) {
-      const itemToUpdate = (agendamentos || []).find(a => String(a.id) === String(agendamentoId));
-      
-      if (itemToUpdate) {
-        // Optimistic UI: Update local state immediately
-        const updatedItem = { ...itemToUpdate, data: dateStr };
-        updateAgendamento(updatedItem);
-        
-        showNotification('Agendamento reagendado!', 'success');
-      }
-      return;
+    if (!id) return;
+
+    if (type === 'agendamento') {
+      setAgendamentos(prev =>
+        prev.map(item =>
+          String(item.id) === String(id)
+            ? { ...item, data: dateStr }
+            : item
+        )
+      );
+      showNotification('Agendamento reagendado!', 'success');
     }
 
-    if (terapiaId) {
-      setFormClienteId(clienteId || '');
+    if (type === 'terapia') {
+      setFormClienteId(e.dataTransfer.getData('clienteId') || '');
       setFormData(dateStr);
-      setFormTerapiaIds(prev => [...prev, terapiaId]);
-      setFormPacoteId(pacoteId || undefined);
-      setFormItemPacoteId(itemPacoteId || undefined);
+      setFormTerapiaIds(prev => [...prev, e.dataTransfer.getData('terapiaId')]);
       setFormHora('09:00');
+      setFormPacoteId(e.dataTransfer.getData('pacoteId') || undefined);
+      setFormItemPacoteId(e.dataTransfer.getData('itemPacoteId') || undefined);
       setIsModalOpen(true);
     }
+
+    setDraggingId(null);
   };
 
   const handleSaveAgendamento = async () => {
@@ -203,7 +175,6 @@ export default function AgendaScreen() {
       return;
     }
 
-    const selectedTerapias = formTerapiaIds.map(tid => terapias.find(t => t.id === tid)).filter(Boolean) as Terapia[];
     const datesToSchedule: string[] = [formData];
 
     if (recorrencia && dataFim) {
@@ -217,7 +188,7 @@ export default function AgendaScreen() {
       }
     }
 
-    const saveAll = (formaPagamento?: string) => {
+    const saveAll = () => {
       const newAgendamentos: Agendamento[] = [];
 
       for (let d of datesToSchedule) {
@@ -230,9 +201,9 @@ export default function AgendaScreen() {
             data: d,
             hora: formHora,
             pacoteId: formPacoteId,
-            statusPagamento: formStatusPagamento,
+            statusPagamento: 'Pendente',
             statusAtendimento: 'Agendado',
-            valorCobrado: Number(terapias.find(t => t.id === tid)?.valor || 0)
+            valorCobrado: 0
           };
           newAgendamentos.push(newAgendamento);
         }
@@ -257,53 +228,16 @@ export default function AgendaScreen() {
       // Update Agendamentos
       setAgendamentos(prev => [...(prev || []), ...newAgendamentos]);
 
-      // Handle Transactions if Paid
-      if (formStatusPagamento === 'Pago') {
-        const cliente = clientes.find(c => String(c.id) === String(formClienteId));
-        const clienteNome = cliente?.nome || 'Cliente';
-        addTransacao({
-          descricao: `Atendimento - ${clienteNome}`,
-          valor: Number(formValor) * datesToSchedule.length,
-          data: new Date().toISOString().split('T')[0],
-          status: 'Pago'
-        });
-      }
-
       setIsModalOpen(false);
       setFormTerapiaIds([]); // Reset therapy IDs
       showNotification('Agendado com sucesso!', 'success');
     };
 
-    if (formStatusPagamento === 'Pago') {
-      promptAction('Forma de Pagamento (PIX, Crédito, Débito, Transferência, Dinheiro):', 'PIX', async (forma) => {
-        if (forma) {
-          await saveAll(forma);
-        }
-      }, { title: 'Registrar Pagamento', placeholder: 'PIX, Dinheiro, etc.' });
-    } else {
-      await saveAll();
-    }
+    await saveAll();
   };
 
   const handleDeleteAgendamento = (agendamentoId: string) => {
     confirmAction('Deseja realmente excluir este agendamento?', () => {
-      const agendamento = (agendamentos || []).find(a => String(a.id) === String(agendamentoId));
-      
-      if (agendamento?.pacoteId) {
-        setPacotes(prev => (prev || []).map(p => {
-          if (String(p.id) === String(agendamento.pacoteId)) {
-            const updatedItens = (p.itens || []).map((item) => {
-              if (String(item.terapiaId) === String(agendamento.terapiaId)) {
-                return { ...item, quantidadeRestante: (item.quantidadeRestante || 0) + 1 };
-              }
-              return item;
-            });
-            return { ...p, itens: updatedItens };
-          }
-          return p;
-        }));
-      }
-
       setAgendamentos(prev => (prev || []).filter(a => String(a.id) !== String(agendamentoId)));
       showNotification('Agendamento excluído!', 'success');
     }, { isDanger: true });
@@ -320,6 +254,13 @@ export default function AgendaScreen() {
     setIsDayAgendaOpen(true);
   };
 
+  const openAppointmentModal = (e: React.MouseEvent, ag: Agendamento) => {
+    e.stopPropagation();
+    if (isDragging.current) return;
+    setSelectedDate(ag.data);
+    setIsDayAgendaOpen(true);
+  };
+
   // Long Press logic for dragging existing appointments
   const startLongPress = (id: string) => {
     longPressTimer.current = setTimeout(() => {
@@ -328,7 +269,7 @@ export default function AgendaScreen() {
   };
 
   return (
-    <div className="flex flex-col h-full relative bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)]">
+    <div className="flex flex-col h-full relative bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] select-none">
       {/* Header */}
       <div className="p-4 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] border-b border-gray-200 dark:border-gray-800 sticky top-0 z-10 flex justify-between items-center">
         <div className="flex items-center gap-4">
@@ -380,25 +321,37 @@ export default function AgendaScreen() {
                 <div key={cliente.id} className="bg-white dark:bg-gray-800 p-3 rounded-xl shadow-sm border border-orange-200 dark:border-orange-800 shrink-0 min-w-[160px]">
                   <p className="text-[11px] font-bold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] mb-2 truncate border-b border-gray-100 dark:border-gray-700 pb-1">{cliente.nome}</p>
                   <div className="space-y-1.5">
-                    {orfaos.map((o, idx) => (
-                      <div 
-                        key={idx} 
-                        draggable
-                        onDragStart={(e) => {
-                          e.currentTarget.style.opacity = '0.5';
-                          e.currentTarget.style.transform = 'scale(0.95)';
-                          handleDragStart(e, {
-                            clienteId: cliente.id,
-                            terapiaId: o.terapiaId,
-                            pacoteId: o.pacoteId,
-                            itemPacoteId: o.itemPacoteId,
-                            name: cliente.nome || 'Cliente',
-                            time: 'Novo'
-                          });
-                        }}
+                          {orfaos.map((o, idx) => (
+                            <div 
+                              key={idx} 
+                              draggable={true}
+                              onDragStart={(e) => {
+                                e.stopPropagation();
+                                isDragging.current = true;
+                                const target = e.currentTarget;
+                                setTimeout(() => {
+                                  target.style.opacity = '0.4';
+                                  target.style.transform = 'scale(1.05)';
+                                  target.style.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)';
+                                }, 0);
+                                handleDragStart(e, {
+                                  id: o.terapiaId,
+                                  type: 'terapia',
+                                  clienteId: cliente.id,
+                                  terapiaId: o.terapiaId,
+                                  pacoteId: o.pacoteId,
+                                  itemPacoteId: o.itemPacoteId,
+                                  name: cliente.nome || 'Cliente',
+                                  time: 'Novo'
+                                });
+                              }}
                         onDragEnd={(e) => {
+                          e.stopPropagation();
+                          isDragging.current = false;
+                          setDraggingId(null);
                           e.currentTarget.style.opacity = '1';
                           e.currentTarget.style.transform = 'scale(1)';
+                          e.currentTarget.style.boxShadow = 'none';
                         }}
                         style={{ userSelect: 'none', touchAction: 'none' }}
                         className="flex justify-between items-center gap-2 cursor-grab active:cursor-grabbing bg-orange-50 dark:bg-orange-900/20 p-1 rounded transition-all"
@@ -416,8 +369,7 @@ export default function AgendaScreen() {
       )}
 
       {/* Calendar Grid */}
-      <DropZoneRetorno onDrop={handleDropRetorno} onDragOver={handleDragOver} />
-      <div className="flex-1 overflow-y-auto p-4 pb-52 scrollbar-hide">
+      <div className="flex-1 overflow-y-auto p-4 pb-64 scrollbar-hide relative z-0">
         <div className="grid grid-cols-7 gap-1 mb-2">
           {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(d => (
             <div key={d} className="text-center text-[10px] font-black uppercase tracking-tighter text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] py-2">
@@ -428,6 +380,7 @@ export default function AgendaScreen() {
         
         <div className="space-y-1">
           {(() => {
+            console.log("RENDER CALENDÁRIO", agendamentos.length);
             const weeks: (number | null)[][] = [];
             let currentWeek: (number | null)[] = Array(firstDay).fill(null);
             for (let i = 1; i <= daysInMonth; i++) {
@@ -443,29 +396,25 @@ export default function AgendaScreen() {
             }
 
             return weeks.map((week, weekIdx) => {
-              const isExpanded = expandedWeekIndex === weekIdx;
               return (
-                <div key={weekIdx} className={`grid grid-cols-7 gap-1 transition-all duration-300 ${isExpanded ? 'min-h-max' : 'h-auto'}`}>
+                <div key={weekIdx} className="grid grid-cols-7 gap-1 relative">
                   {week.map((day, dayIdx) => {
                     if (day === null) return <div key={`empty-${weekIdx}-${dayIdx}`} className="aspect-square opacity-20" />;
                     
                     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                     const dayAgendamentos = (agendamentos || [])
-                      .filter(a => a.data === dateStr && a.statusAtendimento !== 'Cancelado')
+                      .filter(a => String(a.data).slice(0, 10) === dateStr && a.statusAtendimento !== 'Cancelado')
                       .sort((a, b) => a.hora.localeCompare(b.hora));
                     const hasBloqueio = (bloqueios || []).some(b => b.data === dateStr);
                     const isToday = new Date().toISOString().startsWith(dateStr);
 
                     return (
                       <div 
-                        key={day} 
+                        key={`${year}-${month}-${day}`} 
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (dayAgendamentos.length > 1) {
-                            setExpandedWeekIndex(isExpanded ? null : weekIdx);
-                          } else {
-                            openDayAgenda(day);
-                          }
+                          if (isDragging.current) return;
+                          openDayAgenda(day);
                         }}
                         onDragOver={(e) => {
                           handleDragOver(e);
@@ -474,71 +423,82 @@ export default function AgendaScreen() {
                         onDragLeave={() => setDragOverDay(null)}
                         onDrop={(e) => {
                           setDragOverDay(null);
+                          console.log('--- DROP DETECTED ---');
+                          console.log('Target Day:', day);
                           handleDrop(e, day);
                         }}
-                        className={`min-h-[65px] rounded-xl flex flex-col p-1.5 relative cursor-pointer transition-all border ${
+                        className={`min-h-[110px] h-auto rounded-xl flex flex-col p-1.5 relative cursor-pointer transition-all border ${
                           dragOverDay === day
                             ? 'ring-2 ring-[var(--color-primary)] bg-[var(--color-primary)]/10 border-dashed scale-105 z-10'
                             : isToday 
                               ? 'bg-[var(--color-primary)]/5 border-[var(--color-primary)]' 
                               : 'bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] border-gray-100 dark:border-gray-800'
-                        } ${isExpanded ? 'h-auto shadow-lg ring-1 ring-primary' : 'aspect-square overflow-hidden'}`}
+                        } hover:shadow-md hover:border-[var(--color-primary)]/30`}
                       >
                         <div className="flex justify-between items-center mb-1">
                           <span className={`text-[11px] font-black ${isToday ? 'text-[var(--color-primary)]' : 'text-[var(--color-text-sec-light)] opacity-50'}`}>{day}</span>
                           {hasBloqueio && <ShieldAlert size={10} className="text-[var(--color-error)]" />}
                         </div>
+                        
+                        {/* Debug Info */}
+                        <div className="flex flex-col text-[7px] opacity-30 pointer-events-none mb-1">
+                          <span>{dateStr}</span>
+                          <span>Total: {dayAgendamentos.length}</span>
+                        </div>
 
                         <div className="flex flex-col gap-1">
-                          {isExpanded ? (
-                            dayAgendamentos.map(ag => {
-                              const cliente = (clientes || []).find(c => c.id === ag.clienteId);
-                              const isRealizado = ag.statusAtendimento === 'Realizado';
-                              return (
+                          {dayAgendamentos.map(ag => {
+                            const cliente = (clientes || []).find(c => c.id === ag.clienteId);
+                            const isRealizado = ag.statusAtendimento === 'Realizado';
+                            return (
                                 <div 
                                   key={ag.id}
-                                  draggable
+                                  draggable={true}
+                                  data-id={ag.id}
+                                  onClick={(e) => openAppointmentModal(e, ag)}
                                   onDragStart={(e) => {
                                     e.stopPropagation();
-                                    e.currentTarget.style.opacity = '0.5';
-                                    e.currentTarget.style.transform = 'scale(0.95)';
+                                    isDragging.current = true;
+                                    const target = e.currentTarget;
+                                    setTimeout(() => {
+                                      target.style.opacity = '0.4';
+                                      target.style.transform = 'scale(1.05)';
+                                      target.style.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)';
+                                    }, 0);
                                     handleDragStart(e, {
                                       id: ag.id,
+                                      type: 'agendamento',
                                       name: cliente?.nome || 'Cliente',
                                       time: ag.hora
                                     });
                                   }}
                                   onDragEnd={(e) => {
+                                    e.stopPropagation();
+                                    isDragging.current = false;
+                                    setDraggingId(null);
                                     e.currentTarget.style.opacity = '1';
                                     e.currentTarget.style.transform = 'scale(1)';
+                                    e.currentTarget.style.boxShadow = 'none';
                                   }}
-                                  style={{ userSelect: 'none', touchAction: 'none' }}
+                                  style={{ 
+                                    userSelect: 'none', 
+                                    touchAction: 'none', 
+                                    WebkitUserDrag: 'element'
+                                  } as any}
                                   className={`text-[9px] p-1 rounded border leading-tight transition-all cursor-grab active:cursor-grabbing ${
+                                    draggingId === ag.id ? 'opacity-50' : ''
+                                  } ${
                                     isRealizado ? 'bg-gray-100 text-gray-400' : 'bg-white dark:bg-gray-700 text-[var(--color-primary)] border-[var(--color-primary)]/30'
                                   }`}
                                 >
-                                  <div className="flex justify-between items-center font-black">
-                                    <span>{ag.hora}</span>
-                                    {isRealizado && <CheckCircle2 size={8} />}
-                                  </div>
-                                  <div className="truncate">{cliente?.nome?.split(' ')[0]}</div>
+                                <div className="flex justify-between items-center font-black">
+                                  <span>{ag.hora}</span>
+                                  {isRealizado && <CheckCircle2 size={8} />}
                                 </div>
-                              );
-                            })
-                          ) : (
-                            dayAgendamentos.length > 0 && (
-                              <>
-                                <div className="text-[9px] px-1 py-0.5 rounded bg-[var(--color-primary)] text-white font-bold leading-tight truncate">
-                                  {(clientes || []).find(c => c.id === dayAgendamentos[0].clienteId)?.nome?.split(' ')[0]}
-                                </div>
-                                {dayAgendamentos.length > 1 && (
-                                  <div className="text-[8px] font-black text-[var(--color-primary)] mt-0.5 bg-[var(--color-primary)]/10 px-1 rounded-sm w-fit">
-                                    +{dayAgendamentos.length - 1}
-                                  </div>
-                                )}
-                              </>
-                            )
-                          )}
+                                <div className="truncate">{cliente?.nome?.split(' ')[0]}</div>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     );
@@ -551,7 +511,7 @@ export default function AgendaScreen() {
       </div>
 
       {/* Draggable Clients Area */}
-      <div className="absolute bottom-0 left-0 right-0 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] border-t border-gray-200 dark:border-gray-800 p-4 pb-10 shadow-[0_-15px_30px_-5px_rgba(0,0,0,0.15)] z-20 rounded-t-[2.5rem]">
+      <div className="absolute bottom-0 left-0 right-0 bg-[var(--color-surface-light)]/95 dark:bg-[var(--color-surface-dark)]/95 backdrop-blur-md border-t border-gray-200 dark:border-gray-800 p-4 pb-10 shadow-[0_-15px_30px_-5px_rgba(0,0,0,0.15)] z-20 rounded-t-[2.5rem]">
         <div className="w-12 h-1.5 bg-gray-300 dark:bg-gray-700 rounded-full mx-auto mb-4 opacity-50"></div>
         <h3 className="text-[10px] font-black text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] uppercase tracking-widest mb-4 flex items-center justify-center gap-2">
           <GripVertical size={14} className="animate-pulse" /> Arraste a terapia para agendar
@@ -596,9 +556,17 @@ export default function AgendaScreen() {
                           draggable={tc.restante > 0}
                           onDragStart={(e) => {
                             if (tc.restante <= 0) { e.preventDefault(); return; }
-                            e.currentTarget.style.opacity = '0.5';
-                            e.currentTarget.style.transform = 'scale(0.95)';
+                            e.stopPropagation();
+                            isDragging.current = true;
+                            const target = e.currentTarget;
+                            setTimeout(() => {
+                              target.style.opacity = '0.4';
+                              target.style.transform = 'scale(1.05)';
+                              target.style.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)';
+                            }, 0);
                             handleDragStart(e, {
+                              id: tc.terapiaId,
+                              type: 'terapia',
                               clienteId: cliente.id,
                               terapiaId: tc.terapiaId,
                               pacoteId: tc.pacoteId,
@@ -608,13 +576,17 @@ export default function AgendaScreen() {
                             });
                           }}
                           onDragEnd={(e) => {
+                            e.stopPropagation();
+                            isDragging.current = false;
+                            setDraggingId(null);
                             e.currentTarget.style.opacity = '1';
                             e.currentTarget.style.transform = 'scale(1)';
+                            e.currentTarget.style.boxShadow = 'none';
                           }}
                           style={{ userSelect: 'none', touchAction: 'none' }}
                           className={`px-3 py-2.5 rounded-xl border text-[10px] font-black flex justify-between items-center transition-all ${
                             tc.restante > 0 
-                              ? 'bg-white dark:bg-gray-800 border-[var(--color-primary)]/20 text-[var(--color-primary)] cursor-grab active:cursor-grabbing' 
+                              ? 'bg-white dark:bg-gray-800 border-[var(--color-primary)]/20 text-[var(--color-primary)] cursor-grab active:cursor-grabbing hover:shadow-md' 
                               : 'bg-gray-100 dark:bg-gray-900 border-transparent text-gray-400 opacity-50 grayscale cursor-not-allowed'
                           }`}
                         >
@@ -638,12 +610,15 @@ export default function AgendaScreen() {
       {/* Drag Preview (Hidden) */}
       <div 
         ref={dragPreviewRef}
-        className="fixed -top-full left-0 p-3 bg-[var(--color-primary)] text-white rounded-xl shadow-2xl flex flex-col gap-1 min-w-[140px] pointer-events-none z-[-1] border border-white/20"
+        className="fixed -top-full left-0 p-4 bg-gradient-to-br from-[var(--color-primary)] to-indigo-600 text-white rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.4)] flex flex-col gap-1.5 min-w-[180px] pointer-events-none z-[-1] border border-white/40 backdrop-blur-md scale-110"
       >
-        <span className="preview-name text-sm font-bold truncate">Cliente</span>
-        <div className="flex items-center gap-2 opacity-90">
-          <Clock size={12} />
-          <span className="preview-time text-xs font-medium">00:00</span>
+        <div className="flex items-center gap-2 mb-1">
+          <div className="w-3 h-3 rounded-full bg-white animate-pulse shadow-[0_0_10px_white]"></div>
+          <span className="preview-name text-base font-black truncate tracking-tight">Cliente</span>
+        </div>
+        <div className="flex items-center gap-2 bg-white/30 px-3 py-1.5 rounded-xl w-fit border border-white/20">
+          <Clock size={14} className="text-white" />
+          <span className="preview-time text-xs font-black tracking-wider">00:00</span>
         </div>
       </div>
 
@@ -717,23 +692,6 @@ export default function AgendaScreen() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-gray-100 dark:border-gray-800">
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-[var(--color-text-sec-light)] mb-2">Valor Total</label>
-                  <div className="flex items-center gap-1 font-black text-[var(--color-success)]">
-                    <span>R$</span>
-                    <input type="number" step="0.01" value={formValor} onChange={e => setFormValor(parseFloat(e.target.value) || 0)} className="w-full bg-transparent outline-none" />
-                  </div>
-                </div>
-                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-gray-100 dark:border-gray-800">
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-[var(--color-text-sec-light)] mb-2">Pagamento</label>
-                  <select value={formStatusPagamento} onChange={e => setFormStatusPagamento(e.target.value as any)} className="w-full bg-transparent font-bold text-sm outline-none cursor-pointer">
-                    <option value="Pendente">🔴 Pendente</option>
-                    <option value="Pago">🟢 Pago</option>
-                  </select>
-                </div>
-              </div>
-
               <div className="p-4 bg-[var(--color-primary)]/5 rounded-2xl border border-[var(--color-primary)]/10">
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input type="checkbox" checked={recorrencia} onChange={e => setRecorrencia(e.target.checked)} className="w-5 h-5 rounded-lg text-[var(--color-primary)] border-gray-300 focus:ring-[var(--color-primary)]" />
@@ -763,6 +721,193 @@ export default function AgendaScreen() {
               >
                 Confirmar Agendamento
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Agenda do Dia */}
+      {isDayAgendaOpen && selectedDate && (
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-md p-0 sm:p-4">
+          <div className="bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] w-full max-w-md rounded-t-[3rem] sm:rounded-[2.5rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300 max-h-[92vh] overflow-y-auto relative">
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h2 className="text-2xl font-black text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] tracking-tighter">
+                  Agenda do <span className="text-[var(--color-primary)]">Dia</span>
+                </h2>
+                <p className="text-sm font-medium text-[var(--color-text-sec-light)] mt-1">
+                  {(() => {
+                    const [y, m, d] = selectedDate.split('-').map(Number);
+                    return new Date(y, m - 1, d).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
+                  })()}
+                </p>
+              </div>
+              <button onClick={() => setIsDayAgendaOpen(false)} className="bg-gray-100 dark:bg-gray-800 p-2 rounded-full transition-transform active:scale-90">
+                <X size={24} className="text-[var(--color-text-sec-light)]" />
+              </button>
+            </div>
+
+            <div className="space-y-4 pb-8">
+              {(agendamentos || [])
+                .filter(a => a.data === selectedDate && a.statusAtendimento !== 'Cancelado')
+                .sort((a, b) => a.hora.localeCompare(b.hora))
+                .map(ag => {
+                  const cliente = (clientes || []).find(c => c.id === ag.clienteId);
+                  const terapia = (terapias || []).find(t => t.id === ag.terapiaId);
+                  const isRealizado = ag.statusAtendimento === 'Realizado';
+                  const isPago = ag.statusPagamento === 'Pago' || !!ag.pacoteId;
+                  const pagoViaPacote = !!ag.pacoteId;
+
+                  return (
+                    <div key={ag.id} className={`p-4 rounded-2xl border transition-all ${isRealizado ? 'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-800 opacity-70' : 'bg-white dark:bg-gray-800 border-[var(--color-primary)]/20 shadow-sm'}`}>
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-lg font-black text-[var(--color-primary)]">{ag.hora}</span>
+                            {isRealizado && <span className="bg-gray-200 text-gray-600 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Realizado</span>}
+                          </div>
+                          <h3 className="font-bold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">{cliente?.nome || 'Cliente'}</h3>
+                          <p className="text-xs text-[var(--color-text-sec-light)]">{terapia?.nome || 'Terapia'}</p>
+                        </div>
+                        <div className="flex flex-col items-end gap-2">
+                          <span className={`text-[10px] font-black px-2 py-1 rounded-md uppercase ${isPago ? 'bg-[var(--color-success)]/10 text-[var(--color-success)]' : 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]'}`}>
+                            {pagoViaPacote ? 'Pago via Pacote' : isPago ? 'Pago' : 'Pendente'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2 mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+                        {!isRealizado && (
+                          <button 
+                            onClick={() => handleCompleteAppointment(ag.id)}
+                            className="flex-1 py-2 bg-[var(--color-primary)]/10 text-[var(--color-primary)] font-bold text-xs rounded-xl hover:bg-[var(--color-primary)]/20 transition-colors"
+                          >
+                            Concluir
+                          </button>
+                        )}
+                        
+                        {!isPago && (
+                          <button 
+                            onClick={() => {
+                              promptAction('Forma de Pagamento (PIX, Crédito, Débito, Transferência, Dinheiro):', 'PIX', (forma) => {
+                                if (forma) {
+                                  updateAgendamento({ ...ag, statusPagamento: 'Pago' });
+                                  addTransacao({
+                                    descricao: `Atendimento - ${cliente?.nome || 'Cliente'}`,
+                                    valor: ag.valorCobrado || 0,
+                                    data: new Date().toISOString().split('T')[0],
+                                    status: 'Pago',
+                                    agendamentoId: ag.id
+                                  });
+                                  showNotification('Pagamento registrado!', 'success');
+                                }
+                              }, { title: 'Registrar Pagamento', placeholder: 'PIX, Dinheiro, etc.' });
+                            }}
+                            className="flex-1 py-2 bg-[var(--color-success)]/10 text-[var(--color-success)] font-bold text-xs rounded-xl hover:bg-[var(--color-success)]/20 transition-colors"
+                          >
+                            Cobrar
+                          </button>
+                        )}
+
+                        <button 
+                          onClick={() => handleDeleteAgendamento(ag.id)}
+                          className="p-2 bg-red-50 dark:bg-red-900/20 text-red-500 rounded-xl hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+
+              {(agendamentos || []).filter(a => a.data === selectedDate && a.statusAtendimento !== 'Cancelado').length === 0 && (
+                <div className="text-center py-8 text-[var(--color-text-sec-light)]">
+                  <CalendarIcon size={48} className="mx-auto mb-3 opacity-20" />
+                  <p className="text-sm font-medium">Nenhum agendamento para este dia.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Bloqueios */}
+      {isBloqueiosOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-md p-4">
+          <div className="bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in duration-300 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-black text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] tracking-tighter">
+                Bloqueios de <span className="text-[var(--color-error)]">Agenda</span>
+              </h2>
+              <button onClick={() => setIsBloqueiosOpen(false)} className="bg-gray-100 dark:bg-gray-800 p-2 rounded-full transition-transform active:scale-90">
+                <X size={24} className="text-[var(--color-text-sec-light)]" />
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              <div className="bg-red-50 dark:bg-red-900/10 p-5 rounded-3xl border border-red-100 dark:border-red-900/20">
+                <h3 className="text-[10px] font-black uppercase tracking-widest text-red-500 mb-4">Novo Bloqueio</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-[var(--color-text-sec-light)] mb-2">Data</label>
+                    <input 
+                      type="date" 
+                      value={blockData} 
+                      onChange={e => setBlockData(e.target.value)}
+                      className="w-full bg-white dark:bg-gray-800 p-3 rounded-xl font-bold text-sm outline-none border border-gray-100 dark:border-gray-700" 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-[var(--color-text-sec-light)] mb-2">Motivo</label>
+                    <input 
+                      type="text" 
+                      placeholder="Ex: Feriado, Folga, Curso..."
+                      value={blockMotivo} 
+                      onChange={e => setBlockMotivo(e.target.value)}
+                      className="w-full bg-white dark:bg-gray-800 p-3 rounded-xl font-bold text-sm outline-none border border-gray-100 dark:border-gray-700" 
+                    />
+                  </div>
+                  <button 
+                    onClick={() => {
+                      if (!blockData) return showNotification('Selecione uma data', 'error');
+                      addBloqueio({ data: blockData, motivo: blockMotivo });
+                      setBlockData('');
+                      setBlockMotivo('');
+                      showNotification('Bloqueio adicionado!', 'success');
+                    }}
+                    className="w-full py-3 bg-red-500 text-white font-black text-xs uppercase tracking-widest rounded-xl shadow-lg shadow-red-500/20 active:scale-95 transition-transform"
+                  >
+                    Bloquear Data
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h3 className="text-[10px] font-black uppercase tracking-widest text-[var(--color-text-sec-light)] mb-2">Bloqueios Ativos</h3>
+                {(bloqueios || []).length > 0 ? (
+                  (bloqueios || []).sort((a, b) => a.data.localeCompare(b.data)).map(b => (
+                    <div key={b.id} className="flex items-center justify-between bg-white dark:bg-gray-800 p-4 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
+                      <div>
+                        <div className="text-sm font-black text-red-500">{new Date(b.data + 'T12:00:00').toLocaleDateString('pt-BR')}</div>
+                        <div className="text-[10px] font-bold text-[var(--color-text-sec-light)]">{b.motivo || 'Bloqueio de Agenda'}</div>
+                      </div>
+                      <button 
+                        onClick={() => {
+                          confirmAction('Deseja remover este bloqueio?', () => {
+                            deleteBloqueio(b.id);
+                            showNotification('Bloqueio removido!', 'success');
+                          });
+                        }}
+                        className="p-2 bg-red-50 dark:bg-red-900/20 text-red-500 rounded-lg"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-6 text-[var(--color-text-sec-light)] italic text-xs">Nenhum bloqueio ativo</div>
+                )}
+              </div>
             </div>
           </div>
         </div>

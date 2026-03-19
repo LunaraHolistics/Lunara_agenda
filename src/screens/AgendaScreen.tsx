@@ -33,6 +33,21 @@ export default function AgendaScreen() {
   // State
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [diasBloqueados, setDiasBloqueados] = useState<DiaBloqueado[]>([]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('diasBloqueados');
+    if (saved) {
+      try {
+        setDiasBloqueados(JSON.parse(saved));
+      } catch (e) {
+        console.error('Erro ao carregar dias bloqueados', e);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('diasBloqueados', JSON.stringify(diasBloqueados));
+  }, [diasBloqueados]);
   
   // UI State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -44,9 +59,15 @@ export default function AgendaScreen() {
   const [expandedClienteId, setExpandedClienteId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverDay, setDragOverDay] = useState<number | null>(null);
+  const [dragItem, setDragItem] = useState<any>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [isMobile, setIsMobile] = useState(false);
   const dragPreviewRef = useRef<HTMLDivElement>(null);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    setIsMobile(window.matchMedia("(pointer: coarse)").matches);
+  }, []);
 
   // Form State - Agendamento
   const [formClienteId, setFormClienteId] = useState('');
@@ -133,6 +154,65 @@ export default function AgendaScreen() {
       window.removeEventListener('dragover', handleAutoScroll);
     };
   }, []);
+
+  const handleTouchStart = (e: React.TouchEvent, item: any) => {
+    setDragItem(item);
+    setDraggingId(item.id);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!dragItem) return;
+    const touch = e.touches[0];
+    const element = document.elementFromPoint(touch.clientX, touch.clientY);
+    const dayElement = element?.closest('[data-day]');
+    if (dayElement) {
+      const day = parseInt(dayElement.getAttribute('data-day') || '0');
+      setDragOverDay(day);
+    } else {
+      setDragOverDay(null);
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!dragItem || dragOverDay === null) {
+      setDragItem(null);
+      setDraggingId(null);
+      setDragOverDay(null);
+      return;
+    }
+
+    const day = dragOverDay;
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const diaEstaBloqueado = diasBloqueados.some(d => d.data === dateStr);
+
+    if (diaEstaBloqueado) {
+      showNotification('Este dia está bloqueado.', 'error');
+      setDragItem(null);
+      setDraggingId(null);
+      setDragOverDay(null);
+      return;
+    }
+
+    if (dragItem.type === 'agendamento') {
+      const item = (agendamentos || []).find(a => String(a.id) === String(dragItem.id));
+      if (item?.statusAtendimento === 'Concluido') {
+        showNotification('Não é possível mover uma sessão concluída.', 'error');
+      } else {
+        setAgendamentos(prev =>
+          prev.map(i =>
+            String(i.id) === String(dragItem.id)
+              ? { ...i, data: dateStr, statusAtendimento: 'Agendado' }
+              : i
+          )
+        );
+        showNotification('Agendamento reagendado!', 'success');
+      }
+    }
+
+    setDragItem(null);
+    setDraggingId(null);
+    setDragOverDay(null);
+  };
 
   // Handlers
   const handleDragOver = (e: React.DragEvent) => {
@@ -362,6 +442,30 @@ export default function AgendaScreen() {
     setIsDayAgendaOpen(true);
   };
 
+  const handleMobileSelect = (ag: Agendamento) => {
+    promptAction('Nova data (YYYY-MM-DD):', ag.data, (dateStr) => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+        showNotification('Formato de data inválido. Use YYYY-MM-DD', 'error');
+        return;
+      }
+      
+      const diaEstaBloqueado = diasBloqueados.some(d => d.data === dateStr);
+      if (diaEstaBloqueado) {
+        showNotification('Este dia está bloqueado.', 'error');
+        return;
+      }
+      
+      setAgendamentos(prev =>
+        prev.map(item =>
+          String(item.id) === String(ag.id)
+            ? { ...item, data: dateStr, statusAtendimento: 'Agendado' }
+            : item
+        )
+      );
+      showNotification('Agendamento reagendado!', 'success');
+    });
+  };
+
   // Long Press logic for dragging existing appointments
   const startLongPress = (id: string) => {
     longPressTimer.current = setTimeout(() => {
@@ -446,6 +550,16 @@ export default function AgendaScreen() {
                                   time: 'Novo'
                                 });
                               }}
+                              onTouchStart={(e) => handleTouchStart(e, {
+                                id: o.terapiaId,
+                                type: 'terapia',
+                                clienteId: cliente.id,
+                                terapiaId: o.terapiaId,
+                                pacoteId: o.pacoteId,
+                                itemPacoteId: o.itemPacoteId,
+                                name: cliente.nome || 'Cliente',
+                                time: 'Novo'
+                              })}
                         onDragEnd={(e) => {
                           e.stopPropagation();
                           isDragging.current = false;
@@ -513,6 +627,9 @@ export default function AgendaScreen() {
                     return (
                       <div 
                         key={`${year}-${month}-${day}`} 
+                        data-day={day}
+                        onTouchMove={handleTouchMove}
+                        onTouchEnd={handleTouchEnd}
                         onClick={(e) => {
                           e.stopPropagation();
                           if (isDragging.current) return;
@@ -569,9 +686,15 @@ export default function AgendaScreen() {
                               return (
                                 <div 
                                   key={ag.id}
-                                  draggable={!isConcluido}
+                                  draggable={!isConcluido && !isMobile}
                                   data-id={ag.id}
-                                  onClick={(e) => openAppointmentModal(e, ag)}
+                                  onClick={(e) => {
+                                    if (isMobile) {
+                                      handleMobileSelect(ag);
+                                    } else {
+                                      openAppointmentModal(e, ag);
+                                    }
+                                  }}
                                   onDragStart={(e) => {
                                     if (ag.statusAtendimento === 'Concluido') {
                                       e.preventDefault();
@@ -685,7 +808,7 @@ export default function AgendaScreen() {
                         terapiasContratadas.map((tc, idx) => (
                           <div 
                             key={`${tc.pacoteId}-${tc.itemPacoteId}-${idx}`}
-                            draggable={tc.restante > 0}
+                            draggable={tc.restante > 0 && !isMobile}
                             onDragStart={(e) => {
                               if (tc.restante <= 0) { e.preventDefault(); return; }
                               e.stopPropagation();

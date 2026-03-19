@@ -53,6 +53,9 @@ export default function AgendaScreen() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBloqueiosOpen, setIsBloqueiosOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [isMobileDateModalOpen, setIsMobileDateModalOpen] = useState(false);
+  const [mobileSelectedAgendamento, setMobileSelectedAgendamento] = useState<Agendamento | null>(null);
+  const [mobileNewDate, setMobileNewDate] = useState('');
   const [isDayAgendaOpen, setIsDayAgendaOpen] = useState(false);
   const [minimizado, setMinimizado] = useState(false);
   const [showOrfaos, setShowOrfaos] = useState(false);
@@ -111,14 +114,18 @@ export default function AgendaScreen() {
   const prevMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
   const nextMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
 
-  const bloquearDia = (data: string) => {
+  const bloquearDia = (e: React.MouseEvent, data: string) => {
+    e.preventDefault();
+    e.stopPropagation();
     promptAction('Motivo do bloqueio (opcional):', '', (motivo) => {
       setDiasBloqueados(prev => [...prev, { data, motivo }]);
       showNotification('Dia bloqueado!', 'success');
     });
   };
 
-  const desbloquearDia = (data: string) => {
+  const desbloquearDia = (e: React.MouseEvent, data: string) => {
+    e.preventDefault();
+    e.stopPropagation();
     confirmAction('Deseja desbloquear este dia?', () => {
       setDiasBloqueados(prev => prev.filter(d => d.data !== data));
       showNotification('Dia desbloqueado!', 'info');
@@ -443,27 +450,45 @@ export default function AgendaScreen() {
   };
 
   const handleMobileSelect = (ag: Agendamento) => {
-    promptAction('Nova data (YYYY-MM-DD):', ag.data, (dateStr) => {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-        showNotification('Formato de data inválido. Use YYYY-MM-DD', 'error');
-        return;
-      }
-      
-      const diaEstaBloqueado = diasBloqueados.some(d => d.data === dateStr);
-      if (diaEstaBloqueado) {
-        showNotification('Este dia está bloqueado.', 'error');
-        return;
-      }
-      
-      setAgendamentos(prev =>
-        prev.map(item =>
-          String(item.id) === String(ag.id)
-            ? { ...item, data: dateStr, statusAtendimento: 'Agendado' }
-            : item
-        )
-      );
-      showNotification('Agendamento reagendado!', 'success');
-    });
+    setMobileSelectedAgendamento(ag);
+    setMobileNewDate(ag.data);
+    setIsMobileDateModalOpen(true);
+  };
+
+  const handleConfirmMobileDate = () => {
+    if (!mobileSelectedAgendamento || !mobileNewDate) return;
+    
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(mobileNewDate)) {
+      showNotification('Formato de data inválido.', 'error');
+      return;
+    }
+    
+    const diaEstaBloqueado = diasBloqueados.some(d => d.data === mobileNewDate);
+    if (diaEstaBloqueado) {
+      showNotification('Este dia está bloqueado.', 'error');
+      return;
+    }
+    
+    setAgendamentos(prev =>
+      prev.map(item =>
+        String(item.id) === String(mobileSelectedAgendamento.id)
+          ? { ...item, data: mobileNewDate, statusAtendimento: 'Agendado' }
+          : item
+      )
+    );
+    showNotification('Agendamento reagendado!', 'success');
+    setIsMobileDateModalOpen(false);
+    setMobileSelectedAgendamento(null);
+  };
+
+  const handleMobileFooterClick = (clienteId: string, terapiaId: string, pacoteId?: string, itemPacoteId?: string) => {
+    setFormClienteId(clienteId);
+    setFormData(''); // Let the user pick the date
+    setFormTerapiaIds([terapiaId]);
+    setFormHora('09:00'); // Default time
+    setFormPacoteId(pacoteId);
+    setFormItemPacoteId(itemPacoteId);
+    setIsModalOpen(true);
   };
 
   // Long Press logic for dragging existing appointments
@@ -529,8 +554,8 @@ export default function AgendaScreen() {
                           {orfaos.map((o, idx) => (
                             <div 
                               key={idx} 
-                              draggable={true}
-                              onDragStart={(e) => {
+                              draggable={isMobile ? undefined : true}
+                              onDragStart={isMobile ? undefined : (e) => {
                                 e.stopPropagation();
                                 isDragging.current = true;
                                 const target = e.currentTarget;
@@ -550,31 +575,23 @@ export default function AgendaScreen() {
                                   time: 'Novo'
                                 });
                               }}
-                              onTouchStart={(e) => handleTouchStart(e, {
-                                id: o.terapiaId,
-                                type: 'terapia',
-                                clienteId: cliente.id,
-                                terapiaId: o.terapiaId,
-                                pacoteId: o.pacoteId,
-                                itemPacoteId: o.itemPacoteId,
-                                name: cliente.nome || 'Cliente',
-                                time: 'Novo'
-                              })}
-                        onDragEnd={(e) => {
-                          e.stopPropagation();
-                          isDragging.current = false;
-                          setDraggingId(null);
-                          e.currentTarget.style.opacity = '1';
-                          e.currentTarget.style.transform = 'scale(1)';
-                          e.currentTarget.style.boxShadow = 'none';
-                        }}
-                        style={{ userSelect: 'none', touchAction: 'none' }}
-                        className="flex justify-between items-center gap-2 cursor-grab active:cursor-grabbing bg-orange-50 dark:bg-orange-900/20 p-1 rounded transition-all"
-                      >
-                        <span className="text-[10px] text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] truncate">{o.nome}</span>
-                        <span className="text-[10px] font-black text-white bg-orange-500 px-2 py-0.5 rounded-full">{o.restante}</span>
-                      </div>
-                    ))}
+                              onDragEnd={isMobile ? undefined : (e) => {
+                                e.stopPropagation();
+                                isDragging.current = false;
+                                setDraggingId(null);
+                                e.currentTarget.style.opacity = '1';
+                                e.currentTarget.style.transform = 'scale(1)';
+                                e.currentTarget.style.boxShadow = 'none';
+                              }}
+                              onClick={isMobile ? () => handleMobileFooterClick(cliente.id, o.terapiaId, o.pacoteId, o.itemPacoteId) : undefined}
+                              style={isMobile ? { touchAction: 'manipulation', cursor: 'pointer', pointerEvents: 'auto' } : { userSelect: 'none', touchAction: 'none' }}
+                              className={`flex justify-between items-center gap-2 ${isMobile ? '' : 'cursor-grab active:cursor-grabbing'} bg-orange-50 dark:bg-orange-900/20 p-1 rounded transition-all`}
+                            >
+                              <span className="text-[10px] text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] truncate">{o.nome}</span>
+                              <span className="text-[10px] font-black text-white bg-orange-500 px-2 py-0.5 rounded-full">{o.restante}</span>
+                            </div>
+                          ))}
+
                   </div>
                 </div>
               );
@@ -634,10 +651,14 @@ export default function AgendaScreen() {
                           e.stopPropagation();
                           if (isDragging.current) return;
                           if (diaEstaBloqueado) {
-                            desbloquearDia(dateStr);
+                            desbloquearDia(e, dateStr);
                           } else {
                             if (dayAgendamentos.length === 0 && !hasBloqueio) {
-                              confirmAction('Deseja bloquear este dia?', () => bloquearDia(dateStr));
+                              confirmAction('Deseja bloquear este dia?', () => {
+                                // Ensure persistence
+                                setDiasBloqueados(prev => [...prev, { data: dateStr }]);
+                                showNotification('Dia bloqueado!', 'success');
+                              });
                             } else {
                               openDayAgenda(day);
                             }
@@ -668,7 +689,17 @@ export default function AgendaScreen() {
                       >
                         <div className="flex justify-between items-center mb-1">
                           <span className={`text-[11px] font-black ${isToday ? 'text-[var(--color-primary)]' : 'text-[var(--color-text-sec-light)] opacity-50'}`}>{day}</span>
-                          {hasBloqueio && <ShieldAlert size={10} className="text-[var(--color-error)]" />}
+                          <button onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (hasBloqueio) {
+                                // Assuming bloqueios logic needs to be handled here too, 
+                                // but based on previous code it was handled in the parent div onClick.
+                                // Let's keep the parent div onClick logic but add the button for better UX.
+                            }
+                          }}>
+                            {hasBloqueio && <ShieldAlert size={10} className="text-[var(--color-error)]" />}
+                          </button>
                           {diaEstaBloqueado && <span className="text-[9px] font-black text-red-600 dark:text-red-400">🔒</span>}
                         </div>
                         
@@ -756,7 +787,7 @@ export default function AgendaScreen() {
       </div>
 
       {/* Draggable Clients Area */}
-      <div className="absolute bottom-0 left-0 right-0 bg-[var(--color-surface-light)]/95 dark:bg-[var(--color-surface-dark)]/95 backdrop-blur-md border-t border-gray-200 dark:border-gray-800 p-4 pb-10 shadow-[0_-15px_30px_-5px_rgba(0,0,0,0.15)] z-20 rounded-t-[2.5rem]">
+      <div className="absolute bottom-0 left-0 right-0 bg-[var(--color-surface-light)]/95 dark:bg-[var(--color-surface-dark)]/95 backdrop-blur-md border-t border-gray-200 dark:border-gray-800 p-4 pb-10 shadow-[0_-15px_30px_-5px_rgba(0,0,0,0.15)] z-40 rounded-t-[2.5rem]">
         <div className="flex justify-between items-center mb-4">
           <div className="w-12 h-1.5 bg-gray-300 dark:bg-gray-700 rounded-full mx-auto opacity-50"></div>
           <button 
@@ -808,8 +839,8 @@ export default function AgendaScreen() {
                         terapiasContratadas.map((tc, idx) => (
                           <div 
                             key={`${tc.pacoteId}-${tc.itemPacoteId}-${idx}`}
-                            draggable={tc.restante > 0 && !isMobile}
-                            onDragStart={(e) => {
+                            draggable={isMobile ? undefined : (tc.restante > 0)}
+                            onDragStart={isMobile ? undefined : (e) => {
                               if (tc.restante <= 0) { e.preventDefault(); return; }
                               e.stopPropagation();
                               isDragging.current = true;
@@ -830,7 +861,7 @@ export default function AgendaScreen() {
                                 time: 'Novo'
                               });
                             }}
-                            onDragEnd={(e) => {
+                            onDragEnd={isMobile ? undefined : (e) => {
                               e.stopPropagation();
                               isDragging.current = false;
                               setDraggingId(null);
@@ -838,10 +869,11 @@ export default function AgendaScreen() {
                               e.currentTarget.style.transform = 'scale(1)';
                               e.currentTarget.style.boxShadow = 'none';
                             }}
-                            style={{ userSelect: 'none', touchAction: 'none' }}
+                            onClick={isMobile ? () => handleMobileFooterClick(cliente.id, tc.terapiaId, tc.pacoteId, tc.itemPacoteId) : undefined}
+                            style={isMobile ? { touchAction: 'manipulation', cursor: 'pointer', pointerEvents: 'auto' } : { userSelect: 'none', touchAction: 'none' }}
                             className={`px-3 py-2.5 rounded-xl border text-[10px] font-black flex justify-between items-center transition-all ${
                               tc.restante > 0 
-                                ? 'bg-white dark:bg-gray-800 border-[var(--color-primary)]/20 text-[var(--color-primary)] cursor-grab active:cursor-grabbing hover:shadow-md' 
+                                ? `bg-white dark:bg-gray-800 border-[var(--color-primary)]/20 text-[var(--color-primary)] ${isMobile ? '' : 'cursor-grab active:cursor-grabbing'} hover:shadow-md` 
                                 : 'bg-gray-100 dark:bg-gray-900 border-transparent text-gray-400 opacity-50 grayscale cursor-not-allowed'
                             }`}
                           >
@@ -1216,6 +1248,25 @@ export default function AgendaScreen() {
                   <div className="text-center py-6 text-[var(--color-text-sec-light)] italic text-xs">Nenhum bloqueio ativo</div>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Date Modal */}
+      {isMobileDateModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl w-full max-w-sm shadow-xl">
+            <h3 className="text-lg font-bold mb-4 text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">Reagendar</h3>
+            <input 
+              type="date" 
+              value={mobileNewDate} 
+              onChange={(e) => setMobileNewDate(e.target.value)}
+              className="w-full p-3 border rounded-lg mb-6 dark:bg-gray-700 dark:border-gray-600"
+            />
+            <div className="flex gap-3">
+              <button onClick={() => setIsMobileDateModalOpen(false)} className="flex-1 py-2 rounded-lg bg-gray-200 dark:bg-gray-700">Cancelar</button>
+              <button onClick={handleConfirmMobileDate} className="flex-1 py-2 rounded-lg bg-[var(--color-primary)] text-white">Confirmar</button>
             </div>
           </div>
         </div>

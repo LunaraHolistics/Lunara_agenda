@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon, ShieldAlert, X, GripVertical, Clock, AlertCircle, CheckCircle2, Calendar, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon, ShieldAlert, X, GripVertical, Clock, AlertCircle, CheckCircle2, Calendar, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { Cliente, Terapia, Agendamento, Bloqueio, Pacote } from '../types';
 import { StorageService } from '../utils/storage';
 import { useAppContext } from '../AppContext';
@@ -65,11 +65,18 @@ export default function AgendaScreen() {
   const [dragItem, setDragItem] = useState<any>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [isMobile, setIsMobile] = useState(false);
+  const [expandedDays, setExpandedDays] = useState<string[]>([]);
+  const [dropZoneMinimizado, setDropZoneMinimizado] = useState(false);
   const dragPreviewRef = useRef<HTMLDivElement>(null);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    setIsMobile(window.matchMedia("(pointer: coarse)").matches);
+    const mobile = window.matchMedia("(pointer: coarse)").matches;
+    setIsMobile(mobile);
+    if (mobile) {
+      setMinimizado(true);
+      setDropZoneMinimizado(true);
+    }
   }, []);
 
   // Form State - Agendamento
@@ -244,6 +251,11 @@ export default function AgendaScreen() {
     if (data.terapiaId) e.dataTransfer.setData('terapiaId', String(data.terapiaId));
     if (data.pacoteId) e.dataTransfer.setData('pacoteId', String(data.pacoteId));
     if (data.itemPacoteId) e.dataTransfer.setData('itemPacoteId', String(data.itemPacoteId));
+
+    if (data.type === 'agendamento' && !isMobile) {
+      setMinimizado(false);
+      setDropZoneMinimizado(false);
+    }
 
     if (dragPreviewRef.current) {
       const preview = dragPreviewRef.current;
@@ -689,18 +701,32 @@ export default function AgendaScreen() {
                       >
                         <div className="flex justify-between items-center mb-1">
                           <span className={`text-[11px] font-black ${isToday ? 'text-[var(--color-primary)]' : 'text-[var(--color-text-sec-light)] opacity-50'}`}>{day}</span>
-                          <button onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            if (hasBloqueio) {
-                                // Assuming bloqueios logic needs to be handled here too, 
-                                // but based on previous code it was handled in the parent div onClick.
-                                // Let's keep the parent div onClick logic but add the button for better UX.
-                            }
-                          }}>
-                            {hasBloqueio && <ShieldAlert size={10} className="text-[var(--color-error)]" />}
-                          </button>
-                          {diaEstaBloqueado && <span className="text-[9px] font-black text-red-600 dark:text-red-400">🔒</span>}
+                          <div className="flex items-center gap-1">
+                            {dayAgendamentos.length > 2 && !expandedDays.includes(dateStr) && (
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setExpandedDays(prev => [...prev, dateStr]);
+                                }}
+                                className="text-[9px] font-bold text-white bg-[var(--color-primary)] px-1.5 py-0.5 rounded-full hover:scale-110 transition-transform shadow-sm flex items-center gap-0.5"
+                                title="Ver todos"
+                              >
+                                +{dayAgendamentos.length - 2} <ChevronDown size={8} />
+                              </button>
+                            )}
+                            <button onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              if (hasBloqueio) {
+                                  // Assuming bloqueios logic needs to be handled here too, 
+                                  // but based on previous code it was handled in the parent div onClick.
+                                  // Let's keep the parent div onClick logic but add the button for better UX.
+                              }
+                            }}>
+                              {hasBloqueio && <ShieldAlert size={10} className="text-[var(--color-error)]" />}
+                            </button>
+                            {diaEstaBloqueado && <span className="text-[9px] font-black text-red-600 dark:text-red-400">🔒</span>}
+                          </div>
                         </div>
                         
                         {/* Debug Info */}
@@ -711,7 +737,7 @@ export default function AgendaScreen() {
 
                         { !diaEstaBloqueado && (
                           <div className="flex flex-col gap-1">
-                            {dayAgendamentos.map(ag => {
+                            {dayAgendamentos.slice(0, expandedDays.includes(dateStr) ? undefined : 2).map(ag => {
                               const cliente = (clientes || []).find(c => c.id === ag.clienteId);
                               const isConcluido = ag.statusAtendimento === 'Concluido';
                               return (
@@ -774,6 +800,18 @@ export default function AgendaScreen() {
                                 </div>
                               );
                             })}
+                            
+                            {dayAgendamentos.length > 2 && expandedDays.includes(dateStr) && (
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setExpandedDays(prev => prev.filter(d => d !== dateStr));
+                                }}
+                                className="text-[9px] font-bold text-center text-[var(--color-text-sec-light)] bg-gray-100 dark:bg-gray-800 py-1 rounded mt-1 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors flex items-center justify-center gap-1"
+                              >
+                                Recolher <ChevronUp size={10} />
+                              </button>
+                            )}
                           </div>
                         )}
                         </div>
@@ -899,48 +937,56 @@ export default function AgendaScreen() {
               <h3 className="text-[10px] font-black text-[var(--color-primary)] uppercase tracking-widest flex items-center gap-2">
                 <Trash2 size={14} /> Solte aqui para desmarcar (Sessões Disponíveis)
               </h3>
+              <button 
+                onClick={() => setDropZoneMinimizado(!dropZoneMinimizado)}
+                className="text-[10px] font-bold text-[var(--color-primary)] bg-[var(--color-primary)]/10 px-3 py-1 rounded-full uppercase tracking-tighter transition-all active:scale-95"
+              >
+                {dropZoneMinimizado ? 'Expandir' : 'Minimizar'}
+              </button>
             </div>
             
-            <div 
-              onDragOver={handleDragOver}
-              onDrop={handleDropToFooter}
-              className="p-4 rounded-3xl border-2 border-dashed border-[var(--color-primary)]/20 bg-[var(--color-primary)]/5 min-h-[100px] transition-all hover:bg-[var(--color-primary)]/10"
-            >
-              <div className="flex overflow-x-auto gap-3 pb-2 no-scrollbar">
-                {(() => {
-                  const pacotesIds = new Set((pacotes || []).map(p => p.id));
-                  return (agendamentos || [])
-                    .filter(a => a.statusAtendimento === 'Disponivel' && pacotesIds.has(a.pacoteId || ''))
-                    .map(ag => {
-                      const cliente = (clientes || []).find(c => c.id === ag.clienteId);
-                      const terapia = (terapias || []).find(t => t.id === ag.terapiaId);
-                      return (
-                        <div 
-                          key={ag.id}
-                          draggable={true}
-                          onDragStart={(e) => {
-                            e.stopPropagation();
-                            isDragging.current = true;
-                            handleDragStart(e, {
-                              id: ag.id,
-                              type: 'agendamento',
-                              name: cliente?.nome || 'Cliente',
-                              time: 'Reagendar'
-                            });
-                          }}
-                          onDragEnd={(e) => {
-                            e.stopPropagation();
-                            isDragging.current = false;
-                            setDraggingId(null);
-                          }}
-                          className="bg-white dark:bg-gray-800 p-2 rounded-xl border border-[var(--color-primary)]/30 shadow-sm shrink-0 min-w-[120px] cursor-grab active:cursor-grabbing"
-                        >
-                          <p className="text-[10px] font-bold truncate">{cliente?.nome}</p>
-                          <p className="text-[8px] opacity-60 truncate">{terapias?.find(t => t.id === ag.terapiaId)?.nome}</p>
-                        </div>
-                      );
-                    });
-                })()}
+            <div className={`transition-all duration-300 overflow-hidden ${dropZoneMinimizado ? 'max-h-0 opacity-0' : 'max-h-[500px] opacity-100'}`}>
+              <div 
+                onDragOver={handleDragOver}
+                onDrop={handleDropToFooter}
+                className="p-4 rounded-3xl border-2 border-dashed border-[var(--color-primary)]/20 bg-[var(--color-primary)]/5 min-h-[100px] transition-all hover:bg-[var(--color-primary)]/10"
+              >
+                <div className="flex overflow-x-auto gap-3 pb-2 no-scrollbar">
+                  {(() => {
+                    const pacotesIds = new Set((pacotes || []).map(p => p.id));
+                    return (agendamentos || [])
+                      .filter(a => a.statusAtendimento === 'Disponivel' && pacotesIds.has(a.pacoteId || ''))
+                      .map(ag => {
+                        const cliente = (clientes || []).find(c => c.id === ag.clienteId);
+                        const terapia = (terapias || []).find(t => t.id === ag.terapiaId);
+                        return (
+                          <div 
+                            key={ag.id}
+                            draggable={!isMobile}
+                            onDragStart={(e) => {
+                              e.stopPropagation();
+                              isDragging.current = true;
+                              handleDragStart(e, {
+                                id: ag.id,
+                                type: 'agendamento',
+                                name: cliente?.nome || 'Cliente',
+                                time: 'Reagendar'
+                              });
+                            }}
+                            onDragEnd={(e) => {
+                              e.stopPropagation();
+                              isDragging.current = false;
+                              setDraggingId(null);
+                            }}
+                            className={`bg-white dark:bg-gray-800 p-2 rounded-xl border border-[var(--color-primary)]/30 shadow-sm shrink-0 min-w-[120px] ${isMobile ? '' : 'cursor-grab active:cursor-grabbing'}`}
+                          >
+                            <p className="text-[10px] font-bold truncate">{cliente?.nome}</p>
+                            <p className="text-[8px] opacity-60 truncate">{terapia?.nome}</p>
+                          </div>
+                        );
+                      });
+                  })()}
+                </div>
               </div>
             </div>
           </div>

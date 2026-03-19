@@ -152,14 +152,28 @@ export default function HomeScreen() {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     
+    const parseDateStr = (d: string, h: string) => {
+      if (!d) return 0;
+      let dateStr = d.replace(/\//g, '-');
+      const parts = dateStr.split('-');
+      if (parts.length === 3 && parts[0].length === 2) {
+        dateStr = `${parts[2]}-${parts[1]}-${parts[0]}`;
+      }
+      const dt = new Date(`${dateStr}T${h || '00:00'}`);
+      return isNaN(dt.getTime()) ? 0 : dt.getTime();
+    };
+
     return (agendamentos || [])
       .filter(ag => {
-        const agDate = safeDate(`${ag.data}T${ag.hora}`);
-        return agDate.getTime() >= todayStart.getTime() && ag.statusAtendimento === 'Agendado';
+        if (!ag.data) return false;
+        const time = parseDateStr(ag.data, ag.hora);
+        return time >= todayStart.getTime() && ag.statusAtendimento === 'Agendado';
       })
-      .sort((a, b) => safeDate(`${a.data}T${a.hora}`).getTime() - safeDate(`${b.data}T${b.hora}`).getTime())
+      .sort((a, b) => {
+        return parseDateStr(a.data, a.hora) - parseDateStr(b.data, b.hora);
+      })
       .slice(0, 5);
-  }, [agendamentos, safeDate]);
+  }, [agendamentos]);
 
   const handleConcluir = (agendamento: Agendamento) => {
     completeAppointment(agendamento.id);

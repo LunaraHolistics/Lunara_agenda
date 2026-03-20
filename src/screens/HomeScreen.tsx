@@ -30,17 +30,17 @@ export default function HomeScreen() {
   const currentYear = new Date().getFullYear();
 
   // Filtra agendamentos do mês atual (não cancelados)
+  const currentMonthStr = String(currentMonth + 1).padStart(2, '0');
   const agendamentosMes = useMemo(() => {
     return (agendamentos || []).filter(ag => {
       // Orphan filter: se tiver pacoteId, o pacote deve existir
       if (ag.pacoteId && !(pacotes || []).some(p => p.id === ag.pacoteId)) return false;
 
-      const date = safeDate(`${ag.data}T${ag.hora}`);
-      return date.getMonth() === currentMonth && 
-             date.getFullYear() === currentYear &&
-             ag.statusAtendimento !== 'Cancelado';
+      if (!ag.data) return false;
+      return String(ag.data).slice(0, 7) === `${currentYear}-${currentMonthStr}` &&
+             (ag.statusAtendimento === 'Concluido' || ag.statusAtendimento === 'Agendado');
     });
-  }, [agendamentos, pacotes, currentMonth, currentYear, safeDate]);
+  }, [agendamentos, pacotes, currentYear, currentMonthStr]);
 
   // Cálculos dos Cards
   const transacoesMes = useMemo(() => {
@@ -146,6 +146,17 @@ export default function HomeScreen() {
       return totalRestante === 1;
     });
   }, [pacotes]);
+
+  // Métricas de Atendimentos do Mês
+  const totalConcluidos = useMemo(() => {
+    return agendamentosMes.filter(ag => ag.statusAtendimento === 'Concluido').length;
+  }, [agendamentosMes]);
+
+  const totalPendentes = useMemo(() => {
+    return agendamentosMes.filter(ag => ag.statusAtendimento === 'Agendado').length;
+  }, [agendamentosMes]);
+
+  const totalMes = totalConcluidos + totalPendentes;
 
   // Próximos Atendimentos (Futuros e do dia atual)
   const proximosAtendimentos = useMemo(() => {
@@ -304,6 +315,27 @@ export default function HomeScreen() {
                   {isCargaAlta && <span className="text-[10px] bg-orange-100 dark:bg-orange-900/30 px-1.5 py-0.5 rounded-md uppercase">Carga Alta</span>}
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Métricas do Mês */}
+        <div className="mt-4">
+          <h3 className="text-sm font-bold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] mb-3 px-1">
+            Atendimentos do Mês
+          </h3>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col items-center justify-center">
+              <span className="text-2xl font-black text-[var(--color-success)]">{totalConcluidos}</span>
+              <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mt-1">Realizados</span>
+            </div>
+            <div className="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col items-center justify-center">
+              <span className="text-2xl font-black text-[var(--color-warning)]">{totalPendentes}</span>
+              <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mt-1">Pendentes</span>
+            </div>
+            <div className="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col items-center justify-center">
+              <span className="text-2xl font-black text-[var(--color-primary)]">{totalMes}</span>
+              <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mt-1">Total</span>
             </div>
           </div>
         </div>

@@ -54,8 +54,14 @@ export default function AgendaScreen() {
   const [isBloqueiosOpen, setIsBloqueiosOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [isMobileDateModalOpen, setIsMobileDateModalOpen] = useState(false);
+  const [isMobileCompleteModalOpen, setIsMobileCompleteModalOpen] = useState(false);
   const [mobileSelectedAgendamento, setMobileSelectedAgendamento] = useState<Agendamento | null>(null);
+  const [mobileCompleteAgendamento, setMobileCompleteAgendamento] = useState<Agendamento | null>(null);
   const [mobileNewDate, setMobileNewDate] = useState('');
+  
+  const touchTimer = useRef<NodeJS.Timeout | null>(null);
+  const isLongPressTriggered = useRef(false);
+  const touchStartY = useRef(0);
   const [isDayAgendaOpen, setIsDayAgendaOpen] = useState(false);
   const [minimizado, setMinimizado] = useState(false);
   const [showOrfaos, setShowOrfaos] = useState(false);
@@ -168,65 +174,6 @@ export default function AgendaScreen() {
       window.removeEventListener('dragover', handleAutoScroll);
     };
   }, []);
-
-  const handleTouchStart = (e: React.TouchEvent, item: any) => {
-    setDragItem(item);
-    setDraggingId(item.id);
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!dragItem) return;
-    const touch = e.touches[0];
-    const element = document.elementFromPoint(touch.clientX, touch.clientY);
-    const dayElement = element?.closest('[data-day]');
-    if (dayElement) {
-      const day = parseInt(dayElement.getAttribute('data-day') || '0');
-      setDragOverDay(day);
-    } else {
-      setDragOverDay(null);
-    }
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (!dragItem || dragOverDay === null) {
-      setDragItem(null);
-      setDraggingId(null);
-      setDragOverDay(null);
-      return;
-    }
-
-    const day = dragOverDay;
-    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    const diaEstaBloqueado = diasBloqueados.some(d => d.data === dateStr);
-
-    if (diaEstaBloqueado) {
-      showNotification('Este dia está bloqueado.', 'error');
-      setDragItem(null);
-      setDraggingId(null);
-      setDragOverDay(null);
-      return;
-    }
-
-    if (dragItem.type === 'agendamento') {
-      const item = (agendamentos || []).find(a => String(a.id) === String(dragItem.id));
-      if (item?.statusAtendimento === 'Concluido') {
-        showNotification('Não é possível mover uma sessão concluída.', 'error');
-      } else {
-        setAgendamentos(prev =>
-          prev.map(i =>
-            String(i.id) === String(dragItem.id)
-              ? { ...i, data: dateStr, statusAtendimento: 'Agendado' }
-              : i
-          )
-        );
-        showNotification('Agendamento reagendado!', 'success');
-      }
-    }
-
-    setDragItem(null);
-    setDraggingId(null);
-    setDragOverDay(null);
-  };
 
   // Handlers
   const handleDragOver = (e: React.DragEvent) => {
@@ -467,6 +414,70 @@ export default function AgendaScreen() {
     setIsMobileDateModalOpen(true);
   };
 
+  const handleTouchStart = (e: React.TouchEvent, ag: Agendamento) => {
+    if (!isMobile || ag.statusAtendimento === 'Concluido') return;
+    
+    e.stopPropagation();
+    isLongPressTriggered.current = false;
+    touchStartY.current = e.touches[0].clientY;
+    const target = e.currentTarget as HTMLElement;
+    
+    // Feedback visual do toque longo
+    target.style.transition = 'transform 2s ease-in-out, box-shadow 2s ease-in-out';
+    target.style.transform = 'scale(0.95)';
+    target.style.boxShadow = 'inset 0 0 10px rgba(0,0,0,0.1)';
+    
+    touchTimer.current = setTimeout(() => {
+      isLongPressTriggered.current = true;
+      target.style.transition = 'transform 0.2s, box-shadow 0.2s';
+      target.style.transform = 'scale(1)';
+      target.style.boxShadow = 'none';
+      handleMobileSelect(ag); // Abre reagendamento
+    }, 2000);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isMobile) return;
+    
+    e.stopPropagation();
+    // Se moveu o dedo mais de 10px, cancela o toque longo
+    const currentY = e.touches[0].clientY;
+    if (Math.abs(currentY - touchStartY.current) > 10) {
+      if (touchTimer.current) {
+        clearTimeout(touchTimer.current);
+        touchTimer.current = null;
+      }
+      isLongPressTriggered.current = true; // Previne o toque simples
+      
+      const target = e.currentTarget as HTMLElement;
+      target.style.transition = 'transform 0.2s, box-shadow 0.2s';
+      target.style.transform = 'scale(1)';
+      target.style.boxShadow = 'none';
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent, ag: Agendamento) => {
+    if (!isMobile || ag.statusAtendimento === 'Concluido') return;
+    
+    e.stopPropagation();
+    const target = e.currentTarget as HTMLElement;
+    target.style.transition = 'transform 0.2s, box-shadow 0.2s';
+    target.style.transform = 'scale(1)';
+    target.style.boxShadow = 'none';
+
+    if (touchTimer.current) {
+      clearTimeout(touchTimer.current);
+      touchTimer.current = null;
+    }
+
+    if (!isLongPressTriggered.current) {
+      // Toque simples (Tap)
+      e.preventDefault(); // Previne o onClick
+      setMobileCompleteAgendamento(ag);
+      setIsMobileCompleteModalOpen(true);
+    }
+  };
+
   const handleConfirmMobileDate = () => {
     if (!mobileSelectedAgendamento || !mobileNewDate) return;
     
@@ -657,8 +668,6 @@ export default function AgendaScreen() {
                       <div 
                         key={`${year}-${month}-${day}`} 
                         data-day={day}
-                        onTouchMove={handleTouchMove}
-                        onTouchEnd={handleTouchEnd}
                         onClick={(e) => {
                           e.stopPropagation();
                           if (isDragging.current) return;
@@ -746,12 +755,13 @@ export default function AgendaScreen() {
                                   draggable={!isConcluido && !isMobile}
                                   data-id={ag.id}
                                   onClick={(e) => {
-                                    if (isMobile) {
-                                      handleMobileSelect(ag);
-                                    } else {
+                                    if (!isMobile) {
                                       openAppointmentModal(e, ag);
                                     }
                                   }}
+                                  onTouchStart={(e) => handleTouchStart(e, ag)}
+                                  onTouchMove={handleTouchMove}
+                                  onTouchEnd={(e) => handleTouchEnd(e, ag)}
                                   onDragStart={(e) => {
                                     if (ag.statusAtendimento === 'Concluido') {
                                       e.preventDefault();
@@ -786,7 +796,7 @@ export default function AgendaScreen() {
                                     touchAction: 'none', 
                                     WebkitUserDrag: isConcluido ? 'none' : 'element'
                                   } as any}
-                                  className={`text-[9px] p-1 rounded border leading-tight transition-all ${isConcluido ? '' : 'cursor-grab active:cursor-grabbing'} ${
+                                  className={`text-[9px] p-1 rounded border leading-tight transition-all relative ${isConcluido ? '' : 'cursor-grab active:cursor-grabbing'} ${
                                     draggingId === ag.id ? 'opacity-50' : ''
                                   } ${
                                     isConcluido ? 'bg-gray-100 text-gray-400 border-gray-200' : 'bg-white dark:bg-gray-700 text-[var(--color-primary)] border-[var(--color-primary)]/30'
@@ -794,7 +804,10 @@ export default function AgendaScreen() {
                                 >
                                   <div className="flex justify-between items-center font-black">
                                     <span>{ag.hora}</span>
-                                    {isConcluido && <CheckCircle2 size={8} />}
+                                    <div className="flex items-center gap-1">
+                                      {isMobile && !isConcluido && <Clock size={8} className="opacity-50" />}
+                                      {isConcluido && <CheckCircle2 size={8} />}
+                                    </div>
                                   </div>
                                   <div className="truncate">{cliente?.nome?.split(' ')[0]}</div>
                                 </div>
@@ -1108,6 +1121,52 @@ export default function AgendaScreen() {
                 Confirmar Agendamento
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Conclusão Mobile */}
+      {isMobileCompleteModalOpen && mobileCompleteAgendamento && (
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-md p-0 sm:p-4">
+          <div className="bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] w-full max-w-md rounded-t-[3rem] sm:rounded-[2.5rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300">
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h2 className="text-2xl font-black text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] tracking-tighter">
+                  Concluir <span className="text-[var(--color-primary)]">Sessão</span>
+                </h2>
+                <p className="text-sm font-medium text-[var(--color-text-sec-light)] mt-1">
+                  Marcar este atendimento como realizado.
+                </p>
+              </div>
+              <button onClick={() => setIsMobileCompleteModalOpen(false)} className="bg-gray-100 dark:bg-gray-800 p-2 rounded-full transition-transform active:scale-90">
+                <X size={24} className="text-[var(--color-text-sec-light)]" />
+              </button>
+            </div>
+
+            <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 mb-6">
+              <p className="font-medium text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">
+                {clientes?.find(c => c.id === mobileCompleteAgendamento.clienteId)?.nome}
+              </p>
+              <p className="text-sm text-[var(--color-text-sec-light)] mt-1">
+                {terapias?.find(t => t.id === mobileCompleteAgendamento.terapiaId)?.nome}
+              </p>
+              <div className="flex items-center gap-2 mt-3 text-sm font-bold text-[var(--color-primary)]">
+                <Clock size={16} />
+                <span>{mobileCompleteAgendamento.data.split('-').reverse().join('/')} às {mobileCompleteAgendamento.hora}</span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                handleCompleteAppointment(mobileCompleteAgendamento.id);
+                setIsMobileCompleteModalOpen(false);
+                setMobileCompleteAgendamento(null);
+              }}
+              className="w-full h-14 bg-[var(--color-success)] text-white rounded-2xl font-bold text-lg shadow-lg shadow-[var(--color-success)]/30 hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
+            >
+              <CheckCircle2 size={24} />
+              Concluir Atendimento
+            </button>
           </div>
         </div>
       )}

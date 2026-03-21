@@ -21,6 +21,8 @@ export interface Cliente {
 
 export interface DadosProfissionais {
   nomeRazaoSocial: string;
+  nomeEmpresa?: string;
+  tipoProfissional: 'Autônomo' | 'MEI';
   cpfCnpj: string;
   registroProfissional: string;
   endereco: string;

@@ -25,7 +25,7 @@ export default function HomeScreen() {
   const [showFinanceiro, setShowFinanceiro] = useState(false);
   const [showConfiguracoes, setShowConfiguracoes] = useState(false);
   const [showContasAReceber, setShowContasAReceber] = useState(false);
-  const [showValues, setShowValues] = useState(true);
+  const [showValues, setShowValues] = useState(() => localStorage.getItem('lunara_show_values') !== 'false');
 
   const currentMonth = new Date().getMonth();
   const currentYear = new Date().getFullYear();
@@ -263,7 +263,7 @@ export default function HomeScreen() {
             Resumo de {new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(new Date())}
           </p>
         </div>
-        <button onClick={() => setShowValues(!showValues)} className="p-2 text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)]">
+        <button onClick={() => { const newValue = !showValues; setShowValues(newValue); localStorage.setItem('lunara_show_values', String(newValue)); }} className="p-2 text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)]">
           {showValues ? <Eye size={20} /> : <EyeOff size={20} />}
         </button>
       </div>

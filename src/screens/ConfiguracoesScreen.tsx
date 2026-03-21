@@ -22,6 +22,8 @@ export default function ConfiguracoesScreen({ onBack }: ConfiguracoesProps) {
   const [dadosProfissionais, setDadosProfissionais] = useState<DadosProfissionais>(() => {
     return StorageService.getData(StorageKeys.DADOS_PROFISSIONAIS) || {
       nomeRazaoSocial: '',
+      nomeEmpresa: '',
+      tipoProfissional: 'Autônomo',
       cpfCnpj: '',
       registroProfissional: '',
       endereco: '',
@@ -35,7 +37,7 @@ export default function ConfiguracoesScreen({ onBack }: ConfiguracoesProps) {
 
   const saveDadosProfissionais = () => {
     StorageService.saveData(StorageKeys.DADOS_PROFISSIONAIS, dadosProfissionais);
-    showStatus('success', 'Dados profissionais salvos!');
+    showStatus('success', 'Dados atualizados!');
     setIsEditing(false);
   };
 
@@ -123,6 +125,8 @@ export default function ConfiguracoesScreen({ onBack }: ConfiguracoesProps) {
             </div>
             <div className="space-y-2 text-sm">
               <p><span className="font-bold">Nome:</span> {dadosProfissionais.nomeRazaoSocial}</p>
+              {dadosProfissionais.nomeEmpresa && <p><span className="font-bold">Empresa:</span> {dadosProfissionais.nomeEmpresa}</p>}
+              <p><span className="font-bold">Tipo:</span> {dadosProfissionais.tipoProfissional}</p>
               <p><span className="font-bold">CPF/CNPJ:</span> {dadosProfissionais.cpfCnpj}</p>
               <p><span className="font-bold">Registro:</span> {dadosProfissionais.registroProfissional}</p>
               <p><span className="font-bold">Endereço:</span> {dadosProfissionais.endereco}</p>
@@ -140,8 +144,33 @@ export default function ConfiguracoesScreen({ onBack }: ConfiguracoesProps) {
                 <input type="text" value={dadosProfissionais.nomeRazaoSocial} onChange={e => setDadosProfissionais({...dadosProfissionais, nomeRazaoSocial: e.target.value})} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-400 uppercase mb-1">CPF ou CNPJ</label>
-                <input type="text" value={dadosProfissionais.cpfCnpj} onChange={e => setDadosProfissionais({...dadosProfissionais, cpfCnpj: e.target.value})} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
+                <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Nome da Empresa / Nome Fantasia</label>
+                <input type="text" value={dadosProfissionais.nomeEmpresa} onChange={e => setDadosProfissionais({...dadosProfissionais, nomeEmpresa: e.target.value})} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Tipo de Profissional</label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2">
+                    <input type="radio" name="tipo" value="Autônomo" checked={dadosProfissionais.tipoProfissional === 'Autônomo'} onChange={e => setDadosProfissionais({...dadosProfissionais, tipoProfissional: 'Autônomo', cpfCnpj: ''})} />
+                    Autônomo
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input type="radio" name="tipo" value="MEI" checked={dadosProfissionais.tipoProfissional === 'MEI'} onChange={e => setDadosProfissionais({...dadosProfissionais, tipoProfissional: 'MEI'})} />
+                    MEI
+                  </label>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-400 uppercase mb-1">
+                  {dadosProfissionais.tipoProfissional === 'MEI' ? 'CNPJ' : 'CPF'}
+                </label>
+                <input 
+                  type="text" 
+                  value={dadosProfissionais.cpfCnpj} 
+                  onChange={e => setDadosProfissionais({...dadosProfissionais, cpfCnpj: e.target.value})} 
+                  className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" 
+                  required={dadosProfissionais.tipoProfissional === 'MEI'}
+                />
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Registro Profissional</label>

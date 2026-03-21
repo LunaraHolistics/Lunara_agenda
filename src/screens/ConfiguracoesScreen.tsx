@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { ArrowLeft, Download, Upload, AlertTriangle, Settings as SettingsIcon, CheckCircle2, XCircle, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Download, Upload, AlertTriangle, Settings as SettingsIcon, CheckCircle2, XCircle, ShieldCheck, Pencil } from 'lucide-react';
 import { useAppContext } from '../AppContext';
 import { DadosProfissionais } from '../types';
 import { StorageService, StorageKeys } from '../services/StorageService';
@@ -28,10 +28,15 @@ export default function ConfiguracoesScreen({ onBack }: ConfiguracoesProps) {
       telefone: ''
     };
   });
+  const [isEditing, setIsEditing] = useState(() => {
+    const data = StorageService.getData(StorageKeys.DADOS_PROFISSIONAIS);
+    return !data || !data.nomeRazaoSocial;
+  });
 
   const saveDadosProfissionais = () => {
     StorageService.saveData(StorageKeys.DADOS_PROFISSIONAIS, dadosProfissionais);
     showStatus('success', 'Dados profissionais salvos!');
+    setIsEditing(false);
   };
 
   const showStatus = (type: StatusType['type'], message: string) => {
@@ -108,32 +113,55 @@ export default function ConfiguracoesScreen({ onBack }: ConfiguracoesProps) {
           </div>
         )}
 
-        <div className="mb-8 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] p-6 rounded-3xl shadow-sm">
-          <h2 className="text-lg font-bold mb-4">Dados para Recibos e Informes</h2>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Nome Completo/Razão Social</label>
-              <input type="text" value={dadosProfissionais.nomeRazaoSocial} onChange={e => setDadosProfissionais({...dadosProfissionais, nomeRazaoSocial: e.target.value})} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
+        {!isEditing && (
+          <div className="mb-8 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] p-6 rounded-3xl shadow-sm">
+            <div className="flex justify-between items-start mb-4">
+              <h2 className="text-lg font-bold">Dados para Recibos e Informes</h2>
+              <button onClick={() => setIsEditing(true)} className="flex items-center gap-2 text-[var(--color-primary)] font-bold">
+                <Pencil size={18} /> Editar
+              </button>
             </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-400 uppercase mb-1">CPF ou CNPJ</label>
-              <input type="text" value={dadosProfissionais.cpfCnpj} onChange={e => setDadosProfissionais({...dadosProfissionais, cpfCnpj: e.target.value})} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
+            <div className="space-y-2 text-sm">
+              <p><span className="font-bold">Nome:</span> {dadosProfissionais.nomeRazaoSocial}</p>
+              <p><span className="font-bold">CPF/CNPJ:</span> {dadosProfissionais.cpfCnpj}</p>
+              <p><span className="font-bold">Registro:</span> {dadosProfissionais.registroProfissional}</p>
+              <p><span className="font-bold">Endereço:</span> {dadosProfissionais.endereco}</p>
+              <p><span className="font-bold">Telefone:</span> {dadosProfissionais.telefone}</p>
             </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Registro Profissional</label>
-              <input type="text" value={dadosProfissionais.registroProfissional} onChange={e => setDadosProfissionais({...dadosProfissionais, registroProfissional: e.target.value})} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Endereço</label>
-              <input type="text" value={dadosProfissionais.endereco} onChange={e => setDadosProfissionais({...dadosProfissionais, endereco: e.target.value})} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Telefone</label>
-              <input type="text" value={dadosProfissionais.telefone} onChange={e => setDadosProfissionais({...dadosProfissionais, telefone: e.target.value})} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
-            </div>
-            <button onClick={saveDadosProfissionais} className="w-full py-3 bg-[var(--color-primary)] text-white rounded-xl font-bold hover:bg-[var(--color-primary)]/90 transition-colors">Salvar Dados</button>
           </div>
-        </div>
+        )}
+
+        {isEditing && (
+          <div className="mb-8 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] p-6 rounded-3xl shadow-sm">
+            <h2 className="text-lg font-bold mb-4">Dados para Recibos e Informes</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Nome Completo/Razão Social</label>
+                <input type="text" value={dadosProfissionais.nomeRazaoSocial} onChange={e => setDadosProfissionais({...dadosProfissionais, nomeRazaoSocial: e.target.value})} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-400 uppercase mb-1">CPF ou CNPJ</label>
+                <input type="text" value={dadosProfissionais.cpfCnpj} onChange={e => setDadosProfissionais({...dadosProfissionais, cpfCnpj: e.target.value})} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Registro Profissional</label>
+                <input type="text" value={dadosProfissionais.registroProfissional} onChange={e => setDadosProfissionais({...dadosProfissionais, registroProfissional: e.target.value})} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Endereço</label>
+                <input type="text" value={dadosProfissionais.endereco} onChange={e => setDadosProfissionais({...dadosProfissionais, endereco: e.target.value})} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Telefone</label>
+                <input type="text" value={dadosProfissionais.telefone} onChange={e => setDadosProfissionais({...dadosProfissionais, telefone: e.target.value})} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
+              </div>
+              <div className="flex gap-2">
+                <button onClick={saveDadosProfissionais} className="flex-1 py-3 bg-[var(--color-primary)] text-white rounded-xl font-bold hover:bg-[var(--color-primary)]/90 transition-colors">Salvar Dados</button>
+                <button onClick={() => setIsEditing(false)} className="px-6 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl font-bold">Cancelar</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="mb-6">
           <h2 className="text-sm font-semibold text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] uppercase tracking-wider mb-3">

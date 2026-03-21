@@ -15,6 +15,8 @@ type Tab = 'home' | 'clientes' | 'terapias' | 'pacotes' | 'agenda' | 'financeiro
 function AppContent() {
   const [activeTab, setActiveTab] = useState<Tab>('home');
 
+  const { agendamentos, clientes, terapias } = useAppContext();
+
   useEffect(() => {
     if ('Notification' in window) {
       if (Notification.permission === 'default') {
@@ -28,6 +30,31 @@ function AppContent() {
         .catch(err => console.error('Erro ao registrar SW', err));
     }
   }, []);
+
+  useEffect(() => {
+    const checkAppointments = () => {
+      const now = new Date();
+      agendamentos.forEach(ag => {
+        const appointmentDate = new Date(`${ag.data}T${ag.hora}`);
+        const diff = appointmentDate.getTime() - now.getTime();
+        
+        // 5 minutos = 300000 ms
+        if (diff > 0 && diff <= 300000) {
+          const cliente = clientes.find(c => c.id === ag.clienteId);
+          const terapia = terapias.find(t => t.id === ag.terapiaId);
+          
+          if (Notification.permission === 'granted') {
+            new Notification('Lembrete de Atendimento', {
+              body: `Atendimento com ${cliente?.nome || 'Cliente'} (${terapia?.nome || 'Terapia'}) em 5 minutos!`,
+            });
+          }
+        }
+      });
+    };
+
+    const interval = setInterval(checkAppointments, 60000); // Verifica a cada minuto
+    return () => clearInterval(interval);
+  }, [agendamentos, clientes, terapias]);
 
   const renderScreen = () => {
     switch (activeTab) {

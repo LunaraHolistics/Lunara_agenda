@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { DollarSign, Clock, Tag, Plus, ChevronRight, PieChart, Settings, Check, Trash2, AlertTriangle, CheckCircle, Calendar, Package } from 'lucide-react';
+import { DollarSign, Clock, Tag, Plus, ChevronRight, PieChart, Settings, Check, Trash2, AlertTriangle, CheckCircle, Calendar, Package, Eye, EyeOff } from 'lucide-react';
 import { Agendamento } from '../types';
 import FinanceiroScreen from './FinanceiroScreen';
 import ConfiguracoesScreen from './ConfiguracoesScreen';
@@ -25,6 +25,7 @@ export default function HomeScreen() {
   const [showFinanceiro, setShowFinanceiro] = useState(false);
   const [showConfiguracoes, setShowConfiguracoes] = useState(false);
   const [showContasAReceber, setShowContasAReceber] = useState(false);
+  const [showValues, setShowValues] = useState(true);
 
   const currentMonth = new Date().getMonth();
   const currentYear = new Date().getFullYear();
@@ -215,6 +216,7 @@ export default function HomeScreen() {
   };
 
   const formatCurrency = (value: number) => {
+    if (!showValues) return 'R$ ****';
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   };
 
@@ -255,12 +257,15 @@ export default function HomeScreen() {
       <div className="p-6 pb-2 bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-semibold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] tracking-tight">
-            Olá, Terapeuta
+            Olá, Celso
           </h2>
           <p className="text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] text-sm mt-1">
             Resumo de {new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(new Date())}
           </p>
         </div>
+        <button onClick={() => setShowValues(!showValues)} className="p-2 text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)]">
+          {showValues ? <Eye size={20} /> : <EyeOff size={20} />}
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 pb-24">

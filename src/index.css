@@ -96,3 +96,9 @@ body {
   z-index: 9999;
 }
 
+@media print {
+  .print-hidden {
+    display: none !important;
+  }
+}
+

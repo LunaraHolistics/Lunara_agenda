@@ -87,6 +87,9 @@ export default function FinanceiroScreen({ onBack }: FinanceiroProps) {
       // Orphan filter: se tiver pacoteId, o pacote deve existir
       if ('pacoteId' in t && t.pacoteId && !(pacotes || []).some(p => p.id === t.pacoteId)) return false;
 
+      // Filtro de valor zero
+      if (Number(t.valor) === 0) return false;
+
       const date = new Date(t.data + 'T12:00:00'); // Evitar problemas de fuso horário
       const matchMes = String(date.getMonth()) === filtroMes;
       const matchAno = String(date.getFullYear()) === filtroAno;

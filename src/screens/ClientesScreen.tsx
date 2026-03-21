@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Plus, Edit2, Trash2, X, Smartphone, ChevronDown } from 'lucide-react';
-import { StorageService } from '../utils/storage';
-import { Cliente, ImportedContact } from '../types';
+import { Search, Plus, Edit2, Trash2, X, Smartphone, ChevronDown, MessageCircle, Sparkles, FileText } from 'lucide-react';
+import { StorageService, StorageKeys } from '../services/StorageService';
+import { Cliente, ImportedContact, DadosProfissionais, Transacao } from '../types';
 import { useAppContext } from '../AppContext';
+import PrintInformeModal from '../components/PrintInformeModal';
 
 export default function ClientesScreen() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
@@ -14,14 +15,18 @@ export default function ClientesScreen() {
   const [nome, setNome] = useState('');
   const [ddi, setDdi] = useState('+55');
   const [telefone, setTelefone] = useState('');
+  const [cpf, setCpf] = useState('');
   const [status, setStatus] = useState(true);
   const [observacoes, setObservacoes] = useState('');
   const [alterado, setAlterado] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [toast, setToast] = useState(false);
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const { showNotification, handleImportContacts, addCliente, updateCliente, deleteCliente, clientes: contextClientes } = useAppContext();
+  const { showNotification, handleImportContacts, addCliente, updateCliente, deleteCliente, clientes: contextClientes, agendamentos, terapias, confirmAction, transacoes } = useAppContext();
+  const isDecember = new Date().getMonth() === 11;
+  const isMarchOrApril = new Date().getMonth() === 2 || new Date().getMonth() === 3;
 
   const handleSave = async () => {
     if (!nome.trim()) {
@@ -36,6 +41,7 @@ export default function ClientesScreen() {
     const clienteData: Omit<Cliente, 'id'> = {
       nome,
       telefone: fullPhone,
+      cpf,
       observacoes,
     };
 
@@ -62,6 +68,7 @@ export default function ClientesScreen() {
     if (cliente) {
       setEditingCliente(cliente);
       setNome(cliente.nome || '');
+      setCpf(cliente.cpf || '');
       
       if (cliente.telefone && cliente.telefone.startsWith('+')) {
         // Extrai o DDI (assume-se 2 ou 3 dígitos após o +)
@@ -82,6 +89,7 @@ export default function ClientesScreen() {
       setNome('');
       setDdi('+55');
       setTelefone('');
+      setCpf('');
       setStatus(true);
       setObservacoes('');
     }
@@ -178,6 +186,42 @@ export default function ClientesScreen() {
                   {cliente.telefone && <p className="text-[var(--color-text-sec-light)] text-sm">{cliente.telefone}</p>}
                 </div>
                 <div className="flex items-center gap-2">
+                  <a 
+                    href={`https://wa.me/${cliente.telefone.replace(/\D/g, '')}?text=${encodeURIComponent(`Olá, ${cliente.nome}! Passando para confirmar nossa sessão. Gratidão, Celso.`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-2 text-green-600 hover:bg-green-100 rounded-full"
+                  >
+                    <MessageCircle size={20} />
+                  </a>
+                  {isDecember && (
+                    <button 
+                      onClick={() => {
+                        const currentYear = new Date().getFullYear();
+                        const agendamentosCliente = (agendamentos || []).filter(a => 
+                          a.clienteId === cliente.id && 
+                          a.status === 'Concluído' && 
+                          new Date(a.data).getFullYear() === currentYear
+                        );
+                        
+                        const total = agendamentosCliente.length;
+                        const terapiasIds = [...new Set(agendamentosCliente.map(a => a.terapiaId))];
+                        const nomesTerapias = terapiasIds.map(tid => terapias.find(t => t.id === tid)?.nome).filter(Boolean).join(', ');
+                        
+                        const mensagem = `Olá, ${cliente.nome}! 🌿 Ao encerrarmos este ciclo, gostaria de agradecer pela confiança. Neste ano, caminhamos juntos em ${total} sessões de ${nomesTerapias}. Que a energia cultivada floresça em sua vida. Gratidão, Celso Luiz.`;
+                        
+                        confirmAction(
+                          `Gerar retrospectiva para ${cliente.nome}?`,
+                          () => {
+                            window.open(`https://wa.me/${cliente.telefone.replace(/\D/g, '')}?text=${encodeURIComponent(mensagem)}`, '_blank');
+                          }
+                        );
+                      }}
+                      className="p-2 text-purple-600 hover:bg-purple-100 rounded-full"
+                    >
+                      <Sparkles size={20} />
+                    </button>
+                  )}
                   <button onClick={() => openModal(cliente)} className="p-2 text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 rounded-full"><Edit2 size={20} /></button>
                   <button 
                     onClick={() => {
@@ -247,9 +291,33 @@ export default function ClientesScreen() {
                 <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Observações</label>
                 <textarea value={observacoes} onChange={(e) => { setObservacoes(e.target.value); setAlterado(true); }} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none min-h-[80px] resize-none" />
               </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-400 uppercase mb-1">CPF</label>
+                <input type="text" value={cpf} onChange={(e) => { setCpf(e.target.value); setAlterado(true); }} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
+              </div>
+
+              {editingCliente && (
+                <button 
+                  onClick={() => setIsPrintModalOpen(true)}
+                  className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold ${isMarchOrApril ? 'bg-[var(--color-primary)] text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}
+                >
+                  <FileText size={20} /> Gerar Informe de Pagamentos (IR)
+                </button>
+              )}
             </div>
           </div>
         </div>
+      )}
+
+      {isPrintModalOpen && editingCliente && (
+        <PrintInformeModal 
+          cliente={editingCliente} 
+          dadosProfissionais={StorageService.getData(StorageKeys.DADOS_PROFISSIONAIS) || {}} 
+          transacoes={transacoes} 
+          agendamentos={agendamentos}
+          onClose={() => setIsPrintModalOpen(false)} 
+        />
       )}
 
       {isModalOpen && (

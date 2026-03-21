@@ -15,7 +15,16 @@ export interface Cliente {
   id: string;
   nome: string;
   telefone: string;
+  cpf?: string;
   observacoes?: string;
+}
+
+export interface DadosProfissionais {
+  nomeRazaoSocial: string;
+  cpfCnpj: string;
+  registroProfissional: string;
+  endereco: string;
+  telefone: string;
 }
 
 // ======================

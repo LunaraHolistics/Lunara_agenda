@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon, ShieldAlert, X, GripVertical, Clock, AlertCircle, CheckCircle2, Calendar, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon, ShieldAlert, X, GripVertical, Clock, AlertCircle, CheckCircle2, Calendar, Trash2, ChevronDown, ChevronUp, MessageCircle } from 'lucide-react';
 import { Cliente, Terapia, Agendamento, Bloqueio, Pacote } from '../types';
 import { StorageService } from '../utils/storage';
 import { useAppContext } from '../AppContext';
@@ -1045,8 +1045,18 @@ export default function AgendaScreen() {
               <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-800">
                 <label className="block text-[10px] font-black uppercase tracking-widest text-[var(--color-text-sec-light)] mb-2">Cliente</label>
                 {formClienteId ? (
-                  <div className="text-lg font-bold text-[var(--color-primary)]">
-                    {(clientes || []).find(c => c.id === formClienteId)?.nome || "Cliente"}
+                  <div className="flex items-center justify-between">
+                    <div className="text-lg font-bold text-[var(--color-primary)]">
+                      {(clientes || []).find(c => c.id === formClienteId)?.nome || "Cliente"}
+                    </div>
+                    <a 
+                      href={`https://wa.me/${(clientes || []).find(c => c.id === formClienteId)?.telefone.replace(/\D/g, '')}?text=${encodeURIComponent(`Olá, ${(clientes || []).find(c => c.id === formClienteId)?.nome}! Passando para confirmar nossa sessão de ${(terapias || []).find(t => t.id === formTerapiaIds[0])?.nome || 'terapia'} agendada para o dia ${formData} às ${formHora}. Podemos confirmar? Gratidão, Celso.`)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-2 text-green-600 hover:bg-green-100 rounded-full"
+                    >
+                      <MessageCircle size={20} />
+                    </a>
                   </div>
                 ) : (
                   <select value={formClienteId} onChange={e => setFormClienteId(e.target.value)} className="w-full bg-transparent font-bold text-sm outline-none cursor-pointer">

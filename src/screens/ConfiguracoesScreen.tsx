@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { ArrowLeft, Download, Upload, AlertTriangle, Settings as SettingsIcon, CheckCircle2, XCircle, ShieldCheck, Pencil } from 'lucide-react';
+import { ArrowLeft, Download, Upload, AlertTriangle, Settings as SettingsIcon, CheckCircle2, XCircle, ShieldCheck, Pencil, ChevronDown, ChevronUp } from 'lucide-react';
 import { useAppContext } from '../AppContext';
 import { DadosProfissionais } from '../types';
 import { StorageService, StorageKeys } from '../services/StorageService';
@@ -30,7 +30,8 @@ export default function ConfiguracoesScreen({ onBack }: ConfiguracoesProps) {
       telefone: ''
     };
   });
-  const [isEditing, setIsEditing] = useState(() => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(() => {
     const data = StorageService.getData(StorageKeys.DADOS_PROFISSIONAIS);
     return !data || !data.nomeRazaoSocial;
   });
@@ -39,6 +40,7 @@ export default function ConfiguracoesScreen({ onBack }: ConfiguracoesProps) {
     StorageService.saveData(StorageKeys.DADOS_PROFISSIONAIS, dadosProfissionais);
     showStatus('success', 'Dados atualizados!');
     setIsEditing(false);
+    setIsExpanded(false);
   };
 
   const showStatus = (type: StatusType['type'], message: string) => {
@@ -115,82 +117,95 @@ export default function ConfiguracoesScreen({ onBack }: ConfiguracoesProps) {
           </div>
         )}
 
-        {!isEditing && (
-          <div className="mb-8 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] p-6 rounded-3xl shadow-sm">
-            <div className="flex justify-between items-start mb-4">
-              <h2 className="text-lg font-bold">Dados para Recibos e Informes</h2>
-              <button onClick={() => setIsEditing(true)} className="flex items-center gap-2 text-[var(--color-primary)] font-bold">
-                <Pencil size={18} /> Editar
-              </button>
-            </div>
-            <div className="space-y-2 text-sm">
-              <p><span className="font-bold">Nome:</span> {dadosProfissionais.nomeRazaoSocial}</p>
-              {dadosProfissionais.nomeEmpresa && <p><span className="font-bold">Empresa:</span> {dadosProfissionais.nomeEmpresa}</p>}
-              <p><span className="font-bold">Tipo:</span> {dadosProfissionais.tipoProfissional}</p>
-              <p><span className="font-bold">CPF/CNPJ:</span> {dadosProfissionais.cpfCnpj}</p>
-              <p><span className="font-bold">Registro:</span> {dadosProfissionais.registroProfissional}</p>
-              <p><span className="font-bold">Endereço:</span> {dadosProfissionais.endereco}</p>
-              <p><span className="font-bold">Telefone:</span> {dadosProfissionais.telefone}</p>
+        <div className="mb-8 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] p-6 rounded-3xl shadow-sm">
+          <div className="flex justify-between items-center mb-4 cursor-pointer" onClick={() => setIsExpanded(!isExpanded)}>
+            <h2 className="text-lg font-bold">Dados para Recibos e Informes</h2>
+            <div className="flex items-center gap-2">
+              {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
             </div>
           </div>
-        )}
+          
+          {!isExpanded && (
+            <div className="text-sm text-gray-500 dark:text-gray-400">
+              Dados salvos: {dadosProfissionais.nomeEmpresa || dadosProfissionais.nomeRazaoSocial || 'Não informado'}
+            </div>
+          )}
 
-        {isEditing && (
-          <div className="mb-8 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] p-6 rounded-3xl shadow-sm">
-            <h2 className="text-lg font-bold mb-4">Dados para Recibos e Informes</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Nome Completo/Razão Social</label>
-                <input type="text" value={dadosProfissionais.nomeRazaoSocial} onChange={e => setDadosProfissionais({...dadosProfissionais, nomeRazaoSocial: e.target.value})} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Nome da Empresa / Nome Fantasia</label>
-                <input type="text" value={dadosProfissionais.nomeEmpresa} onChange={e => setDadosProfissionais({...dadosProfissionais, nomeEmpresa: e.target.value})} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Tipo de Profissional</label>
-                <div className="flex gap-4">
-                  <label className="flex items-center gap-2">
-                    <input type="radio" name="tipo" value="Autônomo" checked={dadosProfissionais.tipoProfissional === 'Autônomo'} onChange={e => setDadosProfissionais({...dadosProfissionais, tipoProfissional: 'Autônomo', cpfCnpj: ''})} />
-                    Autônomo
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input type="radio" name="tipo" value="MEI" checked={dadosProfissionais.tipoProfissional === 'MEI'} onChange={e => setDadosProfissionais({...dadosProfissionais, tipoProfissional: 'MEI'})} />
-                    MEI
-                  </label>
+          {isExpanded && (
+            <>
+              {!isEditing ? (
+                <>
+                  <div className="flex justify-end mb-4">
+                    <button onClick={() => setIsEditing(true)} className="flex items-center gap-2 text-[var(--color-primary)] font-bold">
+                      <Pencil size={18} /> Editar
+                    </button>
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <p><span className="font-bold">Nome:</span> {dadosProfissionais.nomeRazaoSocial}</p>
+                    {dadosProfissionais.nomeEmpresa && <p><span className="font-bold">Empresa:</span> {dadosProfissionais.nomeEmpresa}</p>}
+                    <p><span className="font-bold">Tipo:</span> {dadosProfissionais.tipoProfissional}</p>
+                    <p><span className="font-bold">CPF/CNPJ:</span> {dadosProfissionais.cpfCnpj}</p>
+                    <p><span className="font-bold">Registro:</span> {dadosProfissionais.registroProfissional}</p>
+                    <p><span className="font-bold">Endereço:</span> {dadosProfissionais.endereco}</p>
+                    <p><span className="font-bold">Telefone:</span> {dadosProfissionais.telefone}</p>
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Nome Completo/Razão Social</label>
+                    <input type="text" value={dadosProfissionais.nomeRazaoSocial} onChange={e => setDadosProfissionais({...dadosProfissionais, nomeRazaoSocial: e.target.value})} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Nome da Empresa / Nome Fantasia</label>
+                    <input type="text" value={dadosProfissionais.nomeEmpresa} onChange={e => setDadosProfissionais({...dadosProfissionais, nomeEmpresa: e.target.value})} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Tipo de Profissional</label>
+                    <div className="flex gap-4">
+                      <label className="flex items-center gap-2">
+                        <input type="radio" name="tipo" value="Autônomo" checked={dadosProfissionais.tipoProfissional === 'Autônomo'} onChange={e => setDadosProfissionais({...dadosProfissionais, tipoProfissional: 'Autônomo', cpfCnpj: ''})} />
+                        Autônomo
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input type="radio" name="tipo" value="MEI" checked={dadosProfissionais.tipoProfissional === 'MEI'} onChange={e => setDadosProfissionais({...dadosProfissionais, tipoProfissional: 'MEI'})} />
+                        MEI
+                      </label>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-400 uppercase mb-1">
+                      {dadosProfissionais.tipoProfissional === 'MEI' ? 'CNPJ' : 'CPF'}
+                    </label>
+                    <input 
+                      type="text" 
+                      value={dadosProfissionais.cpfCnpj} 
+                      onChange={e => setDadosProfissionais({...dadosProfissionais, cpfCnpj: e.target.value})} 
+                      className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" 
+                      required={dadosProfissionais.tipoProfissional === 'MEI'}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Registro Profissional</label>
+                    <input type="text" value={dadosProfissionais.registroProfissional} onChange={e => setDadosProfissionais({...dadosProfissionais, registroProfissional: e.target.value})} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Endereço</label>
+                    <input type="text" value={dadosProfissionais.endereco} onChange={e => setDadosProfissionais({...dadosProfissionais, endereco: e.target.value})} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Telefone</label>
+                    <input type="text" value={dadosProfissionais.telefone} onChange={e => setDadosProfissionais({...dadosProfissionais, telefone: e.target.value})} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={saveDadosProfissionais} className="flex-1 py-3 bg-[var(--color-primary)] text-white rounded-xl font-bold hover:bg-[var(--color-primary)]/90 transition-colors">Salvar Dados</button>
+                    <button onClick={() => setIsEditing(false)} className="px-6 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl font-bold">Cancelar</button>
+                  </div>
                 </div>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-400 uppercase mb-1">
-                  {dadosProfissionais.tipoProfissional === 'MEI' ? 'CNPJ' : 'CPF'}
-                </label>
-                <input 
-                  type="text" 
-                  value={dadosProfissionais.cpfCnpj} 
-                  onChange={e => setDadosProfissionais({...dadosProfissionais, cpfCnpj: e.target.value})} 
-                  className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" 
-                  required={dadosProfissionais.tipoProfissional === 'MEI'}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Registro Profissional</label>
-                <input type="text" value={dadosProfissionais.registroProfissional} onChange={e => setDadosProfissionais({...dadosProfissionais, registroProfissional: e.target.value})} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Endereço</label>
-                <input type="text" value={dadosProfissionais.endereco} onChange={e => setDadosProfissionais({...dadosProfissionais, endereco: e.target.value})} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Telefone</label>
-                <input type="text" value={dadosProfissionais.telefone} onChange={e => setDadosProfissionais({...dadosProfissionais, telefone: e.target.value})} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
-              </div>
-              <div className="flex gap-2">
-                <button onClick={saveDadosProfissionais} className="flex-1 py-3 bg-[var(--color-primary)] text-white rounded-xl font-bold hover:bg-[var(--color-primary)]/90 transition-colors">Salvar Dados</button>
-                <button onClick={() => setIsEditing(false)} className="px-6 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl font-bold">Cancelar</button>
-              </div>
-            </div>
-          </div>
-        )}
+              )}
+            </>
+          )}
+        </div>
 
         <div className="mb-6">
           <h2 className="text-sm font-semibold text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] uppercase tracking-wider mb-3">

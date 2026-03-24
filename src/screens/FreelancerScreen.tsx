@@ -155,68 +155,68 @@ export default function FreelancerScreen({ onBack }: FreelancerProps) {
   return (
     <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-950">
       {/* Header */}
-      <div className="pt-12 pb-4 px-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center gap-3 sticky top-0 z-20">
-        <button onClick={onBack} className="p-2 -ml-2 text-slate-600 dark:text-slate-400">
-          <ArrowLeft size={24} />
+      <div className="pt-8 pb-2 px-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center gap-3 sticky top-0 z-20 shrink-0">
+        <button onClick={onBack} className="p-1.5 -ml-1 text-slate-600 dark:text-slate-400">
+          <ArrowLeft size={20} />
         </button>
-        <div className="flex-1">
-          <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100">
+        <div className="flex-1 min-w-0">
+          <h1 className="text-lg font-bold text-slate-800 dark:text-slate-100 truncate">
             Freelancer
           </h1>
-          <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider">
+          <p className="text-[9px] text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider truncate">
             Serviços Externos
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-1.5">
           <button 
             onClick={() => { setModalType('Receita'); setIsAddModalOpen(true); }}
-            className="bg-emerald-600 text-white p-2 rounded-xl shadow-sm hover:bg-emerald-700 transition-colors"
+            className="bg-emerald-600 text-white p-1.5 rounded-lg shadow-sm hover:bg-emerald-700 transition-colors"
           >
-            <Plus size={20} />
+            <Plus size={18} />
           </button>
           <button 
             onClick={() => { setModalType('Despesa'); setIsAddModalOpen(true); }}
-            className="bg-rose-600 text-white p-2 rounded-xl shadow-sm hover:bg-rose-700 transition-colors"
+            className="bg-rose-600 text-white p-1.5 rounded-lg shadow-sm hover:bg-rose-700 transition-colors"
           >
-            <Plus size={20} />
+            <Plus size={18} />
           </button>
         </div>
       </div>
 
       {/* Card Unificado - Saúde Financeira Total */}
-      <div className="p-4 shrink-0">
-        <div className="bg-slate-800 dark:bg-slate-900 p-6 rounded-[2.5rem] text-white shadow-xl relative overflow-hidden border border-slate-700">
-          <div className="absolute top-0 right-0 p-4 opacity-5">
-            <Briefcase size={120} />
+      <div className="p-3 shrink-0">
+        <div className="bg-slate-800 dark:bg-slate-900 p-4 rounded-[1.5rem] text-white shadow-xl relative overflow-hidden border border-slate-700">
+          <div className="absolute top-0 right-0 p-2 opacity-5">
+            <Briefcase size={80} />
           </div>
           <div className="relative z-10">
-            <div className="flex items-center gap-2 mb-6">
-              <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
-                <Activity size={16} className="text-blue-400" />
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center">
+                <Activity size={12} className="text-blue-400" />
               </div>
-              <span className="text-xs font-bold uppercase tracking-widest text-slate-300">Resumo Consolidado</span>
+              <span className="text-[9px] font-bold uppercase tracking-widest text-slate-300">Resumo Consolidado</span>
             </div>
             
-            <div className="grid grid-cols-2 gap-6 mb-6">
-              <div className="bg-white/5 p-3 rounded-2xl border border-white/10">
-                <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Saldo Clínica</p>
-                <p className="text-lg font-bold text-emerald-400">{formatCurrency(unifiedStats.holistica)}</p>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div className="bg-white/5 p-2 rounded-xl border border-white/10">
+                <p className="text-[8px] uppercase font-bold text-slate-400 mb-0.5">Saldo Clínica</p>
+                <p className="text-sm font-bold text-emerald-400">{formatCurrency(unifiedStats.holistica)}</p>
               </div>
-              <div className="bg-white/5 p-3 rounded-2xl border border-white/10">
-                <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Saldo Freelancer</p>
-                <p className="text-lg font-bold text-blue-400">{formatCurrency(unifiedStats.freelancer)}</p>
+              <div className="bg-white/5 p-2 rounded-xl border border-white/10">
+                <p className="text-[8px] uppercase font-bold text-slate-400 mb-0.5">Saldo Freelancer</p>
+                <p className="text-sm font-bold text-blue-400">{formatCurrency(unifiedStats.freelancer)}</p>
               </div>
             </div>
 
-            <div className="pt-5 border-t border-white/10">
-              <div className="flex justify-between items-end">
+            <div className="pt-3 border-t border-white/10">
+              <div className="flex justify-between items-center">
                 <div>
-                  <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Total Geral Líquido</p>
-                  <p className="text-3xl font-black text-white">{formatCurrency(unifiedStats.total)}</p>
+                  <p className="text-[8px] uppercase font-bold text-slate-400 mb-0.5">Total Geral Líquido</p>
+                  <p className="text-xl font-black text-white">{formatCurrency(unifiedStats.total)}</p>
                 </div>
-                <div className="text-right">
-                  <p className="text-[10px] uppercase font-bold text-amber-400 mb-1">A Receber (Free)</p>
-                  <p className="text-sm font-bold text-amber-400">{formatCurrency(stats.pendente)}</p>
+                <div className="text-right bg-white/5 px-2 py-1 rounded-lg border border-white/5">
+                  <p className="text-[8px] uppercase font-bold text-amber-400">A Receber (Free)</p>
+                  <p className="text-xs font-bold text-amber-400">{formatCurrency(stats.pendente)}</p>
                 </div>
               </div>
             </div>
@@ -225,34 +225,34 @@ export default function FreelancerScreen({ onBack }: FreelancerProps) {
       </div>
 
       {/* Resumo do Mês Freelancer */}
-      <div className="px-4 pb-4 grid grid-cols-2 gap-3 shrink-0">
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
-          <div className="flex items-center gap-2 text-emerald-600 mb-1">
-            <TrendingUp size={14} />
-            <span className="text-[10px] font-bold uppercase">Ganhos</span>
+      <div className="px-3 pb-2 grid grid-cols-2 gap-2 shrink-0">
+        <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm">
+          <div className="flex items-center gap-1.5 text-emerald-600 mb-0.5">
+            <TrendingUp size={12} />
+            <span className="text-[9px] font-bold uppercase">Ganhos</span>
           </div>
-          <p className="text-lg font-bold text-slate-800 dark:text-slate-100">
+          <p className="text-base font-bold text-slate-800 dark:text-slate-100">
             {formatCurrency(stats.receitas)}
           </p>
         </div>
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
-          <div className="flex items-center gap-2 text-rose-600 mb-1">
-            <TrendingDown size={14} />
-            <span className="text-[10px] font-bold uppercase">Gastos</span>
+        <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm">
+          <div className="flex items-center gap-1.5 text-rose-600 mb-0.5">
+            <TrendingDown size={12} />
+            <span className="text-[9px] font-bold uppercase">Gastos</span>
           </div>
-          <p className="text-lg font-bold text-slate-800 dark:text-slate-100">
+          <p className="text-base font-bold text-slate-800 dark:text-slate-100">
             {formatCurrency(stats.despesas)}
           </p>
         </div>
       </div>
 
       {/* Filtros */}
-      <div className="px-4 pb-4 space-y-3 shrink-0">
+      <div className="px-3 pb-2 shrink-0">
         <div className="flex gap-2">
           <select 
             value={filtroMes}
             onChange={(e) => setFiltroMes(e.target.value)}
-            className="flex-1 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-sm outline-none"
+            className="flex-1 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-800 rounded-lg px-2 py-1.5 text-xs outline-none"
           >
             {meses.map((mes, index) => (
               <option key={index} value={index}>{mes}</option>
@@ -261,7 +261,7 @@ export default function FreelancerScreen({ onBack }: FreelancerProps) {
           <select 
             value={filtroAno}
             onChange={(e) => setFiltroAno(e.target.value)}
-            className="w-24 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-sm outline-none"
+            className="w-20 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-800 rounded-lg px-2 py-1.5 text-xs outline-none"
           >
             {[2024, 2025, 2026].map(year => (
               <option key={year} value={year}>{year}</option>
@@ -271,50 +271,50 @@ export default function FreelancerScreen({ onBack }: FreelancerProps) {
       </div>
 
       {/* Lista de Transações Freelancer */}
-      <div className="flex-1 overflow-y-auto px-4 pb-10">
+      <div className="flex-1 overflow-y-auto px-3 pb-20">
         {filteredTransacoes.length === 0 ? (
-          <div className="text-center py-12 bg-white dark:bg-slate-900 rounded-3xl border border-dashed border-slate-300 dark:border-slate-800">
-            <Briefcase className="mx-auto text-slate-300 mb-2" size={32} />
-            <p className="text-slate-500 text-sm">Nenhum registro freelancer.</p>
+          <div className="text-center py-8 bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-slate-300 dark:border-slate-800">
+            <Briefcase className="mx-auto text-slate-300 mb-2" size={24} />
+            <p className="text-slate-500 text-xs">Nenhum registro freelancer.</p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {filteredTransacoes.map(t => (
-              <div key={t.id} className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+              <div key={t.id} className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
                     t.tipo === 'Receita' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'
                   }`}>
-                    {t.tipo === 'Receita' ? <TrendingUp size={20} /> : <TrendingDown size={20} />}
+                    {t.tipo === 'Receita' ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
                   </div>
-                  <div>
-                    <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100 leading-tight">
+                  <div className="min-w-0">
+                    <h4 className="font-bold text-xs text-slate-800 dark:text-slate-100 leading-tight truncate">
                       {t.descricao}
                     </h4>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-[10px] text-slate-500 flex items-center gap-1">
-                        <Calendar size={10} />
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="text-[9px] text-slate-500 flex items-center gap-1">
+                        <Calendar size={8} />
                         {t.data.split('-').reverse().join('/')}
                       </span>
-                      <span className="text-[10px] text-slate-500 px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded-md">
+                      <span className="text-[9px] text-slate-500 px-1 py-0.5 bg-slate-100 dark:bg-slate-800 rounded">
                         {t.metodo || 'PIX'}
                       </span>
                       {t.status === 'Pendente' && (
-                        <span className="text-[10px] font-bold text-amber-600 px-1.5 py-0.5 bg-amber-100 rounded-md flex items-center gap-1">
-                          <Clock size={10} /> PENDENTE
+                        <span className="text-[9px] font-bold text-amber-600 px-1 py-0.5 bg-amber-100 rounded flex items-center gap-1">
+                          <Clock size={8} /> PENDENTE
                         </span>
                       )}
                     </div>
                   </div>
                 </div>
-                <div className="text-right flex flex-col items-end">
-                  <p className={`font-bold ${t.tipo === 'Receita' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                <div className="text-right flex flex-col items-end shrink-0 ml-2">
+                  <p className={`font-bold text-sm ${t.tipo === 'Receita' ? 'text-emerald-600' : 'text-rose-600'}`}>
                     {t.tipo === 'Receita' ? '+' : '-'}{formatCurrency(t.valor)}
                   </p>
-                  <div className="flex gap-2 mt-2">
+                  <div className="flex gap-2 mt-1">
                     <button 
                       onClick={() => handleEditClick(t)}
-                      className="text-[10px] text-blue-500 font-bold uppercase"
+                      className="text-[9px] text-blue-500 font-bold uppercase"
                     >
                       Editar
                     </button>
@@ -329,7 +329,7 @@ export default function FreelancerScreen({ onBack }: FreelancerProps) {
                           showNotification('Removido!', 'success');
                         }, { isDanger: true });
                       }}
-                      className="text-[10px] text-rose-500 font-bold uppercase"
+                      className="text-[9px] text-rose-500 font-bold uppercase"
                     >
                       Excluir
                     </button>

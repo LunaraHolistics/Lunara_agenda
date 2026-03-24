@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { DollarSign, Clock, Tag, Plus, ChevronRight, PieChart, Settings, Check, Trash2, AlertTriangle, CheckCircle, Calendar, Package, Eye, EyeOff } from 'lucide-react';
+import { DollarSign, Clock, Tag, Plus, ChevronRight, ChevronLeft, PieChart, Settings, Check, Trash2, AlertTriangle, CheckCircle, Calendar, Package, Eye, EyeOff } from 'lucide-react';
 import { Agendamento } from '../types';
 import FinanceiroScreen from './FinanceiroScreen';
 import ConfiguracoesScreen from './ConfiguracoesScreen';
@@ -32,35 +32,54 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
   const [showValues, setShowValues] = useState(() => localStorage.getItem('lunara_show_values') !== 'false');
 
   // Gestão de Swipe
-  const [touchStart, setTouchStart] = useState<number | null>(null);
-  const [touchEnd, setTouchEnd] = useState<number | null>(null);
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
+  const [touchEndX, setTouchEndX] = useState<number | null>(null);
+  const [touchEndY, setTouchEndY] = useState<number | null>(null);
 
-  const minSwipeDistance = 70;
+  const minSwipeDistance = 100; // deltaX > 100
 
   const onTouchStart = (e: React.TouchEvent) => {
-    setTouchEnd(null);
-    setTouchStart(e.targetTouches[0].clientX);
+    setTouchEndX(null);
+    setTouchEndY(null);
+    setTouchStartX(e.targetTouches[0].clientX);
+    setTouchStartY(e.targetTouches[0].clientY);
   };
 
   const onTouchMove = (e: React.TouchEvent) => {
-    setTouchEnd(e.targetTouches[0].clientX);
+    setTouchEndX(e.targetTouches[0].clientX);
+    setTouchEndY(e.targetTouches[0].clientY);
   };
 
   const onTouchEnd = () => {
-    if (!touchStart || !touchEnd) {
-      setTouchStart(null);
-      setTouchEnd(null);
+    if (touchStartX === null || touchEndX === null || touchStartY === null || touchEndY === null) {
+      resetTouch();
       return;
     }
-    const distance = touchStart - touchEnd;
-    const isLeftSwipe = distance > minSwipeDistance;
 
-    if (isLeftSwipe && onNavigate) {
+    const deltaX = touchEndX - touchStartX;
+    const deltaY = touchEndY - touchStartY;
+
+    // Swipe Right (Esquerda para Direita)
+    const isRightSwipe = deltaX > minSwipeDistance;
+    const isHorizontal = Math.abs(deltaX) > Math.abs(deltaY) * 2;
+    const startedNearEdge = touchStartX < 60; // Margem de segurança na borda esquerda
+
+    if (isRightSwipe && isHorizontal && startedNearEdge && onNavigate) {
+      if (window.navigator.vibrate) {
+        window.navigator.vibrate(10); // Pequeno feedback tátil
+      }
       onNavigate('freelancer');
     }
     
-    setTouchStart(null);
-    setTouchEnd(null);
+    resetTouch();
+  };
+
+  const resetTouch = () => {
+    setTouchStartX(null);
+    setTouchStartY(null);
+    setTouchEndX(null);
+    setTouchEndY(null);
   };
 
   const currentMonth = new Date().getMonth();
@@ -301,10 +320,10 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
       onTouchEnd={onTouchEnd}
     >
       {/* Indicador de Swipe (Dica Visual) */}
-      {touchStart && touchEnd && (touchStart - touchEnd > 20) && (
-        <div className="fixed right-0 top-1/2 -translate-y-1/2 z-50 pointer-events-none animate-pulse">
-          <div className="bg-[var(--color-primary)]/20 backdrop-blur-sm p-4 rounded-l-full border-l border-y border-[var(--color-primary)]/30">
-            <ChevronRight size={32} className="text-[var(--color-primary)]" />
+      {touchStartX !== null && touchEndX !== null && (touchEndX - touchStartX > 20) && touchStartX < 60 && (
+        <div className="fixed left-0 top-1/2 -translate-y-1/2 z-50 pointer-events-none animate-pulse">
+          <div className="bg-[var(--color-primary)]/20 backdrop-blur-sm p-4 rounded-r-full border-r border-y border-[var(--color-primary)]/30 shadow-[4px_0_15px_rgba(0,0,0,0.1)]">
+            <ChevronLeft size={32} className="text-[var(--color-primary)]" />
           </div>
         </div>
       )}

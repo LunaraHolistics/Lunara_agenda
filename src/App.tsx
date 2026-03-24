@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Home, Users, Activity, Package, Calendar, Wallet, BarChart2, Settings, LogOut, Briefcase } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import HomeScreen from './screens/HomeScreen';
 import ClientesScreen from './screens/ClientesScreen';
 import TerapiasScreen from './screens/TerapiasScreen';
@@ -15,8 +16,26 @@ type Tab = 'home' | 'clientes' | 'terapias' | 'pacotes' | 'agenda' | 'financeiro
 
 function AppContent() {
   const [activeTab, setActiveTab] = useState<Tab>('home');
+  const [direction, setDirection] = useState(0);
 
   const { agendamentos, clientes, terapias } = useAppContext();
+
+  const handleTabChange = (newTab: Tab) => {
+    if (newTab === activeTab) return;
+    
+    // Lógica de direção para o slide
+    // Se for para freelancer vindo da home, slide para a direita (direção positiva)
+    // Se for voltando da freelancer para home, slide para a esquerda (direção negativa)
+    if (activeTab === 'home' && newTab === 'freelancer') {
+      setDirection(-1); // Freelancer vem da esquerda
+    } else if (activeTab === 'freelancer' && newTab === 'home') {
+      setDirection(1); // Home vem da direita
+    } else {
+      setDirection(0); // Sem animação de slide específica para outros
+    }
+    
+    setActiveTab(newTab);
+  };
 
   useEffect(() => {
     if ('Notification' in window) {
@@ -59,15 +78,15 @@ function AppContent() {
 
   const renderScreen = () => {
     switch (activeTab) {
-      case 'home': return <HomeScreen onNavigate={(tab: any) => setActiveTab(tab)} />;
+      case 'home': return <HomeScreen onNavigate={(tab: any) => handleTabChange(tab)} />;
       case 'clientes': return <ClientesScreen />;
       case 'terapias': return <TerapiasScreen />;
       case 'pacotes': return <PacotesScreen />;
       case 'agenda': return <AgendaScreen />;
-      case 'financeiro': return <FinanceiroScreen onBack={() => setActiveTab('home')} />;
-      case 'configuracoes': return <ConfiguracoesScreen onBack={() => setActiveTab('home')} />;
-      case 'freelancer': return <FreelancerScreen onBack={() => setActiveTab('home')} />;
-      default: return <HomeScreen onNavigate={(tab: any) => setActiveTab(tab)} />;
+      case 'financeiro': return <FinanceiroScreen onBack={() => handleTabChange('home')} />;
+      case 'configuracoes': return <ConfiguracoesScreen onBack={() => handleTabChange('home')} />;
+      case 'freelancer': return <FreelancerScreen onBack={() => handleTabChange('home')} />;
+      default: return <HomeScreen onNavigate={(tab: any) => handleTabChange(tab)} />;
     }
   };
 
@@ -99,7 +118,7 @@ function AppContent() {
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => handleTabChange(tab.id)}
                 className={`w-full flex items-center gap-3 px-6 py-3 transition-colors ${
                   isActive 
                     ? 'bg-[#006699]/10 text-[#006699] border-r-4 border-[#006699]' 
@@ -130,9 +149,21 @@ function AppContent() {
         </div>
 
         {/* Content Scroll Area */}
-        <div className="flex-1 overflow-y-auto pb-24 md:pb-0">
-          <div className="max-w-5xl mx-auto w-full">
-            {renderScreen()}
+        <div className="flex-1 overflow-y-auto pb-24 md:pb-0 relative">
+          <div className="max-w-5xl mx-auto w-full h-full">
+            <AnimatePresence mode="wait" custom={direction}>
+              <motion.div
+                key={activeTab}
+                custom={direction}
+                initial={direction !== 0 ? { x: direction > 0 ? '100%' : '-100%', opacity: 0 } : { opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={direction !== 0 ? { x: direction > 0 ? '-100%' : '100%', opacity: 0 } : { opacity: 0 }}
+                transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                className="h-full w-full"
+              >
+                {renderScreen()}
+              </motion.div>
+            </AnimatePresence>
           </div>
         </div>
 
@@ -144,7 +175,7 @@ function AppContent() {
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => handleTabChange(tab.id)}
                 className="flex flex-col items-center justify-center min-w-[50px] h-full gap-1 transition-colors shrink-0"
                 aria-label={tab.label}
               >

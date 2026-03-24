@@ -99,6 +99,7 @@ export interface Despesa {
   categoria: CategoriaDespesa;
   formaPagamento?: string;
   observacao?: string;
+  segmento?: 'holistica' | 'freelancer';
 }
 
 export interface Transacao {
@@ -112,6 +113,7 @@ export interface Transacao {
   categoria?: string;
   pacoteId?: string;
   agendamentoId?: string;
+  segmento?: 'holistica' | 'freelancer';
 }
 
 // ======================

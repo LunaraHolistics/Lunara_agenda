@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Home, Users, Activity, Package, Calendar, Wallet, BarChart2, Settings, LogOut } from 'lucide-react';
+import { Home, Users, Activity, Package, Calendar, Wallet, BarChart2, Settings, LogOut, Briefcase } from 'lucide-react';
 import HomeScreen from './screens/HomeScreen';
 import ClientesScreen from './screens/ClientesScreen';
 import TerapiasScreen from './screens/TerapiasScreen';
@@ -7,10 +7,11 @@ import PacotesScreen from './screens/PacotesScreen';
 import AgendaScreen from './screens/AgendaScreen';
 import FinanceiroScreen from './screens/FinanceiroScreen';
 import ConfiguracoesScreen from './screens/ConfiguracoesScreen';
+import FreelancerScreen from './screens/FreelancerScreen';
 import Login from './screens/Login';
 import { AppProvider, useAppContext } from './AppContext';
 
-type Tab = 'home' | 'clientes' | 'terapias' | 'pacotes' | 'agenda' | 'financeiro' | 'configuracoes';
+type Tab = 'home' | 'clientes' | 'terapias' | 'pacotes' | 'agenda' | 'financeiro' | 'configuracoes' | 'freelancer';
 
 function AppContent() {
   const [activeTab, setActiveTab] = useState<Tab>('home');
@@ -58,14 +59,15 @@ function AppContent() {
 
   const renderScreen = () => {
     switch (activeTab) {
-      case 'home': return <HomeScreen />;
+      case 'home': return <HomeScreen onNavigate={(tab: any) => setActiveTab(tab)} />;
       case 'clientes': return <ClientesScreen />;
       case 'terapias': return <TerapiasScreen />;
       case 'pacotes': return <PacotesScreen />;
       case 'agenda': return <AgendaScreen />;
       case 'financeiro': return <FinanceiroScreen onBack={() => setActiveTab('home')} />;
       case 'configuracoes': return <ConfiguracoesScreen onBack={() => setActiveTab('home')} />;
-      default: return <HomeScreen />;
+      case 'freelancer': return <FreelancerScreen onBack={() => setActiveTab('home')} />;
+      default: return <HomeScreen onNavigate={(tab: any) => setActiveTab(tab)} />;
     }
   };
 
@@ -76,6 +78,7 @@ function AppContent() {
     { id: 'pacotes', label: 'Pacotes', icon: Package },
     { id: 'agenda', label: 'Agenda', icon: Calendar },
     { id: 'financeiro', label: 'Finanças', icon: Wallet },
+    { id: 'freelancer', label: 'Freelancer', icon: Briefcase },
     { id: 'configuracoes', label: 'Config', icon: Settings },
   ] as const;
 
@@ -135,7 +138,7 @@ function AppContent() {
 
         {/* Bottom Navigation Mobile */}
         <nav className="md:hidden fixed bottom-0 left-0 right-0 flex flex-row items-center justify-around bg-white dark:bg-zinc-900 border-t border-gray-200 dark:border-zinc-800 pb-6 pt-2 px-1 h-20 overflow-x-auto no-scrollbar z-50">
-          {tabs.map((tab) => {
+          {tabs.filter(t => t.id !== 'freelancer').map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             return (

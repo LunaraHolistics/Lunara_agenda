@@ -291,7 +291,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       valor: data.valor || 0,
       tipo: data.tipo || 'Receita',
       data: data.data || new Date().toISOString().split('T')[0],
-      status: data.status || 'Pago'
+      status: data.status || 'Pago',
+      segmento: data.segmento || 'holistica'
     } as Transacao;
     setTransacoes(prev => [novo, ...prev]);
     showNotification("Transação registrada!", "success");
@@ -306,7 +307,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const addDespesa = (data: Omit<Despesa, 'id'>) => {
-    const novo = { ...data, id: crypto.randomUUID() } as Despesa;
+    const novo = { ...data, id: crypto.randomUUID(), segmento: data.segmento || 'holistica' } as Despesa;
     setDespesas(prev => [novo, ...prev]);
     showNotification("Despesa registrada!", "success");
   };

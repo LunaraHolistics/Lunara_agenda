@@ -6,7 +6,11 @@ import ConfiguracoesScreen from './ConfiguracoesScreen';
 import ContasAReceberScreen from './ContasAReceberScreen';
 import { useAppContext } from '../AppContext';
 
-export default function HomeScreen() {
+interface HomeScreenProps {
+  onNavigate?: (tab: string) => void;
+}
+
+export default function HomeScreen({ onNavigate }: HomeScreenProps) {
   const { 
     showNotification, 
     confirmAction, 
@@ -27,6 +31,38 @@ export default function HomeScreen() {
   const [showContasAReceber, setShowContasAReceber] = useState(false);
   const [showValues, setShowValues] = useState(() => localStorage.getItem('lunara_show_values') !== 'false');
 
+  // Gestão de Swipe
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
+
+  const minSwipeDistance = 70;
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) {
+      setTouchStart(null);
+      setTouchEnd(null);
+      return;
+    }
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > minSwipeDistance;
+
+    if (isLeftSwipe && onNavigate) {
+      onNavigate('freelancer');
+    }
+    
+    setTouchStart(null);
+    setTouchEnd(null);
+  };
+
   const currentMonth = new Date().getMonth();
   const currentYear = new Date().getFullYear();
 
@@ -46,6 +82,9 @@ export default function HomeScreen() {
   // Cálculos dos Cards
   const transacoesMes = useMemo(() => {
     const periodTransacoes = (transacoes || []).filter(t => {
+      // Filtro de segmento
+      if (t.segmento && t.segmento !== 'holistica') return false;
+      
       // Orphan filter: se tiver pacoteId, o pacote deve existir
       if (t.pacoteId && !(pacotes || []).some(p => p.id === t.pacoteId)) return false;
 
@@ -55,6 +94,9 @@ export default function HomeScreen() {
     });
 
     const periodDespesas = (despesas || []).filter(d => {
+      // Filtro de segmento
+      if (d.segmento && d.segmento !== 'holistica') return false;
+
       const date = safeDate(`${d.data}T00:00:00`);
       return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
     });
@@ -252,7 +294,21 @@ export default function HomeScreen() {
   }
 
   return (
-    <div className="flex flex-col h-full relative">
+    <div 
+      className="flex flex-col h-full relative"
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+    >
+      {/* Indicador de Swipe (Dica Visual) */}
+      {touchStart && touchEnd && (touchStart - touchEnd > 20) && (
+        <div className="fixed right-0 top-1/2 -translate-y-1/2 z-50 pointer-events-none animate-pulse">
+          <div className="bg-[var(--color-primary)]/20 backdrop-blur-sm p-4 rounded-l-full border-l border-y border-[var(--color-primary)]/30">
+            <ChevronRight size={32} className="text-[var(--color-primary)]" />
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="p-6 pb-2 bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] flex justify-between items-center">
         <div>

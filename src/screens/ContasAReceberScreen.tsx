@@ -131,7 +131,8 @@ export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenPro
         status: 'Pago',
         pacoteId: selectedPendencia.tipo === 'pacote' ? selectedPendencia.id : undefined,
         agendamentoId: selectedPendencia.tipo === 'agendamento' ? selectedPendencia.id : undefined,
-        tipo: 'Receita'
+        tipo: 'Receita',
+        segmento: 'holistica'
       };
 
       if (transacaoExistente) {

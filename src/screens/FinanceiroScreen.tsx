@@ -59,7 +59,10 @@ export default function FinanceiroScreen({ onBack }: FinanceiroProps) {
       showNotification('Preencha os campos obrigatórios.', 'error');
       return;
     }
-    addDespesa(newDespesa);
+    addDespesa({
+      ...newDespesa,
+      segmento: 'holistica'
+    });
     showNotification('Despesa registrada com sucesso!', 'success');
     setIsAddDespesaModalOpen(false);
     setNewDespesa({
@@ -79,8 +82,8 @@ export default function FinanceiroScreen({ onBack }: FinanceiroProps) {
 
   const filteredTransacoes = useMemo(() => {
     const combined = [
-      ...(transacoes || []).map(t => ({ ...t, isDespesaState: false })),
-      ...(despesas || []).map(d => ({ ...d, tipo: 'Despesa' as const, status: 'Pago' as const, isDespesaState: true }))
+      ...(transacoes || []).filter(t => !t.segmento || t.segmento === 'holistica').map(t => ({ ...t, isDespesaState: false })),
+      ...(despesas || []).filter(d => !d.segmento || d.segmento === 'holistica').map(d => ({ ...d, tipo: 'Despesa' as const, status: 'Pago' as const, isDespesaState: true }))
     ];
 
     return combined.filter(t => {

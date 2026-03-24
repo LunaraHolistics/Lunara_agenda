@@ -432,32 +432,38 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         ))}
       </div>
       {confirmation && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-2xl shadow-2xl p-6">
-            <h3 className="text-lg font-bold mb-2">{confirmation.title || 'Confirmar'}</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">{confirmation.message}</p>
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm h-[100dvh]">
+          <div className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-[2rem] shadow-2xl shadow-black/20 p-6 animate-in zoom-in-95 duration-200 border border-gray-100 dark:border-zinc-800">
+            <h3 className="text-lg font-bold mb-2 text-gray-900 dark:text-gray-100">{confirmation.title || 'Confirmar'}</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-8 leading-relaxed">{confirmation.message}</p>
             <div className="flex gap-3">
-              <button onClick={() => setConfirmation(null)} className="flex-1 py-3 text-sm font-medium text-gray-500">Cancelar</button>
-              <button onClick={() => { confirmation.onConfirm(); setConfirmation(null); }} className={`flex-1 py-3 text-sm font-bold rounded-xl ${confirmation.isDanger ? 'bg-red-600 text-white' : 'bg-[var(--color-primary)] text-white'}`}>Confirmar</button>
+              <button onClick={() => setConfirmation(null)} className="flex-1 py-3 text-sm font-bold text-gray-500 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-xl transition-colors">Cancelar</button>
+              <button onClick={() => { confirmation.onConfirm(); setConfirmation(null); }} className={`flex-1 py-3 text-sm font-bold rounded-xl shadow-lg transition-transform active:scale-95 ${confirmation.isDanger ? 'bg-red-600 text-white shadow-red-600/20' : 'bg-[var(--color-primary)] text-white shadow-[var(--color-primary)]/20'}`}>Confirmar</button>
             </div>
           </div>
         </div>
       )}
       {prompt && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-2xl shadow-2xl p-6">
-            <h3 className="text-lg font-bold mb-2">{prompt.title || 'Entrada'}</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">{prompt.message}</p>
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm h-[100dvh]">
+          <div className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-[2rem] shadow-2xl shadow-black/20 p-6 animate-in zoom-in-95 duration-200 border border-gray-100 dark:border-zinc-800">
+            <h3 className="text-lg font-bold mb-2 text-gray-900 dark:text-gray-100">{prompt.title || 'Entrada'}</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4 leading-relaxed">{prompt.message}</p>
             <input 
               type="text" 
               autoFocus 
               defaultValue={prompt.defaultValue} 
-              className="w-full px-4 py-3 bg-gray-50 dark:bg-white/5 border rounded-xl mb-6 outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+              className="w-full px-4 py-3 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-zinc-800 rounded-xl mb-8 outline-none focus:ring-2 focus:ring-[var(--color-primary)] text-gray-900 dark:text-gray-100"
               id="global-prompt-input"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  prompt.onConfirm((e.currentTarget as HTMLInputElement).value);
+                  setPrompt(null);
+                }
+              }}
             />
             <div className="flex gap-3">
-              <button onClick={() => setPrompt(null)} className="flex-1 py-3 text-sm font-medium text-gray-500">Cancelar</button>
-              <button onClick={() => { prompt.onConfirm((document.getElementById('global-prompt-input') as HTMLInputElement).value); setPrompt(null); }} className="flex-1 py-3 text-sm font-bold bg-[var(--color-primary)] text-white rounded-xl">Confirmar</button>
+              <button onClick={() => setPrompt(null)} className="flex-1 py-3 text-sm font-bold text-gray-500 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-xl transition-colors">Cancelar</button>
+              <button onClick={() => { prompt.onConfirm((document.getElementById('global-prompt-input') as HTMLInputElement).value); setPrompt(null); }} className="flex-1 py-3 text-sm font-bold bg-[var(--color-primary)] text-white rounded-xl shadow-lg shadow-[var(--color-primary)]/20 transition-transform active:scale-95">Confirmar</button>
             </div>
           </div>
         </div>

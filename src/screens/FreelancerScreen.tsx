@@ -343,18 +343,18 @@ export default function FreelancerScreen({ onBack }: FreelancerProps) {
 
       {/* Modal Adicionar Receita/Despesa */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom-10 duration-200">
-            <div className="flex justify-between items-center mb-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 h-[100dvh]">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-[2rem] p-6 shadow-2xl shadow-slate-900/20 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto no-scrollbar border border-slate-200 dark:border-slate-800">
+            <div className="flex justify-between items-center mb-6 sticky top-0 bg-white dark:bg-slate-900 z-10 pb-2">
               <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">
                 Nova {modalType} Freelancer
               </h2>
-              <button onClick={() => setIsAddModalOpen(false)} className="text-slate-400 p-1">
+              <button onClick={() => setIsAddModalOpen(false)} className="text-slate-400 p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
                 <X size={24} />
               </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-4 pb-4">
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
                   {modalType === 'Receita' ? 'Local / Empresa' : 'Descrição / Local'}
@@ -447,18 +447,18 @@ export default function FreelancerScreen({ onBack }: FreelancerProps) {
 
       {/* Modal de Edição */}
       {isEditModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom-10 duration-200">
-            <div className="flex justify-between items-center mb-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 h-[100dvh]">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-[2rem] p-6 shadow-2xl shadow-slate-900/20 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto no-scrollbar border border-slate-200 dark:border-slate-800">
+            <div className="flex justify-between items-center mb-6 sticky top-0 bg-white dark:bg-slate-900 z-10 pb-2">
               <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">
                 Editar Registro
               </h2>
-              <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 p-1">
+              <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
                 <X size={24} />
               </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-4 pb-4">
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Descrição</label>
                 <input 

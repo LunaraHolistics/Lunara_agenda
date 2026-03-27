@@ -59,6 +59,7 @@ interface AppContextType {
   deleteTransacao: (id: string) => void;
 
   addDespesa: (despesa: Omit<Despesa, 'id'>) => void;
+  updateDespesa: (despesa: Despesa) => void;
   deleteDespesa: (id: string) => void;
 
   showNotification: (message: string, type?: 'success' | 'error' | 'info') => void;
@@ -312,6 +313,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     showNotification("Despesa registrada!", "success");
   };
 
+  const updateDespesa = (data: Despesa) => {
+    setDespesas(prev => prev.map(d => d.id === data.id ? data : d));
+  };
+
   const deleteDespesa = (id: string) => {
     setDespesas(prev => prev.filter(d => d.id !== id));
     showNotification("Despesa removida", "info");
@@ -413,7 +418,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       addPacote, updatePacote, deletePacote,
       addBloqueio, deleteBloqueio,
       addTransacao, updateTransacao, deleteTransacao,
-      addDespesa, deleteDespesa,
+      addDespesa, updateDespesa, deleteDespesa,
       showNotification, confirmAction, promptAction,
       handleImportContacts, exportarBackup, importarBackup, repairDatabase,
       resetSystem,

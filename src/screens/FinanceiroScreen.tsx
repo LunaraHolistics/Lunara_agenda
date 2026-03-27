@@ -14,6 +14,7 @@ export default function FinanceiroScreen({ onBack }: FinanceiroProps) {
     clientes, 
     pacotes,
     updateTransacao, 
+    updateDespesa,
     deleteTransacao, 
     addDespesa,
     deleteDespesa,
@@ -49,8 +50,16 @@ export default function FinanceiroScreen({ onBack }: FinanceiroProps) {
       showNotification('Preencha os campos obrigatórios.', 'error');
       return;
     }
-    updateTransacao(editingTransaction as Transacao);
-    showNotification('Transação atualizada com sucesso!', 'success');
+    
+    const { isDespesaState, ...transactionData } = editingTransaction as any;
+    
+    if (isDespesaState) {
+      updateDespesa(transactionData as any);
+    } else {
+      updateTransacao(transactionData as Transacao);
+    }
+
+    showNotification('Alteração salva com sucesso!', 'success');
     setIsEditModalOpen(false);
   };
 
@@ -237,7 +246,7 @@ export default function FinanceiroScreen({ onBack }: FinanceiroProps) {
       </div>
 
       {/* Lista de Transações */}
-      <div className="flex-1 overflow-y-auto px-4 pb-10">
+      <div className="flex-1 overflow-y-auto px-4 pb-32">
         {filteredTransacoes.length === 0 ? (
           <div className="text-center py-12 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] rounded-3xl border border-dashed border-gray-300 dark:border-gray-800">
             <p className="text-gray-500 text-sm">Nenhuma transação neste período.</p>
@@ -458,8 +467,14 @@ export default function FinanceiroScreen({ onBack }: FinanceiroProps) {
                 <div>
                   <label className="block text-xs font-bold text-[var(--color-text-sec-light)] uppercase mb-1">Método</label>
                   <select 
-                    value={editingTransaction.metodo || 'PIX'}
-                    onChange={e => setEditingTransaction({...editingTransaction, metodo: e.target.value})}
+                    value={(editingTransaction as any).isDespesaState ? (editingTransaction as any).formaPagamento || 'PIX' : editingTransaction.metodo || 'PIX'}
+                    onChange={e => {
+                      if ((editingTransaction as any).isDespesaState) {
+                        setEditingTransaction({...editingTransaction, formaPagamento: e.target.value});
+                      } else {
+                        setEditingTransaction({...editingTransaction, metodo: e.target.value});
+                      }
+                    }}
                     className="w-full px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none border border-gray-100 dark:border-gray-800"
                   >
                     <option value="PIX">PIX</option>
@@ -472,28 +487,31 @@ export default function FinanceiroScreen({ onBack }: FinanceiroProps) {
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div>
+                <div className={(editingTransaction as any).isDespesaState ? "col-span-2" : ""}>
                   <label className="block text-xs font-bold text-[var(--color-text-sec-light)] uppercase mb-1">Tipo</label>
                   <select 
                     value={editingTransaction.tipo || 'Receita'}
                     onChange={e => setEditingTransaction({...editingTransaction, tipo: e.target.value as 'Receita' | 'Despesa'})}
                     className="w-full px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none border border-gray-100 dark:border-gray-800"
+                    disabled={(editingTransaction as any).isDespesaState}
                   >
                     <option value="Receita">Receita</option>
                     <option value="Despesa">Despesa</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-[var(--color-text-sec-light)] uppercase mb-1">Status</label>
-                  <select 
-                    value={editingTransaction.status || 'Pago'}
-                    onChange={e => setEditingTransaction({...editingTransaction, status: e.target.value as 'Pago' | 'Pendente'})}
-                    className="w-full px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none border border-gray-100 dark:border-gray-800"
-                  >
-                    <option value="Pago">Pago</option>
-                    <option value="Pendente">Pendente</option>
-                  </select>
-                </div>
+                {!(editingTransaction as any).isDespesaState && (
+                  <div>
+                    <label className="block text-xs font-bold text-[var(--color-text-sec-light)] uppercase mb-1">Status</label>
+                    <select 
+                      value={editingTransaction.status || 'Pago'}
+                      onChange={e => setEditingTransaction({...editingTransaction, status: e.target.value as 'Pago' | 'Pendente'})}
+                      className="w-full px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none border border-gray-100 dark:border-gray-800"
+                    >
+                      <option value="Pago">Pago</option>
+                      <option value="Pendente">Pendente</option>
+                    </select>
+                  </div>
+                )}
               </div>
 
               <button 

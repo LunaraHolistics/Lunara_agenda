@@ -91,14 +91,29 @@ export default function PacotesScreen() {
       return;
     }
 
+    const originalPacote = editingPacoteId ? (pacotes || []).find(p => p.id === editingPacoteId) : null;
+    const isAlreadyPaid = originalPacote?.statusPagamento === 'Pago' && originalPacote?.dataPagamento;
+    
     const pacoteId = editingPacoteId || crypto.randomUUID();
     const valorCalculado = valorManual !== null ? valorManual : totais.final;
+    let valorFinalParaPacote = Number(valorCalculado);
+    let valorExtra = 0;
+
+    // Lógica de Serviço Extra: Se já estava pago, o valor do pacote não muda.
+    // Qualquer excesso vira "Serviço Extra"
+    if (isAlreadyPaid) {
+      const originalValor = originalPacote.valorFinal;
+      if (Number(valorCalculado) > originalValor) {
+        valorExtra = Number(valorCalculado) - originalValor;
+        valorFinalParaPacote = originalValor; // Mantém o valor original no pacote
+      }
+    }
 
     const pacoteData: Pacote = {
       id: pacoteId,
       clienteId: clienteId,
       mesReferencia,
-      valorFinal: Number(valorCalculado),
+      valorFinal: valorFinalParaPacote,
       itens: itens,
       tipoPacote,
       status: 'Ativo',
@@ -122,7 +137,7 @@ export default function PacotesScreen() {
     const transacaoData: Transacao = {
       id: (transacoes || []).find(t => t.pacoteId === pacoteId)?.id || crypto.randomUUID(),
       descricao: `Pacote - ${clienteNome}`,
-      valor: Number(valorCalculado),
+      valor: valorFinalParaPacote,
       data: dataPagamento || new Date().toISOString().split('T')[0],
       metodo: formaPagamento || 'PIX',
       categoria: 'Pacotes',
@@ -136,6 +151,21 @@ export default function PacotesScreen() {
       updateTransacao(transacaoData);
     } else {
       addTransacao(transacaoData);
+    }
+
+    // Lançamento de Serviço Extra (se houver)
+    if (valorExtra > 0) {
+      addTransacao({
+        id: crypto.randomUUID(),
+        descricao: `Serviço Extra - ${clienteNome}`,
+        valor: valorExtra,
+        data: new Date().toISOString().split('T')[0],
+        metodo: 'PIX',
+        categoria: 'Serviço Extra',
+        status: 'Pendente',
+        tipo: 'Receita'
+      });
+      showNotification(`R$ ${valorExtra.toFixed(2)} gerado como Serviço Extra!`, 'info');
     }
     
     setViewMode('list');
@@ -229,7 +259,7 @@ export default function PacotesScreen() {
 
   if (viewMode === 'list') {
     return (
-      <div className="h-[calc(100vh-80px)] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 pb-10 bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)]">
+      <div className="h-[calc(100vh-80px)] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 pb-32 bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)]">
         <div className="p-6 pb-4 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] border-b border-gray-200 dark:border-gray-800 flex justify-between items-center sticky top-0 z-10">
           <h2 className="text-2xl font-bold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">Pacotes Ativos</h2>
           <button onClick={handleNew} className="p-2 bg-[var(--color-primary)] text-white rounded-full shadow-lg hover:opacity-90">
@@ -292,7 +322,7 @@ export default function PacotesScreen() {
   }
 
   return (
-    <div className="h-[calc(100vh-80px)] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 [webkit-overflow-scrolling:touch] bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)]">
+    <div className="h-[calc(100vh-80px)] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 [webkit-overflow-scrolling:touch] pb-32 bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)]">
       {/* Header & Seletores */}
       <div className="p-4 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] border-b border-gray-200 dark:border-gray-800 z-10 shrink-0">
         <div className="flex items-center gap-3 mb-4">

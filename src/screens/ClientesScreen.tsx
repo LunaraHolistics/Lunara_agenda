@@ -152,7 +152,7 @@ export default function ClientesScreen() {
   );
 
   return (
-    <div className="h-[calc(100vh-80px)] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 pb-10">
+    <div className="h-[calc(100vh-80px)] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 pb-32">
       <div className="p-4 bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] sticky top-0 z-10">
         <div className="header-clientes mb-4">
           <h2 className="text-2xl font-bold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">Clientes</h2>
@@ -172,7 +172,7 @@ export default function ClientesScreen() {
         </div>
       </div>
 
-      <div className="px-4 pb-24">
+      <div className="px-4 pb-32">
         {filteredClientes.length === 0 ? (
           <div className="text-center text-[var(--color-text-sec-light)] mt-10">Nenhum cliente.</div>
         ) : (

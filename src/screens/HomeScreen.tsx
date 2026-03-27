@@ -343,7 +343,7 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 pb-24">
+      <div className="flex-1 overflow-y-auto px-4 pb-32">
         {/* Ações Rápidas */}
         <div className="mt-2 mb-2 flex gap-3 overflow-x-auto no-scrollbar pb-2">
           <button 
@@ -558,14 +558,7 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
         </div>
       </div>
 
-      {/* FAB - Novo Atendimento Rápido */}
-      <button 
-        onClick={() => showNotification('Para agendar, acesse a aba Agenda e arraste um cliente para o calendário.', 'info')}
-        className="absolute bottom-6 right-6 h-14 px-6 bg-[var(--color-primary)] text-white rounded-full flex items-center justify-center shadow-lg hover:opacity-90 transition-opacity z-20 gap-2 font-medium"
-      >
-        <Plus size={24} />
-        <span>Atendimento</span>
-      </button>
+      {/* FAB - Removido conforme solicitação */}
     </div>
   );
 }

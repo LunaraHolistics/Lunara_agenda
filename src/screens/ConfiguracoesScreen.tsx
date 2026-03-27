@@ -102,7 +102,7 @@ export default function ConfiguracoesScreen({ onBack }: ConfiguracoesProps) {
         </h1>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto p-4 pb-32">
         {/* Status Message */}
         {status.type !== 'none' && (
           <div className={`mb-6 p-4 rounded-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300 ${

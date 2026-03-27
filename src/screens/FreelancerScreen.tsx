@@ -14,6 +14,7 @@ export default function FreelancerScreen({ onBack }: FreelancerProps) {
     addTransacao,
     addDespesa,
     updateTransacao, 
+    updateDespesa,
     deleteTransacao, 
     deleteDespesa,
     confirmAction, 
@@ -44,46 +45,49 @@ export default function FreelancerScreen({ onBack }: FreelancerProps) {
     setIsEditModalOpen(true);
   };
 
-  const handleSaveEdit = () => {
-    if (!editingTransaction.id || !editingTransaction.descricao || !editingTransaction.valor) {
-      showNotification('Preencha os campos obrigatórios.', 'error');
-      return;
-    }
-    updateTransacao(editingTransaction as Transacao);
-    showNotification('Registro atualizado!', 'success');
-    setIsEditModalOpen(false);
-  };
-
-  const handleSaveNew = () => {
-    if (!formData.descricao || !formData.valor || !formData.data) {
+  const handleSave = (data: any) => {
+    if (!data.descricao || !data.valor || !data.data) {
       showNotification('Preencha os campos obrigatórios.', 'error');
       return;
     }
 
-    if (modalType === 'Receita') {
-      addTransacao({
-        ...formData,
-        tipo: 'Receita',
-        segmento: 'freelancer'
-      });
+    if (data.id) {
+      // Lógica de Edição (Update)
+      const { isDespesaState, ...transactionData } = data;
+      
+      if (isDespesaState) {
+        updateDespesa(transactionData as any);
+      } else {
+        updateTransacao(transactionData as Transacao);
+      }
+      showNotification('Alteração salva com sucesso!', 'success');
+      setIsEditModalOpen(false);
     } else {
-      addDespesa({
-        ...formData,
-        formaPagamento: formData.metodo,
-        segmento: 'freelancer'
+      // Lógica de Novo (Insert)
+      if (modalType === 'Receita') {
+        addTransacao({
+          ...data,
+          tipo: 'Receita',
+          segmento: 'freelancer'
+        });
+      } else {
+        addDespesa({
+          ...data,
+          formaPagamento: data.metodo,
+          segmento: 'freelancer'
+        });
+      }
+      showNotification(`${modalType} registrada com sucesso!`, 'success');
+      setIsAddModalOpen(false);
+      setFormData({
+        descricao: '',
+        valor: 0,
+        data: new Date().toISOString().split('T')[0],
+        categoria: 'Freelancer',
+        metodo: 'PIX',
+        status: 'Pago'
       });
     }
-
-    showNotification(`${modalType} registrada com sucesso!`, 'success');
-    setIsAddModalOpen(false);
-    setFormData({
-      descricao: '',
-      valor: 0,
-      data: new Date().toISOString().split('T')[0],
-      categoria: 'Freelancer',
-      metodo: 'PIX',
-      status: 'Pago'
-    });
   };
 
   const meses = [
@@ -434,7 +438,7 @@ export default function FreelancerScreen({ onBack }: FreelancerProps) {
               </div>
 
               <button 
-                onClick={handleSaveNew}
+                onClick={() => handleSave(formData)}
                 className={`w-full py-4 ${modalType === 'Receita' ? 'bg-emerald-600' : 'bg-rose-600'} text-white font-bold rounded-2xl shadow-lg hover:opacity-90 transition-opacity mt-4 flex items-center justify-center gap-2`}
               >
                 <Save size={20} />
@@ -492,22 +496,30 @@ export default function FreelancerScreen({ onBack }: FreelancerProps) {
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Status</label>
-                  <select 
-                    value={editingTransaction.status || 'Pago'}
-                    onChange={e => setEditingTransaction({...editingTransaction, status: e.target.value as any})}
-                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-xl outline-none border border-slate-200 dark:border-slate-700"
-                  >
-                    <option value="Pago">Recebido</option>
-                    <option value="Pendente">Pendente</option>
-                  </select>
-                </div>
-                <div>
+                {!(editingTransaction as any).isDespesaState && (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Status</label>
+                    <select 
+                      value={editingTransaction.status || 'Pago'}
+                      onChange={e => setEditingTransaction({...editingTransaction, status: e.target.value as any})}
+                      className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-xl outline-none border border-slate-200 dark:border-slate-700"
+                    >
+                      <option value="Pago">Recebido</option>
+                      <option value="Pendente">Pendente</option>
+                    </select>
+                  </div>
+                )}
+                <div className={(editingTransaction as any).isDespesaState ? "col-span-2" : ""}>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Método</label>
                   <select 
-                    value={editingTransaction.metodo || 'PIX'}
-                    onChange={e => setEditingTransaction({...editingTransaction, metodo: e.target.value})}
+                    value={(editingTransaction as any).isDespesaState ? (editingTransaction as any).formaPagamento || 'PIX' : editingTransaction.metodo || 'PIX'}
+                    onChange={e => {
+                      if ((editingTransaction as any).isDespesaState) {
+                        setEditingTransaction({...editingTransaction, formaPagamento: e.target.value});
+                      } else {
+                        setEditingTransaction({...editingTransaction, metodo: e.target.value});
+                      }
+                    }}
                     className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-xl outline-none border border-slate-200 dark:border-slate-700"
                   >
                     <option value="PIX">PIX</option>
@@ -519,7 +531,7 @@ export default function FreelancerScreen({ onBack }: FreelancerProps) {
               </div>
 
               <button 
-                onClick={handleSaveEdit}
+                onClick={() => handleSave(editingTransaction)}
                 className="w-full py-4 bg-slate-800 text-white font-bold rounded-2xl shadow-lg hover:opacity-90 transition-opacity mt-4 flex items-center justify-center gap-2"
               >
                 <Save size={20} />

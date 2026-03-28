@@ -32,23 +32,28 @@ export default function AgendaScreen() {
   
   // State
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [diasBloqueados, setDiasBloqueados] = useState<DiaBloqueado[]>([]);
-
+  
   useEffect(() => {
     const saved = localStorage.getItem('diasBloqueados');
     if (saved) {
       try {
-        setDiasBloqueados(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          parsed.forEach((d: any) => {
+            const exists = (bloqueios || []).some(b => b.data === d.data);
+            if (!exists) {
+              addBloqueio({ data: d.data, motivo: d.motivo || 'Bloqueio Legado' });
+            }
+          });
+          localStorage.removeItem('diasBloqueados');
+          console.log('Migração de bloqueios concluída');
+        }
       } catch (e) {
-        console.error('Erro ao carregar dias bloqueados', e);
+        console.error('Erro na migração de bloqueios', e);
       }
     }
-  }, []);
+  }, [bloqueios, addBloqueio]);
 
-  useEffect(() => {
-    localStorage.setItem('diasBloqueados', JSON.stringify(diasBloqueados));
-  }, [diasBloqueados]);
-  
   // UI State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBloqueiosOpen, setIsBloqueiosOpen] = useState(false);
@@ -131,18 +136,20 @@ export default function AgendaScreen() {
     e.preventDefault();
     e.stopPropagation();
     promptAction('Motivo do bloqueio (opcional):', '', (motivo) => {
-      setDiasBloqueados(prev => [...prev, { data, motivo }]);
-      showNotification('Dia bloqueado!', 'success');
+      addBloqueio({ data, motivo });
     });
   };
 
   const desbloquearDia = (e: React.MouseEvent, data: string) => {
     e.preventDefault();
     e.stopPropagation();
-    confirmAction('Deseja desbloquear este dia?', () => {
-      setDiasBloqueados(prev => prev.filter(d => d.data !== data));
-      showNotification('Dia desbloqueado!', 'info');
-    });
+    const bloqueio = (bloqueios || []).find(b => b.data === data);
+    if (bloqueio) {
+      confirmAction('Deseja desbloquear este dia?', () => {
+        deleteBloqueio(bloqueio.id);
+        showNotification('Dia desbloqueado!', 'info');
+      });
+    }
   };
 
   const year = currentMonth.getFullYear();
@@ -231,7 +238,7 @@ export default function AgendaScreen() {
     const type = e.dataTransfer.getData('type');
     const id = e.dataTransfer.getData('id');
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    const diaEstaBloqueado = diasBloqueados.some(d => d.data === dateStr);
+    const diaEstaBloqueado = (bloqueios || []).some(d => d.data === dateStr);
 
     if (diaEstaBloqueado) {
       showNotification('Este dia está bloqueado.', 'error');
@@ -306,7 +313,7 @@ export default function AgendaScreen() {
       return;
     }
 
-    const diaEstaBloqueado = diasBloqueados.some(d => d.data === formData);
+    const diaEstaBloqueado = (bloqueios || []).some(d => d.data === formData);
     if (diaEstaBloqueado) {
       setErrorMessage('Este dia está bloqueado.');
       return;
@@ -321,7 +328,15 @@ export default function AgendaScreen() {
       while (true) {
         curr.setDate(curr.getDate() + step);
         if (curr > end) break;
-        datesToSchedule.push(curr.toISOString().split('T')[0]);
+        const nextDate = curr.toISOString().split('T')[0];
+        
+        // Check if recurrent date is blocked
+        if ((bloqueios || []).some(b => b.data === nextDate)) {
+          console.log(`Pulando data bloqueada na recorrência: ${nextDate}`);
+          continue;
+        }
+        
+        datesToSchedule.push(nextDate);
       }
     }
 
@@ -486,7 +501,7 @@ export default function AgendaScreen() {
       return;
     }
     
-    const diaEstaBloqueado = diasBloqueados.some(d => d.data === mobileNewDate);
+    const diaEstaBloqueado = (bloqueios || []).some(d => d.data === mobileNewDate);
     if (diaEstaBloqueado) {
       showNotification('Este dia está bloqueado.', 'error');
       return;
@@ -657,11 +672,10 @@ export default function AgendaScreen() {
                     if (day === null) return <div key={`empty-${weekIdx}-${dayIdx}`} className="aspect-square opacity-20" />;
                     
                     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                    const diaEstaBloqueado = diasBloqueados.some(d => d.data === dateStr);
+                    const diaEstaBloqueado = (bloqueios || []).some(d => d.data === dateStr);
                     const dayAgendamentos = (agendamentos || [])
                       .filter(a => String(a.data).slice(0, 10) === dateStr && (a.statusAtendimento === 'Agendado' || a.statusAtendimento === 'Concluido'))
                       .sort((a, b) => a.hora.localeCompare(b.hora));
-                    const hasBloqueio = (bloqueios || []).some(b => b.data === dateStr);
                     const isToday = new Date().toISOString().startsWith(dateStr);
 
                     return (
@@ -671,19 +685,7 @@ export default function AgendaScreen() {
                         onClick={(e) => {
                           e.stopPropagation();
                           if (isDragging.current) return;
-                          if (diaEstaBloqueado) {
-                            desbloquearDia(e, dateStr);
-                          } else {
-                            if (dayAgendamentos.length === 0 && !hasBloqueio) {
-                              confirmAction('Deseja bloquear este dia?', () => {
-                                // Ensure persistence
-                                setDiasBloqueados(prev => [...prev, { data: dateStr }]);
-                                showNotification('Dia bloqueado!', 'success');
-                              });
-                            } else {
-                              openDayAgenda(day);
-                            }
-                          }
+                          openDayAgenda(day);
                         }}
                         onDragOver={(e) => {
                           if (diaEstaBloqueado) return;
@@ -723,17 +725,11 @@ export default function AgendaScreen() {
                                 +{dayAgendamentos.length - 2} <ChevronDown size={8} />
                               </button>
                             )}
-                            <button onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              if (hasBloqueio) {
-                                  // Assuming bloqueios logic needs to be handled here too, 
-                                  // but based on previous code it was handled in the parent div onClick.
-                                  // Let's keep the parent div onClick logic but add the button for better UX.
-                              }
-                            }}>
-                              {hasBloqueio && <ShieldAlert size={10} className="text-[var(--color-error)]" />}
-                            </button>
+                            {diaEstaBloqueado && (
+                              <button onClick={(e) => desbloquearDia(e, dateStr)}>
+                                <ShieldAlert size={10} className="text-[var(--color-error)]" />
+                              </button>
+                            )}
                             {diaEstaBloqueado && <span className="text-[9px] font-black text-red-600 dark:text-red-400">🔒</span>}
                           </div>
                         </div>
@@ -1203,6 +1199,30 @@ export default function AgendaScreen() {
             </div>
 
             <div className="space-y-4 pb-8">
+              {(() => {
+                const bloqueio = (bloqueios || []).find(b => b.data === selectedDate);
+                if (bloqueio) {
+                  return (
+                    <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-2xl mb-4 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <ShieldAlert className="text-red-500" size={20} />
+                        <div>
+                          <p className="text-xs font-black uppercase text-red-600 dark:text-red-400">Dia Bloqueado</p>
+                          <p className="text-sm font-bold text-red-800 dark:text-red-200">{bloqueio.motivo || 'Sem motivo especificado'}</p>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={(e) => desbloquearDia(e, selectedDate)}
+                        className="p-2 bg-white dark:bg-gray-800 text-red-500 rounded-xl shadow-sm hover:scale-105 transition-transform"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+
               {(agendamentos || [])
                 .filter(a => a.data === selectedDate && (a.statusAtendimento === 'Agendado' || a.statusAtendimento === 'Concluido'))
                 .sort((a, b) => a.hora.localeCompare(b.hora))

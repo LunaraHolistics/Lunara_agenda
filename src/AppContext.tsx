@@ -74,6 +74,7 @@ interface AppContextType {
   ddiList: CountryDDI[];
   setAgendamentos: React.Dispatch<React.SetStateAction<Agendamento[]>>;
   setPacotes: React.Dispatch<React.SetStateAction<Pacote[]>>;
+  renewPacote: (pacoteId: string) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -389,6 +390,88 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     showNotification("Banco de dados reparado!", "success");
   };
 
+  const renewPacote = (pacoteId: string) => {
+    const originalPacote = pacotes.find(p => p.id === pacoteId);
+    if (!originalPacote) return;
+
+    // Calculate next month
+    const [year, month] = originalPacote.mesReferencia.split('-').map(Number);
+    // month is 1-indexed in mesReferencia, so Date(year, month, 1) will give the first day of the next month
+    const nextDate = new Date(year, month, 1); 
+    const nextMesReferencia = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}`;
+
+    // Check if already renewed
+    const alreadyRenewed = pacotes.some(p => p.clienteId === originalPacote.clienteId && p.mesReferencia === nextMesReferencia);
+    if (alreadyRenewed) {
+      showNotification("Este pacote já foi renovado para o próximo mês.", "info");
+      return;
+    }
+
+    const newPacoteId = crypto.randomUUID();
+
+    // Create new package items with full quota
+    const newItens = originalPacote.itens.map(item => ({
+      ...item,
+      id: crypto.randomUUID(),
+      quantidadeRestante: item.quantidadeTotal
+    }));
+
+    // Find and duplicate agendamentos
+    const originalAgendamentos = agendamentos.filter(a => a.pacoteId === pacoteId);
+    const newAgendamentos: Agendamento[] = originalAgendamentos.map(a => {
+      // Shift date by 28 days (4 weeks)
+      const d = new Date(a.data + 'T00:00:00');
+      d.setDate(d.getDate() + 28);
+      
+      // Decrement remaining quantity in the new package items for each duplicated appointment
+      const item = newItens.find(i => i.terapiaId === a.terapiaId);
+      if (item) {
+        item.quantidadeRestante = Math.max(0, item.quantidadeRestante - 1);
+      }
+
+      return {
+        ...a,
+        id: crypto.randomUUID(),
+        pacoteId: newPacoteId,
+        data: d.toISOString().split('T')[0],
+        statusAtendimento: 'Agendado',
+        statusPagamento: 'Pendente',
+        valorCobrado: 0
+      };
+    });
+
+    const newPacote: Pacote = {
+      ...originalPacote,
+      id: newPacoteId,
+      mesReferencia: nextMesReferencia,
+      status: 'Ativo',
+      statusPagamento: 'Pendente',
+      dataPagamento: undefined,
+      formaPagamento: undefined,
+      bancoPagamento: undefined,
+      itens: newItens
+    };
+
+    setPacotes(prev => [...prev, newPacote]);
+    setAgendamentos(prev => [...prev, ...newAgendamentos]);
+    
+    // Create transaction for the new package
+    const cliente = clientes.find(c => c.id === originalPacote.clienteId);
+    const transacao: Transacao = {
+      id: crypto.randomUUID(),
+      descricao: `Pacote Renovado - ${cliente?.nome || 'Cliente'}`,
+      valor: newPacote.valorFinal,
+      data: new Date().toISOString().split('T')[0],
+      status: 'Pendente',
+      tipo: 'Receita',
+      categoria: 'Pacotes',
+      pacoteId: newPacoteId
+    };
+    setTransacoes(prev => [transacao, ...prev]);
+
+    showNotification("Pacote renovado com sucesso!", "success");
+  };
+
   const handleImportContacts = async (): Promise<ImportedContact[] | null> => {
     if ('contacts' in navigator && 'select' in (navigator as any).contacts) {
       try {
@@ -423,7 +506,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       handleImportContacts, exportarBackup, importarBackup, repairDatabase,
       resetSystem,
       safeDate, ddiList: DDI_LIST,
-      setAgendamentos, setPacotes
+      setAgendamentos, setPacotes,
+      renewPacote
     }}>
       {children}
       <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none">

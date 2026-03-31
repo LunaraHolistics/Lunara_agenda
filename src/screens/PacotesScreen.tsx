@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Trash2, GripVertical, Plus, PackageOpen, CheckCircle, ChevronLeft, Edit2, User } from 'lucide-react';
+import { Save, Trash2, GripVertical, Plus, PackageOpen, CheckCircle, ChevronLeft, Edit2, User, RefreshCw } from 'lucide-react';
 import { Cliente, Terapia, Pacote, ItemPacote, Transacao } from '../types';
 import { useAppContext } from '../AppContext';
 
@@ -15,7 +15,8 @@ export default function PacotesScreen() {
     updatePacote, 
     deletePacote,
     addTransacao,
-    updateTransacao
+    updateTransacao,
+    renewPacote
   } = useAppContext();
   
   const [viewMode, setViewMode] = useState<'list' | 'form'>('list');
@@ -299,6 +300,15 @@ export default function PacotesScreen() {
                     </div>
                   </div>
                   <div className="flex gap-2 relative z-20">
+                    {p.tipoPacote === 'Mensal Fixo' && (
+                      <button 
+                        onClick={() => confirmAction('Deseja renovar este pacote para o próximo mês? Os agendamentos serão duplicados para 4 semanas depois.', () => renewPacote(p.id))}
+                        className="p-2 text-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl hover:bg-emerald-100 transition-colors"
+                        title="Renovar para o próximo mês"
+                      >
+                        <RefreshCw size={18} />
+                      </button>
+                    )}
                     <button 
                       onClick={() => handleEdit(p)}
                       className="p-2 text-blue-500 bg-blue-50 dark:bg-blue-900/20 rounded-xl hover:bg-blue-100 transition-colors"

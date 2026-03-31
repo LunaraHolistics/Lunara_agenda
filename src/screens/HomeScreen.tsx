@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { DollarSign, Clock, Tag, Plus, ChevronRight, ChevronLeft, PieChart, Settings, Check, Trash2, AlertTriangle, CheckCircle, Calendar, Package, Eye, EyeOff } from 'lucide-react';
+import { DollarSign, Clock, Tag, Plus, ChevronRight, ChevronLeft, PieChart, Settings, Check, Trash2, AlertTriangle, CheckCircle, Calendar, Package, Eye, EyeOff, RefreshCw } from 'lucide-react';
 import { Agendamento } from '../types';
 import FinanceiroScreen from './FinanceiroScreen';
 import ConfiguracoesScreen from './ConfiguracoesScreen';
@@ -23,7 +23,8 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
     terapias,
     pacotes,
     transacoes,
-    despesas
+    despesas,
+    renewPacote
   } = useAppContext();
 
   const [showFinanceiro, setShowFinanceiro] = useState(false);
@@ -219,6 +220,28 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
   }, [agendamentosMes]);
 
   const totalMes = totalConcluidos + totalPendentes;
+  
+  // Pacotes Mensais Fixos para Renovar
+  const pacotesParaRenovar = useMemo(() => {
+    const now = new Date();
+    const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    
+    // Calculate next month string
+    const nextDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const nextMonthStr = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}`;
+
+    return (pacotes || []).filter(p => {
+      if (p.tipoPacote !== 'Mensal Fixo') return false;
+      if (p.mesReferencia !== currentMonthStr) return false;
+      
+      // Check if already has a package for next month
+      const alreadyRenewed = (pacotes || []).some(nextP => 
+        nextP.clienteId === p.clienteId && nextP.mesReferencia === nextMonthStr
+      );
+      
+      return !alreadyRenewed;
+    });
+  }, [pacotes]);
 
   // Próximos Atendimentos (Futuros e do dia atual)
   const proximosAtendimentos = useMemo(() => {
@@ -439,6 +462,34 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
                   <span className="text-[10px] font-black bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-2 py-1 rounded-md">
                     RENOVAR
                   </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Alerta de Renovação de Pacotes Mensais */}
+        {pacotesParaRenovar.length > 0 && (
+          <div className="mt-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 p-4 rounded-2xl">
+            <div className="flex items-center gap-2 mb-3">
+              <RefreshCw size={18} className="text-emerald-500" />
+              <h3 className="text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider">Renovação Mensal Disponível</h3>
+            </div>
+            <div className="space-y-2">
+              {pacotesParaRenovar.map(p => (
+                <div key={p.id} className="flex justify-between items-center bg-white dark:bg-gray-800 p-3 rounded-xl shadow-sm border border-emerald-100 dark:border-emerald-900/50">
+                  <div className="flex flex-col">
+                    <span className="text-sm font-bold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] truncate">
+                      {getClienteNome(p.clienteId)}
+                    </span>
+                    <span className="text-[10px] text-gray-500">Pacote Mensal Fixo</span>
+                  </div>
+                  <button 
+                    onClick={() => confirmAction(`Deseja renovar o pacote de ${getClienteNome(p.clienteId)} para o próximo mês?`, () => renewPacote(p.id))}
+                    className="text-[10px] font-black bg-emerald-500 text-white px-3 py-1.5 rounded-lg shadow-sm active:scale-95 transition-transform"
+                  >
+                    RENOVAR AGORA
+                  </button>
                 </div>
               ))}
             </div>

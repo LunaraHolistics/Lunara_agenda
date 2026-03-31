@@ -64,6 +64,7 @@ export interface Pacote {
   bancoPagamento?: string;
   itens: ItemPacote[];
   observacoes?: string;
+  isMensalFixo?: boolean;
 }
 
 // ======================

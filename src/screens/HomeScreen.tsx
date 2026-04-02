@@ -509,30 +509,6 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
         {/* Weekly Conference Alert */}
         {/* Removed Conference Alert */}
 
-        {/* Alerta de Pacotes a Terminar */}
-        {pacotesTerminando.length > 0 && (
-          <div className="mt-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-4 rounded-2xl">
-            <div className="flex items-center gap-2 mb-3">
-              <Package size={18} className="text-blue-500" />
-              <h3 className="text-xs font-bold text-blue-800 dark:text-blue-300 uppercase tracking-wider">Pacotes a Terminar (1 sessão)</h3>
-            </div>
-            <div className="space-y-2">
-              {pacotesTerminando.map(p => (
-                <div key={p.id} className="flex justify-between items-center bg-white dark:bg-gray-800 p-2.5 rounded-xl shadow-sm border border-blue-100 dark:border-blue-900/50">
-                  <span className="text-sm font-bold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] truncate">
-                    {getClienteNome(p.clienteId)}
-                  </span>
-                  <span className="text-[10px] font-black bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-2 py-1 rounded-md">
-                    RENOVAR
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Alerta de Renovação de Pacotes Mensais - REMOVIDO EM FAVOR DA NOVA SEÇÃO */}
-
         {/* Renovações Pendentes */}
         {renovacoesPendentes.length > 0 && (
           <div className="mt-4 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[2rem] shadow-sm">

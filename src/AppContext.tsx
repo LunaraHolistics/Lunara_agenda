@@ -440,6 +440,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return;
     }
 
+    // Update original package status
+    const updatedOriginalPacote = { ...originalPacote, status: 'Concluido' as const };
+    setPacotes(prev => prev.map(p => p.id === pacoteId ? updatedOriginalPacote : p));
+
     const newPacoteId = crypto.randomUUID();
 
     // Create new package items with full quota

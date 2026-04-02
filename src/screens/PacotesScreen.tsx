@@ -277,7 +277,14 @@ export default function PacotesScreen() {
               <p className="text-gray-500">Nenhum pacote ativo.</p>
             </div>
           ) : (
-            (pacotes || []).filter(p => p.mesReferencia === `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`).map(p => {
+            (pacotes || []).filter(p => {
+              const now = new Date();
+              const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+              const nextDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+              const nextMonthStr = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}`;
+              
+              return p.status === 'Ativo' && (p.mesReferencia === currentMonthStr || p.mesReferencia === nextMonthStr);
+            }).map(p => {
               const cliente = (clientes || []).find(c => c.id === p.clienteId);
               return (
                 <div key={p.id} className="bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 flex items-center justify-between">

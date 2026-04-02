@@ -237,7 +237,8 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
   }, [clientes, agendamentos, pacotes, canceladosRenovacao]);
 
   // Resumo do Dia
-  const hojeStr = new Date().toISOString().split('T')[0];
+  const hoje = new Date();
+  const hojeStr = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
   const atendimentosHoje = useMemo(() => {
     return (agendamentos || []).filter(ag => ag.data === hojeStr && ag.statusAtendimento !== 'Cancelado');
   }, [agendamentos, hojeStr]);
@@ -264,14 +265,6 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
     }
     return `${m}min`;
   };
-
-  // Alerta de Pacotes (1 sessão restante)
-  const pacotesTerminando = useMemo(() => {
-    return (pacotes || []).filter(p => {
-      const totalRestante = (p.itens || []).reduce((acc, item) => acc + Number(item.quantidadeRestante || 0), 0);
-      return totalRestante === 1;
-    });
-  }, [pacotes]);
 
   // Métricas de Atendimentos do Mês
   const totalConcluidos = useMemo(() => {

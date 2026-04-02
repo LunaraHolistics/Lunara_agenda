@@ -686,7 +686,7 @@ export default function AgendaScreen() {
           {(() => {
             console.log("RENDER CALENDÁRIO", agendamentos.length);
             const today = new Date();
-            const todayStr = today.toISOString().slice(0, 10);
+            const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
             
             const weeks: (number | null)[][] = [];
             let currentWeek: (number | null)[] = Array(firstDay).fill(null);
@@ -836,10 +836,13 @@ export default function AgendaScreen() {
                                     draggingId === ag.id ? 'opacity-50' : ''
                                   } ${
                                     isConcluido ? 'bg-gray-100 text-gray-400 border-gray-200' : 'bg-white dark:bg-gray-700 text-[var(--color-primary)] border-[var(--color-primary)]/30'
-                                  }`}
+                                  } ${ag.statusPagamento === 'Pago' ? 'ring-1 ring-[var(--color-success)]/50' : ''}`}
                                 >
                                   <div className="flex justify-between items-center font-black">
-                                    <span>{ag.hora}</span>
+                                    <div className="flex items-center gap-1">
+                                      <span>{ag.hora}</span>
+                                      {ag.statusPagamento === 'Pago' && <DollarSign size={8} className="text-[var(--color-success)]" />}
+                                    </div>
                                     <div className="flex items-center gap-1">
                                       {isMobile && !isConcluido && <Clock size={8} className="opacity-50" />}
                                       {isConcluido && <CheckCircle2 size={8} />}

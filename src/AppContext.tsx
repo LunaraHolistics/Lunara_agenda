@@ -157,6 +157,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     });
   }, [agendamentos, transacoes]);
 
+  const pacotesSincronizados = React.useMemo(() => {
+    return pacotes.map(p => {
+      const transacao = transacoes.find(t => t.pacoteId === p.id);
+      if (transacao && transacao.status === 'Pago') {
+        return { ...p, statusPagamento: 'Pago' as const };
+      }
+      return p;
+    });
+  }, [pacotes, transacoes]);
+
   useEffect(() => {
     const isCorruptedOrEmpty = () => {
       try {
@@ -335,6 +345,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const updateTransacao = (data: Transacao) => {
     setTransacoes(prev => prev.map(t => t.id === data.id ? data : t));
+    
+    // Sincronização reversa: se a transação mudou para Pago, atualizar o item de origem se necessário
+    if (data.status === 'Pago') {
+      if (data.agendamentoId) {
+        setAgendamentos(prev => prev.map(ag => 
+          ag.id === data.agendamentoId ? { ...ag, statusPagamento: 'Pago' as const } : ag
+        ));
+      }
+      if (data.pacoteId) {
+        setPacotes(prev => prev.map(p => 
+          p.id === data.pacoteId ? { ...p, statusPagamento: 'Pago' as const } : p
+        ));
+      }
+    }
   };
 
   const deleteTransacao = (id: string) => {
@@ -531,7 +555,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   return (
     <AppContext.Provider value={{
-      clientes, agendamentos: agendamentosSincronizados, terapias, pacotes, bloqueios, transacoes, despesas,
+      clientes, agendamentos: agendamentosSincronizados, terapias, pacotes: pacotesSincronizados, bloqueios, transacoes, despesas,
       addCliente, updateCliente, deleteCliente,
       addAgendamento, updateAgendamento, deleteAgendamento, completeAppointment,
       addTerapia, updateTerapia, deleteTerapia,

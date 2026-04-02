@@ -48,7 +48,7 @@ export default function ContasAReceberScreen({ onBack }: ContasAReceberScreenPro
 
   useEffect(() => {
     loadPendencias();
-  }, [pacotes, agendamentos, clientes]);
+  }, [pacotes, agendamentos, clientes, transacoes]);
 
   const loadPendencias = () => {
     setLoading(true);

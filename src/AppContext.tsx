@@ -75,6 +75,8 @@ interface AppContextType {
   setAgendamentos: React.Dispatch<React.SetStateAction<Agendamento[]>>;
   setPacotes: React.Dispatch<React.SetStateAction<Pacote[]>>;
   renewPacote: (pacoteId: string) => void;
+  canceladosRenovacao: string[];
+  cancelarRenovacao: (clientId: string) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -112,6 +114,37 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const saved = StorageService.getData(StorageKeys.DESPESAS);
     return Array.isArray(saved) ? saved : [];
   });
+
+  const [canceladosRenovacao, setCanceladosRenovacao] = useState<string[]>(() => {
+    const saved = localStorage.getItem('lunara_cancelados_renovacao');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        const currentMonth = new Date().toISOString().slice(0, 7);
+        return parsed.filter((item: string) => item.startsWith(currentMonth)).map((item: string) => item.split(':')[1]);
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  });
+
+  const cancelarRenovacao = (clientId: string) => {
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const newItem = `${currentMonth}:${clientId}`;
+    const saved = localStorage.getItem('lunara_cancelados_renovacao');
+    let list: string[] = [];
+    if (saved) {
+      try {
+        list = JSON.parse(saved);
+      } catch (e) {}
+    }
+    if (!list.includes(newItem)) {
+      const newList = [...list, newItem];
+      localStorage.setItem('lunara_cancelados_renovacao', JSON.stringify(newList));
+      setCanceladosRenovacao(prev => [...prev, clientId]);
+    }
+  };
 
   const agendamentosSincronizados = React.useMemo(() => {
     console.log('AppContext: recalculating agendamentosSincronizados', agendamentos.length);
@@ -507,7 +540,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       resetSystem,
       safeDate, ddiList: DDI_LIST,
       setAgendamentos, setPacotes,
-      renewPacote
+      renewPacote,
+      canceladosRenovacao,
+      cancelarRenovacao
     }}>
       {children}
       <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none">

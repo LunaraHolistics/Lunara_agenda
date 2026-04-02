@@ -24,7 +24,9 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
     pacotes,
     transacoes,
     despesas,
-    renewPacote
+    renewPacote,
+    canceladosRenovacao,
+    cancelarRenovacao
   } = useAppContext();
 
   const [showFinanceiro, setShowFinanceiro] = useState(false);
@@ -172,6 +174,67 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
       .filter(t => t.status === 'Pago' && t.tipo === 'Receita' && !t.descricao.toLowerCase().includes('pacote'))
       .reduce((acc, t) => acc + Number(t.valor), 0);
   }, [transacoesMes]);
+
+  // Renovações Pendentes
+  const renovacoesPendentes = useMemo(() => {
+    const now = new Date();
+    const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    
+    const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const prevMonthStr = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+
+    const list: any[] = [];
+
+    (clientes || []).forEach(cliente => {
+      if (canceladosRenovacao.includes(cliente.id)) return;
+
+      const hasApptCurrent = (agendamentos || []).some(ag => 
+        ag.clienteId === cliente.id && 
+        String(ag.data).slice(0, 7) === currentMonthStr &&
+        ag.statusAtendimento !== 'Cancelado'
+      );
+
+      const hasApptPrev = (agendamentos || []).some(ag => 
+        ag.clienteId === cliente.id && 
+        String(ag.data).slice(0, 7) === prevMonthStr &&
+        ag.statusAtendimento !== 'Cancelado'
+      );
+
+      const lastAppt = (agendamentos || [])
+        .filter(ag => ag.clienteId === cliente.id && ag.statusAtendimento !== 'Cancelado')
+        .sort((a, b) => String(b.data).localeCompare(String(a.data)))[0];
+
+      // 1. Fixo Mensal
+      const fixoPackage = (pacotes || []).find(p => p.clienteId === cliente.id && p.tipoPacote === 'Mensal Fixo');
+      if (fixoPackage) {
+        if (hasApptPrev && !hasApptCurrent) {
+          list.push({
+            cliente,
+            tipo: 'Fixo Mensal',
+            lastAppt: lastAppt?.data,
+            packageId: fixoPackage.id
+          });
+          return; // Don't add as avulso if already added as fixo
+        }
+      }
+
+      // 2. Avulso
+      const hasActivePackageCurrent = (pacotes || []).some(p => 
+        p.clienteId === cliente.id && 
+        (p.mesReferencia === currentMonthStr || (p.itens || []).some(i => (Number(i.quantidadeRestante) || 0) > 0))
+      );
+
+      if ((hasApptCurrent || hasApptPrev) && !hasActivePackageCurrent) {
+        list.push({
+          cliente,
+          tipo: 'Avulso',
+          lastAppt: lastAppt?.data
+        });
+      }
+    });
+
+    return list;
+  }, [clientes, agendamentos, pacotes, canceladosRenovacao]);
 
   // Resumo do Dia
   const hojeStr = new Date().toISOString().split('T')[0];
@@ -468,28 +531,67 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
           </div>
         )}
 
-        {/* Alerta de Renovação de Pacotes Mensais */}
-        {pacotesParaRenovar.length > 0 && (
-          <div className="mt-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 p-4 rounded-2xl">
-            <div className="flex items-center gap-2 mb-3">
-              <RefreshCw size={18} className="text-emerald-500" />
-              <h3 className="text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider">Renovação Mensal Disponível</h3>
+        {/* Alerta de Renovação de Pacotes Mensais - REMOVIDO EM FAVOR DA NOVA SEÇÃO */}
+
+        {/* Renovações Pendentes */}
+        {renovacoesPendentes.length > 0 && (
+          <div className="mt-4 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 p-4 rounded-[2rem] shadow-sm">
+            <div className="flex items-center justify-between mb-4 px-1">
+              <div className="flex items-center gap-2">
+                <RefreshCw size={18} className="text-[var(--color-primary)]" />
+                <h3 className="text-sm font-bold text-zinc-800 dark:text-zinc-200 uppercase tracking-wider">Renovações Pendentes</h3>
+              </div>
+              <span className="text-[10px] font-black bg-[var(--color-primary)]/10 text-[var(--color-primary)] px-2 py-1 rounded-full">
+                {renovacoesPendentes.length}
+              </span>
             </div>
-            <div className="space-y-2">
-              {pacotesParaRenovar.map(p => (
-                <div key={p.id} className="flex justify-between items-center bg-white dark:bg-gray-800 p-3 rounded-xl shadow-sm border border-emerald-100 dark:border-emerald-900/50">
-                  <div className="flex flex-col">
-                    <span className="text-sm font-bold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] truncate">
-                      {getClienteNome(p.clienteId)}
-                    </span>
-                    <span className="text-[10px] text-gray-500">Pacote Mensal Fixo</span>
+            
+            <div className="space-y-3">
+              {renovacoesPendentes.map(item => (
+                <div key={item.cliente.id} className="bg-white dark:bg-zinc-900 p-4 rounded-2xl shadow-sm border border-zinc-100 dark:border-zinc-800 flex flex-col gap-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{item.cliente.nome}</h4>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${
+                          item.tipo === 'Fixo Mensal' 
+                            ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' 
+                            : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                        }`}>
+                          {item.tipo}
+                        </span>
+                        {item.lastAppt && (
+                          <span className="text-[10px] text-zinc-500">Último: {formatDate(item.lastAppt)}</span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <button 
-                    onClick={() => confirmAction(`Deseja renovar o pacote de ${getClienteNome(p.clienteId)} para o próximo mês?`, () => renewPacote(p.id))}
-                    className="text-[10px] font-black bg-emerald-500 text-white px-3 py-1.5 rounded-lg shadow-sm active:scale-95 transition-transform"
-                  >
-                    RENOVAR AGORA
-                  </button>
+
+                  <div className="flex gap-2">
+                    {item.tipo === 'Fixo Mensal' ? (
+                      <>
+                        <button 
+                          onClick={() => confirmAction(`Deseja renovar o pacote de ${item.cliente.nome}?`, () => renewPacote(item.packageId))}
+                          className="flex-1 bg-[var(--color-primary)] text-white text-[10px] font-black py-2.5 rounded-xl shadow-lg shadow-[var(--color-primary)]/20 active:scale-95 transition-transform"
+                        >
+                          RENOVAR
+                        </button>
+                        <button 
+                          onClick={() => confirmAction(`Deseja cancelar a renovação de ${item.cliente.nome} para este mês?`, () => cancelarRenovacao(item.cliente.id))}
+                          className="px-3 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 text-[10px] font-black py-2.5 rounded-xl active:scale-95 transition-transform"
+                        >
+                          CANCELAR
+                        </button>
+                      </>
+                    ) : (
+                      <button 
+                        onClick={() => showNotification(`Fluxo de renovação para ${item.cliente.nome} iniciado.`, 'info')}
+                        className="flex-1 bg-emerald-500 text-white text-[10px] font-black py-2.5 rounded-xl shadow-lg shadow-emerald-500/20 active:scale-95 transition-transform"
+                      >
+                        OFERECER RENOVAÇÃO
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

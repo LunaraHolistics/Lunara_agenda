@@ -97,18 +97,20 @@ export default function FreelancerScreen({ onBack }: FreelancerProps) {
 
   // Cálculos para o Card Unificado
   const unifiedStats = useMemo(() => {
+    const filterStr = `${filtroAno}-${String(Number(filtroMes) + 1).padStart(2, '0')}`;
+
     const holisticaReceitas = (transacoes || [])
-      .filter(t => (!t.segmento || t.segmento === 'holistica') && t.tipo === 'Receita' && t.status === 'Pago')
+      .filter(t => (!t.segmento || t.segmento === 'holistica') && t.tipo === 'Receita' && t.status === 'Pago' && String(t.data).slice(0, 7) === filterStr)
       .reduce((acc, t) => acc + t.valor, 0);
     const holisticaDespesas = (despesas || [])
-      .filter(d => !d.segmento || d.segmento === 'holistica')
+      .filter(d => (!d.segmento || d.segmento === 'holistica') && String(d.data).slice(0, 7) === filterStr)
       .reduce((acc, d) => acc + d.valor, 0);
     
     const freelancerReceitas = (transacoes || [])
-      .filter(t => t.segmento === 'freelancer' && t.tipo === 'Receita' && t.status === 'Pago')
+      .filter(t => t.segmento === 'freelancer' && t.tipo === 'Receita' && t.status === 'Pago' && String(t.data).slice(0, 7) === filterStr)
       .reduce((acc, t) => acc + t.valor, 0);
     const freelancerDespesas = (despesas || [])
-      .filter(d => d.segmento === 'freelancer')
+      .filter(d => d.segmento === 'freelancer' && String(d.data).slice(0, 7) === filterStr)
       .reduce((acc, d) => acc + d.valor, 0);
 
     const saldoHolistica = holisticaReceitas - holisticaDespesas;
@@ -119,7 +121,7 @@ export default function FreelancerScreen({ onBack }: FreelancerProps) {
       freelancer: saldoFreelancer,
       total: saldoHolistica + saldoFreelancer
     };
-  }, [transacoes, despesas]);
+  }, [transacoes, despesas, filtroMes, filtroAno]);
 
   const filteredTransacoes = useMemo(() => {
     const combined = [
@@ -127,12 +129,12 @@ export default function FreelancerScreen({ onBack }: FreelancerProps) {
       ...(despesas || []).filter(d => d.segmento === 'freelancer').map(d => ({ ...d, tipo: 'Despesa' as const, status: 'Pago' as const, isDespesaState: true }))
     ];
 
+    const filterStr = `${filtroAno}-${String(Number(filtroMes) + 1).padStart(2, '0')}`;
+
     return combined.filter(t => {
-      const date = new Date(t.data + 'T12:00:00');
-      const matchMes = String(date.getMonth()) === filtroMes;
-      const matchAno = String(date.getFullYear()) === filtroAno;
+      const matchMesAno = String(t.data).slice(0, 7) === filterStr;
       const matchTipo = filtroTipo === 'Todos' || t.tipo === filtroTipo;
-      return matchMes && matchAno && matchTipo;
+      return matchMesAno && matchTipo;
     }).sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
   }, [transacoes, despesas, filtroMes, filtroAno, filtroTipo]);
 

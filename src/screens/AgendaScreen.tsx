@@ -80,6 +80,40 @@ export default function AgendaScreen() {
   const [dropZoneMinimizado, setDropZoneMinimizado] = useState(false);
   const dragPreviewRef = useRef<HTMLDivElement>(null);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
+  const dayTouchTimer = useRef<NodeJS.Timeout | null>(null);
+  const isDayLongPress = useRef(false);
+
+  const handleDayTouchStart = (e: React.TouchEvent, dateStr: string) => {
+    if (!isMobile) return;
+    isDayLongPress.current = false;
+    dayTouchTimer.current = setTimeout(() => {
+      isDayLongPress.current = true;
+      const diaEstaBloqueado = (bloqueios || []).some(d => d.data === dateStr);
+      if (diaEstaBloqueado) {
+        confirmAction('Deseja desbloquear este dia?', () => {
+          const b = (bloqueios || []).find(x => x.data === dateStr);
+          if (b) deleteBloqueio(b.id);
+        });
+      } else {
+        confirmAction(`Deseja bloquear o dia ${dateStr.split('-').reverse().join('/')}?`, () => {
+          promptAction('Motivo do bloqueio (opcional):', '', (motivo) => {
+            addBloqueio({ data: dateStr, motivo });
+          });
+        });
+      }
+    }, 600);
+  };
+
+  const handleDayTouchEnd = () => {
+    if (dayTouchTimer.current) {
+      clearTimeout(dayTouchTimer.current);
+      dayTouchTimer.current = null;
+    }
+    // Reset after a short delay to allow onClick to see the state
+    setTimeout(() => {
+      isDayLongPress.current = false;
+    }, 150);
+  };
 
   useEffect(() => {
     const mobile = window.matchMedia("(pointer: coarse)").matches;
@@ -651,6 +685,9 @@ export default function AgendaScreen() {
         <div className="space-y-1">
           {(() => {
             console.log("RENDER CALENDÁRIO", agendamentos.length);
+            const today = new Date();
+            const todayStr = today.toISOString().slice(0, 10);
+            
             const weeks: (number | null)[][] = [];
             let currentWeek: (number | null)[] = Array(firstDay).fill(null);
             for (let i = 1; i <= daysInMonth; i++) {
@@ -676,7 +713,7 @@ export default function AgendaScreen() {
                     const dayAgendamentos = (agendamentos || [])
                       .filter(a => String(a.data).slice(0, 10) === dateStr && (a.statusAtendimento === 'Agendado' || a.statusAtendimento === 'Concluido'))
                       .sort((a, b) => a.hora.localeCompare(b.hora));
-                    const isToday = new Date().toISOString().startsWith(dateStr);
+                    const isToday = String(dateStr) === todayStr;
 
                     return (
                       <div 
@@ -684,9 +721,12 @@ export default function AgendaScreen() {
                         data-day={day}
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (isDragging.current) return;
+                          if (isDragging.current || isDayLongPress.current) return;
                           openDayAgenda(day);
                         }}
+                        onTouchStart={(e) => handleDayTouchStart(e, dateStr)}
+                        onTouchEnd={handleDayTouchEnd}
+                        onTouchMove={handleDayTouchEnd}
                         onDragOver={(e) => {
                           if (diaEstaBloqueado) return;
                           handleDragOver(e);
@@ -702,7 +742,7 @@ export default function AgendaScreen() {
                         }}
                         className={`min-h-[110px] h-auto rounded-xl flex flex-col p-1.5 relative cursor-pointer transition-all border ${
                           diaEstaBloqueado 
-                            ? 'bg-red-100 dark:bg-red-900/30 border-red-200 dark:border-red-800'
+                            ? 'bg-gray-100 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 opacity-60'
                             : dragOverDay === day
                               ? 'ring-2 ring-[var(--color-primary)] bg-[var(--color-primary)]/10 border-dashed scale-105 z-10'
                               : isToday 

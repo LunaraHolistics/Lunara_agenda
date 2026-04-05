@@ -10,6 +10,7 @@ export default function PacotesScreen() {
     clientes,
     terapias,
     pacotes,
+    agendamentos,
     transacoes,
     addPacote, 
     updatePacote, 
@@ -303,6 +304,25 @@ export default function PacotesScreen() {
                         <span className="text-xs text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)]">
                           {p.mesReferencia}
                         </span>
+                      </div>
+                      {/* 🧠 6. CONTADOR CORRETO (ESSENCIAL) */}
+                      <div className="mt-2 space-y-1">
+                        {(p.itens || []).map(item => {
+                          const terapia = (terapias || []).find(t => t.id === item.terapiaId);
+                          const total = (agendamentos || []).filter(a => a.pacoteId === p.id && a.terapiaId === item.terapiaId).length;
+                          const concluidos = (agendamentos || []).filter(a => a.pacoteId === p.id && a.terapiaId === item.terapiaId && a.statusAtendimento === 'Concluido').length;
+                          const agendados = (agendamentos || []).filter(a => a.pacoteId === p.id && a.terapiaId === item.terapiaId && a.statusAtendimento === 'Agendado').length;
+                          
+                          return (
+                            <div key={item.id} className="flex items-center gap-2">
+                              <div className="w-1.5 h-1.5 rounded-full bg-[var(--color-primary)]"></div>
+                              <span className="text-[10px] font-medium opacity-70">{terapia?.nome}:</span>
+                              <span className="text-[10px] font-bold text-[var(--color-primary)]">
+                                {concluidos}/{total} <span className="opacity-50 font-normal">({agendados} agendados)</span>
+                              </span>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>

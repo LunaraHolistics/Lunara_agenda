@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon, ShieldAlert, X, GripVertical, Clock, AlertCircle, CheckCircle2, Calendar, Trash2, ChevronDown, ChevronUp, MessageCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon, ShieldAlert, X, GripVertical, Clock, AlertCircle, CheckCircle2, Calendar, Trash2, ChevronDown, ChevronUp, MessageCircle, DollarSign } from 'lucide-react';
 import { Cliente, Terapia, Agendamento, Bloqueio, Pacote } from '../types';
 import { StorageService } from '../utils/storage';
 import { useAppContext } from '../AppContext';
@@ -27,7 +27,9 @@ export default function AgendaScreen() {
     setPacotes,
     addTransacao,
     addBloqueio,
-    deleteBloqueio
+    deleteBloqueio,
+    addAgendamento,
+    deleteAgendamento
   } = useAppContext();
   
   // State
@@ -292,14 +294,7 @@ export default function AgendaScreen() {
         return;
       }
 
-      setAgendamentos(prev =>
-        prev.map(item =>
-          String(item.id) === String(id)
-            ? { ...item, data: dateStr, statusAtendimento: 'Agendado' }
-            : item
-        )
-      );
-      showNotification('Agendamento agendado!', 'success');
+      updateAgendamento({ ...item!, data: dateStr, statusAtendimento: 'Agendado' });
     }
 
     if (type === 'terapia') {
@@ -329,14 +324,7 @@ export default function AgendaScreen() {
         return;
       }
 
-      setAgendamentos(prev =>
-        prev.map(item =>
-          String(item.id) === String(id)
-            ? { ...item, data: '', hora: '', statusAtendimento: 'Disponivel' }
-            : item
-        )
-      );
-      showNotification('Agendamento movido para disponíveis!', 'success');
+      updateAgendamento({ ...item!, data: '', hora: '', statusAtendimento: 'Disponivel' });
     }
     setDraggingId(null);
   };
@@ -379,44 +367,22 @@ export default function AgendaScreen() {
 
       for (let d of datesToSchedule) {
         for (let tid of formTerapiaIds) {
-          const agendamentoId = crypto.randomUUID();
-          const newAgendamento: Agendamento = {
-            id: agendamentoId,
+          addAgendamento({
             clienteId: formClienteId,
             terapiaId: tid,
             data: d,
             hora: formHora,
             pacoteId: formPacoteId,
+            itemPacoteId: formItemPacoteId,
             statusPagamento: 'Pendente',
             statusAtendimento: 'Agendado',
             valorCobrado: 0
-          };
-          newAgendamentos.push(newAgendamento);
+          });
         }
       }
 
-      // Handle package updates if applicable
-      if (formPacoteId && formItemPacoteId) {
-        setPacotes(prev => (prev || []).map(p => {
-          if (p.id === formPacoteId) {
-            const updatedItens = (p.itens || []).map((item) => {
-              if (item.id === formItemPacoteId) {
-                return { ...item, quantidadeRestante: Math.max(0, Number(item.quantidadeRestante || 0) - formTerapiaIds.length * datesToSchedule.length) };
-              }
-              return item;
-            });
-            return { ...p, itens: updatedItens };
-          }
-          return p;
-        }));
-      }
-
-      // Update Agendamentos
-      setAgendamentos(prev => [...(prev || []), ...newAgendamentos]);
-
       setIsModalOpen(false);
       setFormTerapiaIds([]); // Reset therapy IDs
-      showNotification('Agendado com sucesso!', 'success');
     };
 
     await saveAll();
@@ -430,12 +396,7 @@ export default function AgendaScreen() {
     }
 
     confirmAction('Deseja realmente remover este agendamento da agenda? Ele ficará disponível para reagendamento.', () => {
-      setAgendamentos(prev => (prev || []).map(a => 
-        String(a.id) === String(agendamentoId) 
-          ? { ...a, data: '', hora: '', statusAtendimento: 'Disponivel' } 
-          : a
-      ));
-      showNotification('Agendamento movido para disponíveis!', 'success');
+      deleteAgendamento(agendamentoId);
     }, { isDanger: true });
   };
 
@@ -1011,6 +972,11 @@ export default function AgendaScreen() {
                       .map(ag => {
                         const cliente = (clientes || []).find(c => c.id === ag.clienteId);
                         const terapia = (terapias || []).find(t => t.id === ag.terapiaId);
+                        
+                        // 🧠 6. CONTADOR CORRETO (ESSENCIAL)
+                        const total = (agendamentos || []).filter(a => a.pacoteId === ag.pacoteId && a.terapiaId === ag.terapiaId).length;
+                        const concluidos = (agendamentos || []).filter(a => a.pacoteId === ag.pacoteId && a.terapiaId === ag.terapiaId && a.statusAtendimento === 'Concluido').length;
+
                         return (
                           <div 
                             key={ag.id}
@@ -1032,7 +998,12 @@ export default function AgendaScreen() {
                             }}
                             className={`bg-white dark:bg-gray-800 p-2 rounded-xl border border-[var(--color-primary)]/30 shadow-sm shrink-0 min-w-[120px] ${isMobile ? '' : 'cursor-grab active:cursor-grabbing'}`}
                           >
-                            <p className="text-[10px] font-bold truncate">{cliente?.nome}</p>
+                            <div className="flex justify-between items-start">
+                              <p className="text-[10px] font-bold truncate max-w-[80px]">{cliente?.nome}</p>
+                              <span className="text-[8px] font-black text-[var(--color-primary)] bg-[var(--color-primary)]/10 px-1.5 py-0.5 rounded-full">
+                                {concluidos}/{total}
+                              </span>
+                            </div>
                             <p className="text-[8px] opacity-60 truncate">{terapia?.nome}</p>
                           </div>
                         );

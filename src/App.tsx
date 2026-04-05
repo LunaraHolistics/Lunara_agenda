@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Home, Users, Activity, Package, Calendar, Wallet, BarChart2, Settings, LogOut, Briefcase } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import HomeScreen from './screens/HomeScreen';
@@ -37,11 +37,22 @@ function AppContent() {
     setActiveTab(newTab);
   };
 
+  const notifiedRef = useRef<Set<string>>(new Set());
+
+  const sendNotification = (title: string, body: string) => {
+    if (Notification.permission === 'granted') {
+      new Notification(title, {
+        body,
+        icon: '/icone.png'
+      });
+    }
+  };
+
   useEffect(() => {
-    if ('Notification' in window) {
-      if (Notification.permission === 'default') {
-        Notification.requestPermission();
-      }
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().then(permission => {
+        console.log('Permissão de notificação:', permission);
+      });
     }
 
     if ('serviceWorker' in navigator) {
@@ -52,29 +63,40 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    const checkAppointments = () => {
+    const interval = setInterval(() => {
       const now = new Date();
-      agendamentos.forEach(ag => {
-        const appointmentDate = new Date(`${ag.data}T${ag.hora}`);
-        const diff = appointmentDate.getTime() - now.getTime();
-        
-        // 5 minutos = 300000 ms
-        if (diff > 0 && diff <= 300000) {
-          const cliente = clientes.find(c => c.id === ag.clienteId);
-          const terapia = terapias.find(t => t.id === ag.terapiaId);
-          
-          if (Notification.permission === 'granted') {
-            new Notification('Lembrete de Atendimento', {
-              body: `Atendimento com ${cliente?.nome || 'Cliente'} (${terapia?.nome || 'Terapia'}) em 5 minutos!`,
-            });
+
+      (agendamentos || []).forEach(a => {
+        if (
+          a.statusAtendimento === 'Agendado' &&
+          a.data &&
+          a.hora
+        ) {
+          try {
+            const [year, month, day] = a.data.split('-').map(Number);
+            const [hours, minutes] = a.hora.split(':').map(Number);
+            const agendamentoDate = new Date(year, month - 1, day, hours, minutes);
+            const diff = (agendamentoDate.getTime() - now.getTime()) / 60000;
+
+            const key = `${a.id}-${a.data}-${a.hora}`;
+
+            // Notificar 30 minutos antes
+            if (diff > 0 && diff <= 30 && !notifiedRef.current.has(key)) {
+              sendNotification(
+                'Atendimento próximo',
+                `Você tem um atendimento às ${a.hora}`
+              );
+              notifiedRef.current.add(key);
+            }
+          } catch (e) {
+            console.error('Erro ao processar data do agendamento', e);
           }
         }
       });
-    };
+    }, 60000);
 
-    const interval = setInterval(checkAppointments, 60000); // Verifica a cada minuto
     return () => clearInterval(interval);
-  }, [agendamentos, clientes, terapias]);
+  }, [agendamentos]);
 
   const renderScreen = () => {
     switch (activeTab) {

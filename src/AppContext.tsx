@@ -238,6 +238,44 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setPrompt({ message, defaultValue, onConfirm, ...options });
   };
 
+  // 🧹 3. LIMPEZA DE DADOS EXISTENTES (Rotina de Correção)
+  useEffect(() => {
+    if (agendamentos.length > 0 && pacotes.length > 0) {
+      setAgendamentos(prev => {
+        const toKeep: Agendamento[] = [];
+        const uniqueScheduled = new Set<string>();
+        const availableCounts = new Map<string, number>();
+        
+        prev.forEach(ag => {
+          if (ag.statusAtendimento === 'Disponivel' && ag.pacoteId && ag.itemPacoteId) {
+            // Para sessões disponíveis, limitamos à quantidade total do item no pacote
+            const key = `${ag.pacoteId}-${ag.itemPacoteId}`;
+            const currentCount = availableCounts.get(key) || 0;
+            const pacote = pacotes.find(p => p.id === ag.pacoteId);
+            const item = pacote?.itens.find(i => i.id === ag.itemPacoteId);
+            
+            // Só mantemos se ainda estiver dentro da cota (quantidadeTotal)
+            // Nota: Isso é uma simplificação, pois algumas sessões já podem estar agendadas/concluidas
+            // Mas ajuda a limpar duplicações massivas de placeholders
+            if (item && currentCount < item.quantidadeTotal) {
+              availableCounts.set(key, currentCount + 1);
+              toKeep.push(ag);
+            }
+          } else {
+            // Para sessões agendadas/concluidas/canceladas, usamos unicidade por data/hora
+            const key = `${ag.clienteId}-${ag.terapiaId}-${ag.pacoteId || 'no-pkg'}-${ag.itemPacoteId || 'no-item'}-${ag.statusAtendimento}-${ag.data}-${ag.hora}`;
+            if (!uniqueScheduled.has(key)) {
+              uniqueScheduled.add(key);
+              toKeep.push(ag);
+            }
+          }
+        });
+        
+        return toKeep;
+      });
+    }
+  }, [pacotes.length]); // Run when pacotes are loaded
+
   const addCliente = (data: Omit<Cliente, 'id'>) => {
     const novo = { ...data, id: crypto.randomUUID() } as Cliente;
     setClientes(prev => [...prev, novo].sort((a, b) => a.nome.localeCompare(b.nome)));
@@ -255,23 +293,149 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const addAgendamento = (data: Omit<Agendamento, 'id'>) => {
-    const novo = { ...data, id: crypto.randomUUID() } as Agendamento;
-    setAgendamentos(prev => [...prev, novo].sort((a, b) => a.data.localeCompare(b.data) || a.hora.localeCompare(b.hora)));
+    setAgendamentos(prev => {
+      // 💣 2. BUG CRÍTICO – DUPLICAÇÃO DE SESSÕES
+      const isDuplicate = prev.some(a => 
+        a.clienteId === data.clienteId &&
+        a.terapiaId === data.terapiaId &&
+        a.pacoteId === data.pacoteId &&
+        a.itemPacoteId === data.itemPacoteId &&
+        a.data === data.data &&
+        a.hora === data.hora &&
+        a.statusAtendimento === data.statusAtendimento &&
+        data.statusAtendimento !== 'Disponivel'
+      );
+
+      if (isDuplicate) {
+        console.warn("Tentativa de criar agendamento duplicado bloqueada.");
+        return prev;
+      }
+
+      // 🔄 4. CONSISTÊNCIA ENTRE PACOTE E AGENDA
+      if (data.pacoteId && data.itemPacoteId && data.statusAtendimento === 'Agendado') {
+        const disponivelIdx = prev.findIndex(a => 
+          a.pacoteId === data.pacoteId && 
+          a.itemPacoteId === data.itemPacoteId && 
+          a.statusAtendimento === 'Disponivel'
+        );
+
+        if (disponivelIdx !== -1) {
+          const next = [...prev];
+          next[disponivelIdx] = { ...next[disponivelIdx], ...data };
+          
+          // Atualizar quantidade restante no pacote
+          setPacotes(pPrev => pPrev.map(p => {
+            if (p.id === data.pacoteId) {
+              return {
+                ...p,
+                itens: p.itens.map(item => 
+                  item.id === data.itemPacoteId 
+                    ? { ...item, quantidadeRestante: Math.max(0, item.quantidadeRestante - 1) }
+                    : item
+                )
+              };
+            }
+            return p;
+          }));
+
+          return next.sort((a, b) => a.data.localeCompare(b.data) || a.hora.localeCompare(b.hora));
+        }
+      }
+
+      const novo = { ...data, id: crypto.randomUUID() } as Agendamento;
+      return [...prev, novo].sort((a, b) => a.data.localeCompare(b.data) || a.hora.localeCompare(b.hora));
+    });
     showNotification("Agendado!", "success");
   };
 
   const updateAgendamento = (data: Agendamento) => {
     setAgendamentos(prev => {
+      const old = prev.find(a => a.id === data.id);
+      
+      // Evitar duplicados ao atualizar também
+      const isDuplicate = prev.some(a => 
+        a.id !== data.id &&
+        a.clienteId === data.clienteId &&
+        a.terapiaId === data.terapiaId &&
+        a.pacoteId === data.pacoteId &&
+        a.itemPacoteId === data.itemPacoteId &&
+        a.data === data.data &&
+        a.hora === data.hora &&
+        a.statusAtendimento === data.statusAtendimento &&
+        data.statusAtendimento !== 'Disponivel'
+      );
+
+      if (isDuplicate) {
+        showNotification("Já existe um agendamento idêntico neste horário.", "error");
+        return prev;
+      }
+
+      // Se mudou de Disponivel para Agendado, decrementa pacote
+      if (old?.statusAtendimento === 'Disponivel' && data.statusAtendimento === 'Agendado' && data.pacoteId && data.itemPacoteId) {
+        setPacotes(pPrev => pPrev.map(p => {
+          if (p.id === data.pacoteId) {
+            return {
+              ...p,
+              itens: p.itens.map(item => 
+                item.id === data.itemPacoteId 
+                  ? { ...item, quantidadeRestante: Math.max(0, item.quantidadeRestante - 1) }
+                  : item
+              )
+            };
+          }
+          return p;
+        }));
+      }
+      // Se mudou de Agendado para Disponivel, incrementa pacote
+      else if (old?.statusAtendimento === 'Agendado' && data.statusAtendimento === 'Disponivel' && data.pacoteId && data.itemPacoteId) {
+        setPacotes(pPrev => pPrev.map(p => {
+          if (p.id === data.pacoteId) {
+            return {
+              ...p,
+              itens: p.itens.map(item => 
+                item.id === data.itemPacoteId 
+                  ? { ...item, quantidadeRestante: item.quantidadeRestante + 1 }
+                  : item
+              )
+            };
+          }
+          return p;
+        }));
+      }
+
       const next = prev.map(a => a.id === data.id ? data : a).sort((a, b) => a.data.localeCompare(b.data) || a.hora.localeCompare(b.hora));
-      console.log('AppContext: updateAgendamento', data.id, 'New Date:', data.data);
       return next;
     });
     showNotification("Agendamento atualizado!", "success");
   };
 
   const deleteAgendamento = (id: string) => {
-    setAgendamentos(prev => prev.map(a => a.id === id ? { ...a, data: '', hora: '', statusAtendimento: 'Disponivel' } : a));
-    showNotification("Agendamento movido para disponíveis", "info");
+    setAgendamentos(prev => {
+      const ag = prev.find(a => a.id === id);
+      if (ag?.pacoteId && ag.itemPacoteId) {
+        // 🔄 4. CONSISTÊNCIA: Ao remover → volta para "Disponivel"
+        // Se estava agendado, incrementa a quantidade restante no pacote
+        if (ag.statusAtendimento === 'Agendado' || ag.statusAtendimento === 'Concluido') {
+          setPacotes(pPrev => pPrev.map(p => {
+            if (p.id === ag.pacoteId) {
+              return {
+                ...p,
+                itens: p.itens.map(item => 
+                  item.id === ag.itemPacoteId 
+                    ? { ...item, quantidadeRestante: item.quantidadeRestante + 1 }
+                    : item
+                )
+              };
+            }
+            return p;
+          }));
+        }
+        return prev.map(a => a.id === id ? { ...a, data: '', hora: '', statusAtendimento: 'Disponivel' } : a);
+      }
+      // Se for avulso, remove de vez
+      return prev.filter(a => a.id !== id);
+    });
+    showNotification("Agendamento removido", "info");
   };
 
   const completeAppointment = (id: string) => {
@@ -296,9 +460,39 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const addPacote = (data: Omit<Pacote, 'id'>) => {
-    const novo = { ...data, id: crypto.randomUUID() } as Pacote;
+    const newPacoteId = crypto.randomUUID();
+    const novo = { ...data, id: newPacoteId } as Pacote;
+    
+    // 🧠 1. PROTEÇÃO CONTRA DUPLICAÇÃO (NÍVEL HARD)
+    setAgendamentos(prev => {
+      const jaExiste = prev.some(a => a.pacoteId === newPacoteId);
+      if (jaExiste) {
+        console.log('Sessões já existem para este pacote. Não recriar.');
+        return prev;
+      }
+
+      const novasSessoes: Agendamento[] = [];
+      novo.itens.forEach(item => {
+        for (let i = 0; i < item.quantidadeTotal; i++) {
+          novasSessoes.push({
+            id: crypto.randomUUID(),
+            clienteId: novo.clienteId,
+            pacoteId: newPacoteId,
+            itemPacoteId: item.id,
+            terapiaId: item.terapiaId,
+            data: '',
+            hora: '',
+            statusAtendimento: 'Disponivel',
+            statusPagamento: 'Pendente',
+            valorCobrado: 0
+          });
+        }
+      });
+      return [...prev, ...novasSessoes];
+    });
+
     setPacotes(prev => [...prev, novo].sort((a, b) => b.mesReferencia.localeCompare(a.mesReferencia)));
-    showNotification("Pacote criado!", "success");
+    showNotification("Pacote criado e sessões liberadas!", "success");
   };
 
   const updatePacote = (data: Pacote) => {
@@ -435,16 +629,42 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const repairDatabase = () => {
+    // 1. Validar vínculos
     const validAgendamentos = (agendamentos || []).filter(a => 
       (clientes || []).some(c => c.id === a.clienteId) && 
       (terapias || []).some(t => t.id === a.terapiaId)
     );
-    setAgendamentos(validAgendamentos);
+    
+    // 2. 🧹 LIMPEZA DE DUPLICADOS
+    const toKeep: Agendamento[] = [];
+    const uniqueScheduled = new Set<string>();
+    const availableCounts = new Map<string, number>();
+    
+    validAgendamentos.forEach(ag => {
+      if (ag.statusAtendimento === 'Disponivel' && ag.pacoteId && ag.itemPacoteId) {
+        const key = `${ag.pacoteId}-${ag.itemPacoteId}`;
+        const currentCount = availableCounts.get(key) || 0;
+        const pacote = pacotes.find(p => p.id === ag.pacoteId);
+        const item = pacote?.itens.find(i => i.id === ag.itemPacoteId);
+        if (item && currentCount < item.quantidadeTotal) {
+          availableCounts.set(key, currentCount + 1);
+          toKeep.push(ag);
+        }
+      } else {
+        const key = `${ag.clienteId}-${ag.terapiaId}-${ag.pacoteId || 'no-pkg'}-${ag.itemPacoteId || 'no-item'}-${ag.statusAtendimento}-${ag.data}-${ag.hora}`;
+        if (!uniqueScheduled.has(key)) {
+          uniqueScheduled.add(key);
+          toKeep.push(ag);
+        }
+      }
+    });
+
+    setAgendamentos(toKeep);
     
     const validPacotes = (pacotes || []).filter(p => (clientes || []).some(c => c.id === p.clienteId));
     setPacotes(validPacotes);
     
-    showNotification("Banco de dados reparado!", "success");
+    showNotification("Banco de dados reparado e duplicados removidos!", "success");
   };
 
   const renewPacote = (pacoteId: string) => {
@@ -453,7 +673,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     // Calculate next month
     const [year, month] = originalPacote.mesReferencia.split('-').map(Number);
-    // month is 1-indexed in mesReferencia, so Date(year, month, 1) will give the first day of the next month
     const nextDate = new Date(year, month, 1); 
     const nextMesReferencia = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}`;
 
@@ -464,11 +683,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return;
     }
 
+    const newPacoteId = crypto.randomUUID();
+
+    // 🧠 1. PROTEÇÃO CONTRA DUPLICAÇÃO
+    const jaExiste = agendamentos.some(a => a.pacoteId === newPacoteId);
+    if (jaExiste) {
+      console.log('Sessões já existem para este pacote. Não recriar.');
+      return;
+    }
+
     // Update original package status
     const updatedOriginalPacote = { ...originalPacote, status: 'Concluido' as const };
     setPacotes(prev => prev.map(p => p.id === pacoteId ? updatedOriginalPacote : p));
-
-    const newPacoteId = crypto.randomUUID();
 
     // Create new package items with full quota
     const newItens = originalPacote.itens.map(item => ({
@@ -477,28 +703,49 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       quantidadeRestante: item.quantidadeTotal
     }));
 
-    // Find and duplicate agendamentos
-    const originalAgendamentos = agendamentos.filter(a => a.pacoteId === pacoteId);
-    const newAgendamentos: Agendamento[] = originalAgendamentos.map(a => {
+    // Find and duplicate agendamentos (shifted)
+    const originalAgendamentos = agendamentos.filter(a => a.pacoteId === pacoteId && a.statusAtendimento !== 'Cancelado');
+    const novasSessoes: Agendamento[] = [];
+    
+    originalAgendamentos.forEach(a => {
       // Shift date by 28 days (4 weeks)
       const d = new Date(a.data + 'T00:00:00');
       d.setDate(d.getDate() + 28);
       
-      // Decrement remaining quantity in the new package items for each duplicated appointment
       const item = newItens.find(i => i.terapiaId === a.terapiaId);
-      if (item) {
-        item.quantidadeRestante = Math.max(0, item.quantidadeRestante - 1);
+      if (item && item.quantidadeRestante > 0) {
+        item.quantidadeRestante--;
+        
+        novasSessoes.push({
+          ...a,
+          id: crypto.randomUUID(),
+          pacoteId: newPacoteId,
+          itemPacoteId: item.id,
+          data: d.toISOString().split('T')[0],
+          statusAtendimento: 'Agendado',
+          statusPagamento: 'Pendente',
+          valorCobrado: 0
+        });
       }
+    });
 
-      return {
-        ...a,
-        id: crypto.randomUUID(),
-        pacoteId: newPacoteId,
-        data: d.toISOString().split('T')[0],
-        statusAtendimento: 'Agendado',
-        statusPagamento: 'Pendente',
-        valorCobrado: 0
-      };
+    // 🧠 1. LIBERAÇÃO DE SESSÕES RESTANTES APÓS RENOVAÇÃO
+    newItens.forEach(item => {
+      const restante = item.quantidadeRestante;
+      for (let i = 0; i < restante; i++) {
+        novasSessoes.push({
+          id: crypto.randomUUID(),
+          clienteId: originalPacote.clienteId,
+          pacoteId: newPacoteId,
+          itemPacoteId: item.id,
+          terapiaId: item.terapiaId,
+          data: '',
+          hora: '',
+          statusAtendimento: 'Disponivel',
+          statusPagamento: 'Pendente',
+          valorCobrado: 0
+        });
+      }
     });
 
     const newPacote: Pacote = {
@@ -514,7 +761,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     setPacotes(prev => [...prev, newPacote]);
-    setAgendamentos(prev => [...prev, ...newAgendamentos]);
+    setAgendamentos(prev => [...prev, ...novasSessoes]);
     
     // Create transaction for the new package
     const cliente = clientes.find(c => c.id === originalPacote.clienteId);
@@ -530,7 +777,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
     setTransacoes(prev => [transacao, ...prev]);
 
-    showNotification("Pacote renovado com sucesso!", "success");
+    showNotification("Pacote renovado e sessões liberadas!", "success");
   };
 
   const handleImportContacts = async (): Promise<ImportedContact[] | null> => {

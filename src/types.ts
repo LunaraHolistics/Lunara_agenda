@@ -75,6 +75,7 @@ export interface Agendamento {
   id: string;
   clienteId: string;
   pacoteId?: string;
+  itemPacoteId?: string;
   terapiaId: string;
   data: string;
   hora: string;

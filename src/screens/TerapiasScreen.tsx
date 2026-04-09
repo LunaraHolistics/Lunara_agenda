@@ -14,15 +14,28 @@ export default function TerapiasScreen() {
   const [duracao, setDuracao] = useState('');
 
   const handleSave = async () => {
-    if (!nome.trim() || !valor || !duracao) {
-      showNotification('Preencha todos os campos corretamente.', 'error');
+    const parsedValor = parseFloat(valor.replace(',', '.'));
+    const parsedDuracao = parseInt(duracao, 10);
+
+    if (!nome.trim()) {
+      showNotification('O nome da terapia é obrigatório.', 'error');
+      return;
+    }
+
+    if (isNaN(parsedValor) || parsedValor <= 0) {
+      showNotification('O valor deve ser um número positivo.', 'error');
+      return;
+    }
+
+    if (isNaN(parsedDuracao) || parsedDuracao <= 0) {
+      showNotification('A duração deve ser um número positivo.', 'error');
       return;
     }
 
     const terapiaData: Omit<Terapia, 'id'> = {
       nome,
-      valor: parseFloat(valor.replace(',', '.')),
-      duracao: parseInt(duracao, 10),
+      valor: parsedValor,
+      duracao: parsedDuracao,
     };
 
     if (editingTerapia) {
@@ -184,8 +197,14 @@ export default function TerapiasScreen() {
                   <input 
                     type="number"
                     step="0.01"
+                    min="0"
                     value={valor}
-                    onChange={(e) => setValor(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '' || parseFloat(val) >= 0) {
+                        setValor(val);
+                      }
+                    }}
                     className="w-full px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                     placeholder="0.00"
                   />
@@ -197,8 +216,14 @@ export default function TerapiasScreen() {
                   </label>
                   <input 
                     type="number"
+                    min="0"
                     value={duracao}
-                    onChange={(e) => setDuracao(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '' || parseInt(val, 10) >= 0) {
+                        setDuracao(val);
+                      }
+                    }}
                     className="w-full px-4 py-3 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                     placeholder="60"
                   />

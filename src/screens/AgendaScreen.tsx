@@ -714,7 +714,8 @@ export default function AgendaScreen() {
                         <div className="flex justify-between items-center mb-1">
                           <span className={`text-[11px] font-black ${isToday ? 'text-[var(--color-primary)]' : 'text-[var(--color-text-sec-light)] opacity-50'}`}>{day}</span>
                           <div className="flex items-center gap-1">
-                            {dayAgendamentos.length > 2 && !expandedDays.includes(dateStr) && (
+                            {/* 🎯 ALTERAÇÃO #2: Mostrar apenas 1 agendamento, agrupar os demais */}
+                            {dayAgendamentos.length > 1 && !expandedDays.includes(dateStr) && (
                               <button 
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -723,7 +724,7 @@ export default function AgendaScreen() {
                                 className="text-[9px] font-bold text-white bg-[var(--color-primary)] px-1.5 py-0.5 rounded-full hover:scale-110 transition-transform shadow-sm flex items-center gap-0.5"
                                 title="Ver todos"
                               >
-                                +{dayAgendamentos.length - 2} <ChevronDown size={8} />
+                                +{dayAgendamentos.length - 1} <ChevronDown size={8} />
                               </button>
                             )}
                             {diaEstaBloqueado && (
@@ -743,7 +744,8 @@ export default function AgendaScreen() {
 
                         { !diaEstaBloqueado && (
                           <div className="flex flex-col gap-1">
-                            {dayAgendamentos.slice(0, expandedDays.includes(dateStr) ? undefined : 2).map(ag => {
+                            {/* 🎯 ALTERAÇÃO #2: slice(0, 1) para mostrar apenas 1 agendamento */}
+                            {dayAgendamentos.slice(0, expandedDays.includes(dateStr) ? undefined : 1).map(ag => {
                               const cliente = (clientes || []).find(c => c.id === ag.clienteId);
                               const isConcluido = ag.statusAtendimento === 'Concluido';
                               return (
@@ -814,7 +816,7 @@ export default function AgendaScreen() {
                               );
                             })}
                             
-                            {dayAgendamentos.length > 2 && expandedDays.includes(dateStr) && (
+                            {dayAgendamentos.length > 1 && expandedDays.includes(dateStr) && (
                               <button 
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -837,8 +839,9 @@ export default function AgendaScreen() {
         </div>
       </div>
 
-      {/* Draggable Clients Area */}
+      {/* 🎯 ALTERAÇÃO #1: Barra inferior mobile - quando minimizada, mostra APENAS o puxador */}
       <div className="absolute bottom-0 left-0 right-0 bg-[var(--color-surface-light)]/95 dark:bg-[var(--color-surface-dark)]/95 backdrop-blur-md border-t border-gray-200 dark:border-gray-800 p-4 pb-10 shadow-[0_-15px_30px_-5px_rgba(0,0,0,0.15)] z-40 rounded-t-[2.5rem]">
+        {/* Header da barra - SEMPRE visível */}
         <div className="flex justify-between items-center mb-4">
           <div className="w-12 h-1.5 bg-gray-300 dark:bg-gray-700 rounded-full mx-auto opacity-50"></div>
           <button 
@@ -849,171 +852,174 @@ export default function AgendaScreen() {
           </button>
         </div>
 
-        <div className={`transition-all duration-300 overflow-hidden ${minimizado ? 'max-h-0 opacity-0' : 'max-h-[1000px] opacity-100'}`}>
-          <h3 className="text-[10px] font-black text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] uppercase tracking-widest mb-4 flex items-center justify-center gap-2">
-            <GripVertical size={14} className="animate-pulse" /> Arraste a terapia para agendar
-          </h3>
-          <div className="flex overflow-x-auto pb-4 gap-3 snap-x scroll-smooth no-scrollbar">
-            {(clientes || []).filter(cliente => (pacotes || []).some(p => p.clienteId === cliente.id)).map(cliente => {
-              const isExpanded = expandedClienteId === cliente.id;
-              const clientePacotes = (pacotes || []).filter(p => p.clienteId === cliente.id);
-              const terapiasContratadas = clientePacotes.flatMap(p => {
-                return p.itens.map(item => ({
-                  pacoteId: p.id,
-                  itemPacoteId: item.id,
-                  terapiaId: item.terapiaId,
-                  nome: (terapias || []).find(t => t.id === item.terapiaId)?.nome || 'Desconhecida',
-                  restante: item.quantidadeRestante,
-                  total: item.quantidadeTotal
-                }));
-              });
+        {/* 🎯 ALTERAÇÃO #1: Conteúdo só aparece quando NÃO está minimizado */}
+        {!minimizado && (
+          <div className="transition-all duration-300 overflow-hidden animate-in slide-in-from-top duration-200">
+            <h3 className="text-[10px] font-black text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] uppercase tracking-widest mb-4 flex items-center justify-center gap-2">
+              <GripVertical size={14} className="animate-pulse" /> Arraste a terapia para agendar
+            </h3>
+            <div className="flex overflow-x-auto pb-4 gap-3 snap-x scroll-smooth no-scrollbar">
+              {(clientes || []).filter(cliente => (pacotes || []).some(p => p.clienteId === cliente.id)).map(cliente => {
+                const isExpanded = expandedClienteId === cliente.id;
+                const clientePacotes = (pacotes || []).filter(p => p.clienteId === cliente.id);
+                const terapiasContratadas = clientePacotes.flatMap(p => {
+                  return p.itens.map(item => ({
+                    pacoteId: p.id,
+                    itemPacoteId: item.id,
+                    terapiaId: item.terapiaId,
+                    nome: (terapias || []).find(t => t.id === item.terapiaId)?.nome || 'Desconhecida',
+                    restante: item.quantidadeRestante,
+                    total: item.quantidadeTotal
+                  }));
+                });
 
-              return (
-                <div key={cliente.id} className={`snap-start shrink-0 flex flex-col gap-2 transition-all duration-300 ${isExpanded ? 'min-w-[180px]' : 'min-w-[120px]'}`}>
-                  <div 
-                    onClick={() => setExpandedClienteId(isExpanded ? null : cliente.id)}
-                    className={`px-4 py-3 rounded-2xl border shadow-sm cursor-pointer transition-all flex items-center justify-between ${
-                      isExpanded 
-                        ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]' 
-                        : 'bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] border-gray-100 dark:border-gray-700 text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]'
-                    }`}
-                  >
-                    <span className="text-xs font-bold truncate">
-                      {cliente.nome?.split(' ')[0] || "Sem Nome"}
-                    </span>
-                    {terapiasContratadas.length > 0 && <div className={`w-2 h-2 rounded-full ${isExpanded ? 'bg-white' : 'bg-[var(--color-primary)]'}`}></div>}
-                  </div>
-                  
-                  {isExpanded && (
-                    <div className="flex flex-col gap-2 mt-1 animate-in fade-in zoom-in-95 duration-200">
-                      {terapiasContratadas.length > 0 ? (
-                        terapiasContratadas.map((tc, idx) => (
-                          <div 
-                            key={`${tc.pacoteId}-${tc.itemPacoteId}-${idx}`}
-                            draggable={isMobile ? undefined : (tc.restante > 0)}
-                            onDragStart={isMobile ? undefined : (e) => {
-                              if (tc.restante <= 0) { e.preventDefault(); return; }
-                              e.stopPropagation();
-                              isDragging.current = true;
-                              const target = e.currentTarget;
-                              setTimeout(() => {
-                                target.style.opacity = '0.4';
-                                target.style.transform = 'scale(1.05)';
-                                target.style.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)';
-                              }, 0);
-                              handleDragStart(e, {
-                                id: tc.terapiaId,
-                                type: 'terapia',
-                                clienteId: cliente.id,
-                                terapiaId: tc.terapiaId,
-                                pacoteId: tc.pacoteId,
-                                itemPacoteId: tc.itemPacoteId,
-                                name: cliente.nome || 'Cliente',
-                                time: 'Novo'
-                              });
-                            }}
-                            onDragEnd={isMobile ? undefined : (e) => {
-                              e.stopPropagation();
-                              isDragging.current = false;
-                              setDraggingId(null);
-                              e.currentTarget.style.opacity = '1';
-                              e.currentTarget.style.transform = 'scale(1)';
-                              e.currentTarget.style.boxShadow = 'none';
-                            }}
-                            onClick={isMobile ? () => handleMobileFooterClick(cliente.id, tc.terapiaId, tc.pacoteId, tc.itemPacoteId) : undefined}
-                            style={isMobile ? { touchAction: 'manipulation', cursor: 'pointer', pointerEvents: 'auto' } : { userSelect: 'none', touchAction: 'none' }}
-                            className={`px-3 py-2.5 rounded-xl border text-[10px] font-black flex justify-between items-center transition-all ${
-                              tc.restante > 0 
-                                ? `bg-white dark:bg-gray-800 border-[var(--color-primary)]/20 text-[var(--color-primary)] ${isMobile ? '' : 'cursor-grab active:cursor-grabbing'} hover:shadow-md` 
-                                : 'bg-gray-100 dark:bg-gray-900 border-transparent text-gray-400 opacity-50 grayscale cursor-not-allowed'
-                            }`}
-                          >
-                            <span className="truncate mr-2">{tc.nome}</span>
-                            <span className={`px-1.5 rounded-md ${tc.restante > 0 ? 'bg-[var(--color-primary)]/10' : 'bg-gray-200'}`}>{tc.restante}/{tc.total}</span>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="px-3 py-4 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 text-[10px] text-center text-gray-400 italic">
-                          Sem sessões disponíveis
-                        </div>
-                      )}
+                return (
+                  <div key={cliente.id} className={`snap-start shrink-0 flex flex-col gap-2 transition-all duration-300 ${isExpanded ? 'min-w-[180px]' : 'min-w-[120px]'}`}>
+                    <div 
+                      onClick={() => setExpandedClienteId(isExpanded ? null : cliente.id)}
+                      className={`px-4 py-3 rounded-2xl border shadow-sm cursor-pointer transition-all flex items-center justify-between ${
+                        isExpanded 
+                          ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]' 
+                          : 'bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] border-gray-100 dark:border-gray-700 text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]'
+                      }`}
+                    >
+                      <span className="text-xs font-bold truncate">
+                        {cliente.nome?.split(' ')[0] || "Sem Nome"}
+                      </span>
+                      {terapiasContratadas.length > 0 && <div className={`w-2 h-2 rounded-full ${isExpanded ? 'bg-white' : 'bg-[var(--color-primary)]'}`}></div>}
                     </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Sessões Disponíveis (Drop Zone) */}
-          <div className="mt-6">
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="text-[10px] font-black text-[var(--color-primary)] uppercase tracking-widest flex items-center gap-2">
-                <Trash2 size={14} /> Solte aqui para desmarcar (Sessões Disponíveis)
-              </h3>
-              <button 
-                onClick={() => setDropZoneMinimizado(!dropZoneMinimizado)}
-                className="text-[10px] font-bold text-[var(--color-primary)] bg-[var(--color-primary)]/10 px-3 py-1 rounded-full uppercase tracking-tighter transition-all active:scale-95"
-              >
-                {dropZoneMinimizado ? 'Expandir' : 'Minimizar'}
-              </button>
-            </div>
-            
-            <div className={`transition-all duration-300 overflow-hidden ${dropZoneMinimizado ? 'max-h-0 opacity-0' : 'max-h-[500px] opacity-100'}`}>
-              <div 
-                onDragOver={handleDragOver}
-                onDrop={handleDropToFooter}
-                className="p-4 rounded-3xl border-2 border-dashed border-[var(--color-primary)]/20 bg-[var(--color-primary)]/5 min-h-[100px] transition-all hover:bg-[var(--color-primary)]/10"
-              >
-                <div className="flex overflow-x-auto gap-3 pb-2 no-scrollbar">
-                  {(() => {
-                    const pacotesIds = new Set((pacotes || []).map(p => p.id));
-                    return (agendamentos || [])
-                      .filter(a => a.statusAtendimento === 'Disponivel' && pacotesIds.has(a.pacoteId || ''))
-                      .map(ag => {
-                        const cliente = (clientes || []).find(c => c.id === ag.clienteId);
-                        const terapia = (terapias || []).find(t => t.id === ag.terapiaId);
-                        
-                        // 🧠 6. CONTADOR CORRETO (ESSENCIAL)
-                        const total = (agendamentos || []).filter(a => a.pacoteId === ag.pacoteId && a.terapiaId === ag.terapiaId).length;
-                        const concluidos = (agendamentos || []).filter(a => a.pacoteId === ag.pacoteId && a.terapiaId === ag.terapiaId && a.statusAtendimento === 'Concluido').length;
-
-                        return (
-                          <div 
-                            key={ag.id}
-                            draggable={!isMobile}
-                            onDragStart={(e) => {
-                              e.stopPropagation();
-                              isDragging.current = true;
-                              handleDragStart(e, {
-                                id: ag.id,
-                                type: 'agendamento',
-                                name: cliente?.nome || 'Cliente',
-                                time: 'Reagendar'
-                              });
-                            }}
-                            onDragEnd={(e) => {
-                              e.stopPropagation();
-                              isDragging.current = false;
-                              setDraggingId(null);
-                            }}
-                            className={`bg-white dark:bg-gray-800 p-2 rounded-xl border border-[var(--color-primary)]/30 shadow-sm shrink-0 min-w-[120px] ${isMobile ? '' : 'cursor-grab active:cursor-grabbing'}`}
-                          >
-                            <div className="flex justify-between items-start">
-                              <p className="text-[10px] font-bold truncate max-w-[80px]">{cliente?.nome}</p>
-                              <span className="text-[8px] font-black text-[var(--color-primary)] bg-[var(--color-primary)]/10 px-1.5 py-0.5 rounded-full">
-                                {concluidos}/{total}
-                              </span>
+                    
+                    {isExpanded && (
+                      <div className="flex flex-col gap-2 mt-1 animate-in fade-in zoom-in-95 duration-200">
+                        {terapiasContratadas.length > 0 ? (
+                          terapiasContratadas.map((tc, idx) => (
+                            <div 
+                              key={`${tc.pacoteId}-${tc.itemPacoteId}-${idx}`}
+                              draggable={isMobile ? undefined : (tc.restante > 0)}
+                              onDragStart={isMobile ? undefined : (e) => {
+                                if (tc.restante <= 0) { e.preventDefault(); return; }
+                                e.stopPropagation();
+                                isDragging.current = true;
+                                const target = e.currentTarget;
+                                setTimeout(() => {
+                                  target.style.opacity = '0.4';
+                                  target.style.transform = 'scale(1.05)';
+                                  target.style.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)';
+                                }, 0);
+                                handleDragStart(e, {
+                                  id: tc.terapiaId,
+                                  type: 'terapia',
+                                  clienteId: cliente.id,
+                                  terapiaId: tc.terapiaId,
+                                  pacoteId: tc.pacoteId,
+                                  itemPacoteId: tc.itemPacoteId,
+                                  name: cliente.nome || 'Cliente',
+                                  time: 'Novo'
+                                });
+                              }}
+                              onDragEnd={isMobile ? undefined : (e) => {
+                                e.stopPropagation();
+                                isDragging.current = false;
+                                setDraggingId(null);
+                                e.currentTarget.style.opacity = '1';
+                                e.currentTarget.style.transform = 'scale(1)';
+                                e.currentTarget.style.boxShadow = 'none';
+                              }}
+                              onClick={isMobile ? () => handleMobileFooterClick(cliente.id, tc.terapiaId, tc.pacoteId, tc.itemPacoteId) : undefined}
+                              style={isMobile ? { touchAction: 'manipulation', cursor: 'pointer', pointerEvents: 'auto' } : { userSelect: 'none', touchAction: 'none' }}
+                              className={`px-3 py-2.5 rounded-xl border text-[10px] font-black flex justify-between items-center transition-all ${
+                                tc.restante > 0 
+                                  ? `bg-white dark:bg-gray-800 border-[var(--color-primary)]/20 text-[var(--color-primary)] ${isMobile ? '' : 'cursor-grab active:cursor-grabbing'} hover:shadow-md` 
+                                  : 'bg-gray-100 dark:bg-gray-900 border-transparent text-gray-400 opacity-50 grayscale cursor-not-allowed'
+                              }`}
+                            >
+                              <span className="truncate mr-2">{tc.nome}</span>
+                              <span className={`px-1.5 rounded-md ${tc.restante > 0 ? 'bg-[var(--color-primary)]/10' : 'bg-gray-200'}`}>{tc.restante}/{tc.total}</span>
                             </div>
-                            <p className="text-[8px] opacity-60 truncate">{terapia?.nome}</p>
+                          ))
+                        ) : (
+                          <div className="px-3 py-4 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 text-[10px] text-center text-gray-400 italic">
+                            Sem sessões disponíveis
                           </div>
-                        );
-                      });
-                  })()}
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Sessões Disponíveis (Drop Zone) */}
+            <div className="mt-6">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-[10px] font-black text-[var(--color-primary)] uppercase tracking-widest flex items-center gap-2">
+                  <Trash2 size={14} /> Solte aqui para desmarcar (Sessões Disponíveis)
+                </h3>
+                <button 
+                  onClick={() => setDropZoneMinimizado(!dropZoneMinimizado)}
+                  className="text-[10px] font-bold text-[var(--color-primary)] bg-[var(--color-primary)]/10 px-3 py-1 rounded-full uppercase tracking-tighter transition-all active:scale-95"
+                >
+                  {dropZoneMinimizado ? 'Expandir' : 'Minimizar'}
+                </button>
+              </div>
+              
+              <div className={`transition-all duration-300 overflow-hidden ${dropZoneMinimizado ? 'max-h-0 opacity-0' : 'max-h-[500px] opacity-100'}`}>
+                <div 
+                  onDragOver={handleDragOver}
+                  onDrop={handleDropToFooter}
+                  className="p-4 rounded-3xl border-2 border-dashed border-[var(--color-primary)]/20 bg-[var(--color-primary)]/5 min-h-[100px] transition-all hover:bg-[var(--color-primary)]/10"
+                >
+                  <div className="flex overflow-x-auto gap-3 pb-2 no-scrollbar">
+                    {(() => {
+                      const pacotesIds = new Set((pacotes || []).map(p => p.id));
+                      return (agendamentos || [])
+                        .filter(a => a.statusAtendimento === 'Disponivel' && pacotesIds.has(a.pacoteId || ''))
+                        .map(ag => {
+                          const cliente = (clientes || []).find(c => c.id === ag.clienteId);
+                          const terapia = (terapias || []).find(t => t.id === ag.terapiaId);
+                          
+                          // 🧠 6. CONTADOR CORRETO (ESSENCIAL)
+                          const total = (agendamentos || []).filter(a => a.pacoteId === ag.pacoteId && a.terapiaId === ag.terapiaId).length;
+                          const concluidos = (agendamentos || []).filter(a => a.pacoteId === ag.pacoteId && a.terapiaId === ag.terapiaId && a.statusAtendimento === 'Concluido').length;
+
+                          return (
+                            <div 
+                              key={ag.id}
+                              draggable={!isMobile}
+                              onDragStart={(e) => {
+                                e.stopPropagation();
+                                isDragging.current = true;
+                                handleDragStart(e, {
+                                  id: ag.id,
+                                  type: 'agendamento',
+                                  name: cliente?.nome || 'Cliente',
+                                  time: 'Reagendar'
+                                });
+                              }}
+                              onDragEnd={(e) => {
+                                e.stopPropagation();
+                                isDragging.current = false;
+                                setDraggingId(null);
+                              }}
+                              className={`bg-white dark:bg-gray-800 p-2 rounded-xl border border-[var(--color-primary)]/30 shadow-sm shrink-0 min-w-[120px] ${isMobile ? '' : 'cursor-grab active:cursor-grabbing'}`}
+                            >
+                              <div className="flex justify-between items-start">
+                                <p className="text-[10px] font-bold truncate max-w-[80px]">{cliente?.nome}</p>
+                                <span className="text-[8px] font-black text-[var(--color-primary)] bg-[var(--color-primary)]/10 px-1.5 py-0.5 rounded-full">
+                                  {concluidos}/{total}
+                                </span>
+                              </div>
+                              <p className="text-[8px] opacity-60 truncate">{terapia?.nome}</p>
+                            </div>
+                          );
+                        });
+                    })()}
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Drag Preview (Hidden) */}

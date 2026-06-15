@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense, laz
 import { Home, Users, Activity, Package, Calendar, Wallet, Settings, Briefcase, Menu, X, RefreshCw, CheckCircle, WifiOff } from 'lucide-react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 
-// 🎯 Lazy loading para telas
+// Lazy loading
 const HomeScreen = lazy(() => import('./screens/HomeScreen'));
 const ClientesScreen = lazy(() => import('./screens/ClientesScreen'));
 const TerapiasScreen = lazy(() => import('./screens/TerapiasScreen'));
@@ -13,12 +13,7 @@ const ConfiguracoesScreen = lazy(() => import('./screens/ConfiguracoesScreen'));
 const FreelancerScreen = lazy(() => import('./screens/FreelancerScreen'));
 
 import { AppProvider, useAppContext } from './AppContext';
-import { StorageService } from './services/StorageService';
 import { Agendamento } from './types';
-
-// ======================
-// TYPES E CONFIGURAÇÕES
-// ======================
 
 export type Tab = 'home' | 'clientes' | 'terapias' | 'pacotes' | 'agenda' | 'financeiro' | 'configuracoes' | 'freelancer';
 
@@ -31,10 +26,10 @@ export const TABS_CONFIG = [
   { id: 'financeiro' as Tab, label: 'Finanças', icon: Wallet, showInMobile: true },
   { id: 'freelancer' as Tab, label: 'Freelancer', icon: Briefcase, showInMobile: false },
   { id: 'configuracoes' as Tab, label: 'Config', icon: Settings, showInMobile: false },
-] as const;
+];
 
 // ======================
-// HOOK: useServiceWorker (SIMPLIFICADO)
+// HOOK: useServiceWorker
 // ======================
 
 export const useServiceWorker = () => {
@@ -55,42 +50,35 @@ export const useServiceWorker = () => {
         
         registrationRef.current = registration;
         setSwReady(true);
-        console.log('✅ Service Worker registrado');
 
-        // Verificar se há update esperando (caso o app foi fechado antes de atualizar)
         if (registration.waiting) {
           setUpdateAvailable(true);
         }
 
-        // Listener: Nova versão disponível
         registration.addEventListener('updatefound', () => {
           const newWorker = registration.installing;
           if (newWorker) {
             newWorker.addEventListener('statechange', () => {
-              // Só mostrar modal se já tinha um SW ativo (não é primeira instalação)
               if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
                 setUpdateAvailable(true);
-                console.log('🎉 Nova versão disponível!');
               }
             });
           }
         });
 
-        // Verificar updates periodicamente (a cada 30 min)
         const updateInterval = setInterval(async () => {
           await registration.update();
         }, 30 * 60 * 1000);
 
         return () => clearInterval(updateInterval);
       } catch (error) {
-        console.error('❌ Erro ao registrar Service Worker:', error);
+        console.error('Erro ao registrar Service Worker:', error);
       }
     };
 
     registerSW();
   }, []);
 
-  // Aplicar atualização
   const applyUpdate = useCallback(() => {
     if (!registrationRef.current?.waiting) {
       window.location.reload();
@@ -100,19 +88,12 @@ export const useServiceWorker = () => {
     setIsUpdating(true);
     registrationRef.current.waiting.postMessage({ type: 'SKIP_WAITING' });
     
-    // Recarregar após o SW trocar
     setTimeout(() => {
       window.location.reload();
     }, 500);
   }, []);
 
-  return {
-    swReady,
-    updateAvailable,
-    isUpdating,
-    applyUpdate,
-    setUpdateAvailable
-  };
+  return { swReady, updateAvailable, isUpdating, applyUpdate };
 };
 
 // ======================
@@ -206,7 +187,7 @@ export const useAppointmentNotifications = (
 };
 
 // ======================
-// COMPONENT: UpdatePrompt (CORRIGIDO)
+// COMPONENT: UpdatePrompt
 // ======================
 
 interface UpdatePromptProps {
@@ -226,8 +207,8 @@ const UpdatePrompt: React.FC<UpdatePromptProps> = ({ visible, onApply, onDismiss
     >
       <div className="bg-white dark:bg-zinc-900 w-full max-w-md rounded-[2rem] shadow-2xl p-6 border border-gray-200 dark:border-zinc-800">
         <div className="flex items-center gap-3 mb-4">
-          <div className="p-2 bg-[#006699]/10 rounded-xl">
-            <RefreshCw size={24} className="text-[#006699]" />
+          <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-xl">
+            <RefreshCw size={24} className="text-blue-600 dark:text-blue-400" />
           </div>
           <div>
             <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">
@@ -267,7 +248,7 @@ const UpdatePrompt: React.FC<UpdatePromptProps> = ({ visible, onApply, onDismiss
           <button
             onClick={onApply}
             disabled={isUpdating}
-            className="flex-1 py-3 text-sm font-bold bg-[#006699] text-white rounded-xl shadow-lg shadow-[#006699]/20 transition-transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="flex-1 py-3 text-sm font-bold bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-600/20 transition-transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {isUpdating ? (
               <>
@@ -349,7 +330,7 @@ class ErrorBoundary extends React.Component<
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('💥 Erro capturado:', error, errorInfo);
+    console.error('Erro capturado:', error, errorInfo);
   }
 
   render() {
@@ -365,7 +346,7 @@ class ErrorBoundary extends React.Component<
           </p>
           <button
             onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-[#006699] text-white rounded-lg hover:bg-[#005280]"
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
             Recarregar Página
           </button>
@@ -385,38 +366,30 @@ function AppContent() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [toasts, setToasts] = useState<Toast[]>([]);
-  
-  // 🎯 NOVO: Estado para controlar exibição do modal
   const [showUpdatePrompt, setShowUpdatePrompt] = useState(false);
   const [userDismissedUpdate, setUserDismissedUpdate] = useState(false);
   
   const { agendamentos } = useAppContext();
   const isOnline = useOnlineStatus();
   const shouldReduceMotion = useReducedMotion();
-  
-  // 🎯 Service Worker
   const { swReady, updateAvailable, isUpdating, applyUpdate } = useServiceWorker();
   
-  // 🎯 Mostrar modal quando há update disponível E usuário não dispensou
   useEffect(() => {
     if (updateAvailable && !userDismissedUpdate) {
       setShowUpdatePrompt(true);
     }
   }, [updateAvailable, userDismissedUpdate]);
   
-  // 🎯 Notificações
   useAppointmentNotifications(agendamentos, {
     enabled: true,
     advanceNoticeMinutes: [30, 5, 1]
   });
 
-  // Loading inicial
   useEffect(() => {
     const timer = setTimeout(() => setIsLoading(false), 300);
     return () => clearTimeout(timer);
   }, []);
 
-  // Listener para notificações fallback
   useEffect(() => {
     const handleNotification = (e: CustomEvent) => {
       const { title, body, type = 'info' } = e.detail || {};
@@ -431,19 +404,16 @@ function AppContent() {
     return () => window.removeEventListener('lunara:notification', handleNotification as EventListener);
   }, []);
 
-  // Tabs
   const availableTabs = useMemo(() => TABS_CONFIG.map(tab => tab.id), []);
   const mobileTabs = useMemo(() => TABS_CONFIG.filter(tab => tab.showInMobile), []);
   const desktopTabs = useMemo(() => TABS_CONFIG, []);
 
-  // Handlers de tab
   const handleTabChange = useCallback((newTab: Tab) => {
     if (newTab === activeTab) return;
     setActiveTab(newTab);
     if (isMobileMenuOpen) setIsMobileMenuOpen(false);
   }, [activeTab, isMobileMenuOpen]);
 
-  // Direção da animação
   const [animationDirection, setAnimationDirection] = useState(0);
   const calculateDirection = useCallback((from: Tab, to: Tab): number => {
     const fromIndex = availableTabs.indexOf(from);
@@ -458,12 +428,11 @@ function AppContent() {
     handleTabChange(newTab);
   }, [activeTab, handleTabChange, calculateDirection]);
 
-  // Renderizar tela
   const renderScreen = useCallback(() => {
     if (isLoading) {
       return (
         <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#006699] border-t-transparent"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent"></div>
         </div>
       );
     }
@@ -491,22 +460,19 @@ function AppContent() {
     );
   }, [activeTab, isLoading, handleTabChangeWithAnimation]);
 
-  // Handlers do modal
   const handleDismissUpdate = useCallback(() => {
     setShowUpdatePrompt(false);
-    setUserDismissedUpdate(true); // Não mostra de novo até próxima atualização
+    setUserDismissedUpdate(true);
   }, []);
 
   const handleApplyUpdate = useCallback(() => {
     applyUpdate();
   }, [applyUpdate]);
 
-  // Handler de toast
   const dismissToast = useCallback((id: string) => {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  // Verificar se há atendimento próximo
   const hasUpcomingAppointment = useMemo(() => {
     return agendamentos?.some(a => 
       a.statusAtendimento === 'Agendado' && 
@@ -536,18 +502,17 @@ function AppContent() {
               className="w-8 h-8 mr-3 object-contain" 
               referrerPolicy="no-referrer" 
             />
-            <h1 className="text-xl font-bold text-[#006699] tracking-tight">
+            <h1 className="text-xl font-bold text-blue-600 tracking-tight">
               Lunara Agenda
             </h1>
           </div>
           
-          {/* Badge de atualização - só mostra se há update E usuário não dispensou */}
           {updateAvailable && !userDismissedUpdate && (
             <button
               onClick={() => setShowUpdatePrompt(true)}
-              className="p-2 bg-[#006699] text-white rounded-full hover:bg-[#005280] transition-colors animate-pulse"
+              className="p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors animate-pulse"
               title="Nova versão disponível"
-              aria-label="Nova versão disponível - clique para atualizar"
+              aria-label="Nova versão disponível"
             >
               <RefreshCw size={16} />
             </button>
@@ -564,7 +529,7 @@ function AppContent() {
                 onClick={() => handleTabChangeWithAnimation(tab.id)}
                 className={`w-full flex items-center gap-3 px-6 py-3 transition-all duration-200 ${
                   isActive 
-                    ? 'bg-[#006699]/10 text-[#006699] border-r-4 border-[#006699] font-semibold' 
+                    ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border-r-4 border-blue-600 font-semibold' 
                     : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-zinc-800'
                 }`}
                 aria-current={isActive ? 'page' : undefined}
@@ -597,15 +562,14 @@ function AppContent() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <img src="/icone.png" alt="Lunara Agenda" className="w-8 h-8 object-contain" referrerPolicy="no-referrer" />
-              <h1 className="text-xl font-bold text-[#006699] tracking-tight">Lunara Agenda</h1>
+              <h1 className="text-xl font-bold text-blue-600 tracking-tight">Lunara Agenda</h1>
             </div>
             
             <div className="flex items-center gap-2">
-              {/* Badge de atualização mobile - só mostra se há update E usuário não dispensou */}
               {updateAvailable && !userDismissedUpdate && (
                 <button
                   onClick={() => setShowUpdatePrompt(true)}
-                  className="p-2 bg-[#006699] text-white rounded-full hover:bg-[#005280] transition-colors animate-pulse"
+                  className="p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors animate-pulse"
                   title="Atualizar app"
                   aria-label="Nova versão disponível"
                 >
@@ -624,7 +588,6 @@ function AppContent() {
             </div>
           </div>
           
-          {/* Mobile Menu Dropdown */}
           <AnimatePresence>
             {isMobileMenuOpen && (
               <motion.div
@@ -644,7 +607,7 @@ function AppContent() {
                         onClick={() => handleTabChangeWithAnimation(tab.id)}
                         className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${
                           isActive 
-                            ? 'bg-[#006699]/10 text-[#006699] font-medium' 
+                            ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-medium' 
                             : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-zinc-800'
                         }`}
                       >
@@ -667,7 +630,7 @@ function AppContent() {
                 <p className="text-red-500">Erro ao carregar esta tela.</p>
                 <button 
                   onClick={() => window.location.reload()}
-                  className="mt-4 px-4 py-2 bg-[#006699] text-white rounded-lg"
+                  className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg"
                 >
                   Tentar novamente
                 </button>
@@ -731,7 +694,7 @@ function AppContent() {
                 className={`flex flex-col items-center justify-center min-w-[60px] h-full gap-1 
                            transition-all duration-200 py-1 px-2 rounded-xl ${
                   isActive 
-                    ? 'text-[#006699] bg-[#006699]/5' 
+                    ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20' 
                     : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
                 }`}
                 aria-label={tab.label}
@@ -740,12 +703,11 @@ function AppContent() {
                 <div className="relative">
                   <Icon size={22} strokeWidth={isActive ? 2.5 : 2} aria-hidden="true" />
                   
-                  {/* Indicador de atendimento próximo na Agenda */}
                   {tab.id === 'agenda' && hasUpcomingAppointment && (
                     <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white dark:border-zinc-900 animate-pulse" />
                   )}
                 </div>
-                <span className={`text-[10px] font-medium ${isActive ? 'text-[#006699]' : 'text-gray-400'}`}>
+                <span className={`text-[10px] font-medium ${isActive ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400'}`}>
                   {tab.label}
                 </span>
               </button>
@@ -754,10 +716,8 @@ function AppContent() {
         </nav>
       </main>
 
-      {/* Toast System */}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
       
-      {/* 🎯 Modal de Atualização - CORRIGIDO */}
       <UpdatePrompt 
         visible={showUpdatePrompt} 
         onApply={handleApplyUpdate} 

@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense, lazy } from 'react';
-import { Home, Users, Activity, Package, Calendar, Wallet, BarChart2, Settings, LogOut, Briefcase, Bell, Menu, X, RefreshCw, CheckCircle, AlertTriangle, Wifi, WifiOff } from 'lucide-react';
+import { Home, Users, Activity, Package, Calendar, Wallet, Settings, Briefcase, Menu, X, RefreshCw, CheckCircle, WifiOff } from 'lucide-react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 
-// 🎯 Lazy loading para telas menos usadas (otimização de bundle)
+// 🎯 Lazy loading para telas
 const HomeScreen = lazy(() => import('./screens/HomeScreen'));
 const ClientesScreen = lazy(() => import('./screens/ClientesScreen'));
 const TerapiasScreen = lazy(() => import('./screens/TerapiasScreen'));
@@ -11,10 +11,9 @@ const AgendaScreen = lazy(() => import('./screens/AgendaScreen'));
 const FinanceiroScreen = lazy(() => import('./screens/FinanceiroScreen'));
 const ConfiguracoesScreen = lazy(() => import('./screens/ConfiguracoesScreen'));
 const FreelancerScreen = lazy(() => import('./screens/FreelancerScreen'));
-const Login = lazy(() => import('./screens/Login'));
 
 import { AppProvider, useAppContext } from './AppContext';
-import { StorageService, StorageKeys } from './services/StorageService';
+import { StorageService } from './services/StorageService';
 import { Agendamento } from './types';
 
 // ======================
@@ -23,64 +22,29 @@ import { Agendamento } from './types';
 
 export type Tab = 'home' | 'clientes' | 'terapias' | 'pacotes' | 'agenda' | 'financeiro' | 'configuracoes' | 'freelancer';
 
-export interface TabConfig {
-  id: Tab;
-  label: string;
-  icon: React.ComponentType<{ size?: number; strokeWidth?: number }>;
-  priority: 'high' | 'medium' | 'low';
-  showInMobile?: boolean;
-  requiresAuth?: boolean;
-}
-
-export const TABS_CONFIG: TabConfig[] = [
-  { id: 'home', label: 'Início', icon: Home, priority: 'high', showInMobile: true },
-  { id: 'agenda', label: 'Agenda', icon: Calendar, priority: 'high', showInMobile: true },
-  { id: 'clientes', label: 'Clientes', icon: Users, priority: 'high', showInMobile: true },
-  { id: 'pacotes', label: 'Pacotes', icon: Package, priority: 'medium', showInMobile: false },
-  { id: 'terapias', label: 'Terapias', icon: Activity, priority: 'medium', showInMobile: false },
-  { id: 'financeiro', label: 'Finanças', icon: Wallet, priority: 'medium', showInMobile: true },
-  { id: 'freelancer', label: 'Freelancer', icon: Briefcase, priority: 'low', showInMobile: false },
-  { id: 'configuracoes', label: 'Config', icon: Settings, priority: 'low', showInMobile: false },
+export const TABS_CONFIG = [
+  { id: 'home' as Tab, label: 'Início', icon: Home, showInMobile: true },
+  { id: 'agenda' as Tab, label: 'Agenda', icon: Calendar, showInMobile: true },
+  { id: 'clientes' as Tab, label: 'Clientes', icon: Users, showInMobile: true },
+  { id: 'pacotes' as Tab, label: 'Pacotes', icon: Package, showInMobile: false },
+  { id: 'terapias' as Tab, label: 'Terapias', icon: Activity, showInMobile: false },
+  { id: 'financeiro' as Tab, label: 'Finanças', icon: Wallet, showInMobile: true },
+  { id: 'freelancer' as Tab, label: 'Freelancer', icon: Briefcase, showInMobile: false },
+  { id: 'configuracoes' as Tab, label: 'Config', icon: Settings, showInMobile: false },
 ] as const;
 
-// 🎯 Tipos para comunicação com Service Worker
-export interface SWMessage {
-  type: string;
-  payload?: any;
-  error?: {
-    message: string;
-    stack?: string;
-    timestamp: number;
-  };
-}
-
-export interface CacheStats {
-  [cacheName: string]: {
-    count: number;
-    size: number;
-  };
-}
-
 // ======================
-// HOOK: useServiceWorkerIntegration
+// HOOK: useServiceWorker (SIMPLIFICADO)
 // ======================
 
-export const useServiceWorkerIntegration = () => {
+export const useServiceWorker = () => {
   const [swReady, setSwReady] = useState(false);
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
-  const [lastSync, setLastSync] = useState<string | null>(null);
   const registrationRef = useRef<ServiceWorkerRegistration | null>(null);
 
-  // 🎯 Registrar e configurar Service Worker
   useEffect(() => {
-    if (!('serviceWorker' in navigator)) {
-      console.warn('⚠ Service Worker não suportado neste navegador');
-      return;
-    }
-
-    let updateInterval: NodeJS.Timeout;
+    if (!('serviceWorker' in navigator)) return;
 
     const registerSW = async () => {
       try {
@@ -91,345 +55,63 @@ export const useServiceWorkerIntegration = () => {
         
         registrationRef.current = registration;
         setSwReady(true);
-        console.log('✅ Service Worker registrado:', registration.scope);
+        console.log('✅ Service Worker registrado');
 
-        // 🎯 Listener: Nova versão disponível
+        // Verificar se há update esperando (caso o app foi fechado antes de atualizar)
+        if (registration.waiting) {
+          setUpdateAvailable(true);
+        }
+
+        // Listener: Nova versão disponível
         registration.addEventListener('updatefound', () => {
           const newWorker = registration.installing;
           if (newWorker) {
             newWorker.addEventListener('statechange', () => {
+              // Só mostrar modal se já tinha um SW ativo (não é primeira instalação)
               if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
                 setUpdateAvailable(true);
                 console.log('🎉 Nova versão disponível!');
-                
-                // Disparar evento global para outros componentes
-                window.dispatchEvent(new CustomEvent('lunara:update-available', {
-                  detail: { version: 'nova', message: 'Atualização disponível' }
-                }));
               }
             });
           }
         });
 
-        // 🎯 Verificar updates periodicamente (a cada 30 min em produção)
-        const checkInterval = process.env.NODE_ENV === 'development' ? 5 * 60 * 1000 : 30 * 60 * 1000;
-        updateInterval = setInterval(async () => {
+        // Verificar updates periodicamente (a cada 30 min)
+        const updateInterval = setInterval(async () => {
           await registration.update();
-          console.log('🔄 Verificando atualizações do SW...');
-        }, checkInterval);
+        }, 30 * 60 * 1000);
 
-        // 🎯 Listener para mensagens DO service worker
-        navigator.serviceWorker.addEventListener('message', (event: MessageEvent<SWMessage>) => {
-          handleSWMessage(event.data);
-        });
-
-        // 🎯 Listener para cliques em notificações
-        navigator.serviceWorker.addEventListener('message', (event: MessageEvent<SWMessage>) => {
-          if (event.data?.type === 'NOTIFICATION_CLICKED') {
-            handleNotificationClick(event.data.payload);
-          }
-        });
-
-        // 🎯 Buscar stats iniciais do cache (apenas em dev)
-        if (process.env.NODE_ENV === 'development') {
-          requestCacheStats();
-        }
-
+        return () => clearInterval(updateInterval);
       } catch (error) {
         console.error('❌ Erro ao registrar Service Worker:', error);
       }
     };
 
     registerSW();
-
-    return () => {
-      if (updateInterval) clearInterval(updateInterval);
-    };
   }, []);
 
-  // 🎯 Processar mensagens recebidas do SW
-  const handleSWMessage = useCallback((message: SWMessage) => {
-    console.log('💬 Mensagem do SW:', message);
-
-    switch (message.type) {
-      case 'SW_ACTIVATED':
-        console.log('✅ SW ativado:', message.payload);
-        setUpdateAvailable(true);
-        break;
-        
-      case 'CACHE_UPDATED':
-        console.log('📦 Cache atualizado:', message.payload?.url);
-        // Pode atualizar UI se necessário
-        break;
-        
-      case 'SYNC_COMPLETE':
-        console.log('🔄 Sync concluído:', message.payload?.tag);
-        setLastSync(new Date().toISOString());
-        window.dispatchEvent(new CustomEvent('lunara:sync-complete', {
-          detail: { tag: message.payload?.tag }
-        }));
-        break;
-        
-      case 'CACHE_STATS':
-        setCacheStats(message.payload);
-        console.log('📊 Stats do cache:', message.payload);
-        break;
-        
-      case 'SW_ERROR':
-        console.error('💥 Erro no SW:', message.error);
-        // Pode mostrar toast de erro aqui
-        break;
-        
-      case 'NOTIFICATION_CLICKED':
-        handleNotificationClick(message.payload);
-        break;
-        
-      default:
-        console.log(`⚠ Mensagem não tratada: ${message.type}`);
+  // Aplicar atualização
+  const applyUpdate = useCallback(() => {
+    if (!registrationRef.current?.waiting) {
+      window.location.reload();
+      return;
     }
-  }, []);
-
-  // 🎯 Handler para clique em notificação
-  const handleNotificationClick = useCallback((payload?: any) => {
-    console.log('🖱 Notificação clicada:', payload);
-    
-    if (payload?.agendamentoId) {
-      // Navegar para a agenda com o agendamento específico
-      window.dispatchEvent(new CustomEvent('lunara:navigate-to-agendamento', {
-        detail: { agendamentoId: payload.agendamentoId }
-      }));
-      
-      // Se estiver em outra tab, mudar para agenda
-      window.dispatchEvent(new CustomEvent('lunara:change-tab', {
-        detail: { tab: 'agenda' }
-      }));
-    } else if (payload?.url) {
-      window.location.href = payload.url;
-    }
-  }, []);
-
-  // 🎯 Aplicar atualização (ativa novo SW e recarrega)
-  const applyUpdate = useCallback(async () => {
-    if (!registrationRef.current) return;
     
     setIsUpdating(true);
-    try {
-      // Enviar mensagem para pular waiting
-      registrationRef.current.waiting?.postMessage({ type: 'SKIP_WAITING' });
-      
-      // Aguardar um pouco e recarregar
-      await new Promise(resolve => setTimeout(resolve, 500));
+    registrationRef.current.waiting.postMessage({ type: 'SKIP_WAITING' });
+    
+    // Recarregar após o SW trocar
+    setTimeout(() => {
       window.location.reload();
-    } catch (error) {
-      console.error('❌ Erro ao aplicar atualização:', error);
-      setIsUpdating(false);
-    }
-  }, []);
-
-  // 🎯 Solicitar stats do cache
-  const requestCacheStats = useCallback(() => {
-    if (registrationRef.current?.active) {
-      registrationRef.current.active.postMessage({ type: 'GET_CACHE_STATS' });
-    }
-  }, []);
-
-  // 🎯 Limpar cache específico
-  const clearCache = useCallback(async (cacheName?: string, reprecache = false) => {
-    if (!registrationRef.current?.active) return;
-    
-    registrationRef.current.active.postMessage({
-      type: 'CLEAR_CACHE',
-      payload: { cacheName, reprecache }
-    });
-    
-    // Atualizar stats após limpar
-    setTimeout(requestCacheStats, 1000);
-  }, [requestCacheStats]);
-
-  // 🎯 Registrar background sync para operações pendentes
-  const registerSync = useCallback(async (tag: string) => {
-    if (!('sync' in ServiceWorkerRegistration.prototype)) {
-      console.warn('⚠ Background Sync não suportado');
-      return false;
-    }
-    
-    try {
-      if (registrationRef.current) {
-        await registrationRef.current.sync.register(tag);
-        console.log(`🔄 Sync registrado: ${tag}`);
-        return true;
-      }
-    } catch (error) {
-      console.error(`❌ Erro ao registrar sync ${tag}:`, error);
-      return false;
-    }
-    return false;
-  }, []);
-
-  // 🎯 Enviar URLs para precache dinâmico
-  const precacheUrls = useCallback(async (urls: string[]) => {
-    if (!registrationRef.current?.active) return;
-    
-    registrationRef.current.active.postMessage({
-      type: 'CACHE_URLS',
-      payload: { urls }
-    });
-    console.log(`📦 Precache solicitado para ${urls.length} URLs`);
+    }, 500);
   }, []);
 
   return {
     swReady,
     updateAvailable,
     isUpdating,
-    cacheStats,
-    lastSync,
     applyUpdate,
-    requestCacheStats,
-    clearCache,
-    registerSync,
-    precacheUrls,
-    registration: registrationRef.current
-  };
-};
-
-// ======================
-// HOOK: useAppointmentNotifications
-// ======================
-
-interface UseNotificationOptions {
-  checkInterval?: number;
-  advanceNoticeMinutes?: number[];
-  enabled?: boolean;
-}
-
-export const useAppointmentNotifications = (
-  agendamentos: Agendamento[],
-  options: UseNotificationOptions = {}
-) => {
-  const {
-    checkInterval = 60000,
-    advanceNoticeMinutes = [30, 5],
-    enabled = true
-  } = options;
-
-  const notifiedRef = useRef<Set<string>>(new Set());
-  const lastCheckRef = useRef<number>(Date.now());
-  const permissionRef = useRef<NotificationPermission>('default');
-
-  useEffect(() => {
-    if (!enabled || !('Notification' in window)) return;
-
-    const requestPermission = async () => {
-      if (Notification.permission === 'default') {
-        try {
-          const permission = await Notification.requestPermission();
-          permissionRef.current = permission;
-          console.log('🔔 Permissão de notificação:', permission);
-        } catch (error) {
-          console.error('❌ Erro ao solicitar permissão:', error);
-        }
-      } else {
-        permissionRef.current = Notification.permission;
-      }
-    };
-
-    requestPermission();
-  }, [enabled]);
-
-  const sendNotification = useCallback((title: string, body: string, icon?: string, data?: any) => {
-    if (!enabled) return;
-
-    if ('Notification' in window && permissionRef.current === 'granted') {
-      try {
-        new Notification(title, {
-          body,
-          icon: icon || '/icone.png',
-          tag: `lunara-${Date.now()}`,
-          requireInteraction: true,
-          data // Dados para manipular no click
-        });
-        console.log('🔔 Notificação enviada:', title);
-        return;
-      } catch (error) {
-        console.warn('⚠ Falha na notificação nativa:', error);
-      }
-    }
-
-    // Fallback via CustomEvent
-    window.dispatchEvent(new CustomEvent('lunara:notification', {
-      detail: { title, body, type: 'appointment', data }
-    }));
-  }, [enabled]);
-
-  useEffect(() => {
-    if (!enabled || !agendamentos?.length || permissionRef.current !== 'granted') return;
-
-    const checkAppointments = () => {
-      const now = Date.now();
-      lastCheckRef.current = now;
-
-      const relevantAppointments = agendamentos.filter(a => 
-        a.statusAtendimento === 'Agendado' && 
-        a.data && a.hora &&
-        !a.archived
-      );
-
-      relevantAppointments.forEach(agendamento => {
-        try {
-          const [year, month, day] = agendamento.data.split('-').map(Number);
-          const [hours, minutes] = agendamento.hora.split(':').map(Number);
-          
-          if (!year || !month || !day || hours === undefined || minutes === undefined) return;
-
-          const agendamentoDate = new Date(year, month - 1, day, hours, minutes);
-          const diffMinutes = (agendamentoDate.getTime() - now) / 60000;
-
-          if (diffMinutes < -5 || diffMinutes > 120) return;
-
-          const key = `${agendamento.id}_${agendamento.data}_${agendamento.hora}`;
-
-          const shouldNotify = advanceNoticeMinutes.some(min => 
-            diffMinutes > 0 && diffMinutes <= min && !notifiedRef.current.has(key)
-          );
-
-          if (shouldNotify) {
-            sendNotification(
-              '⏰ Atendimento em breve',
-              `Atendimento às ${agendamento.hora}`,
-              '/icone.png',
-              { agendamentoId: agendamento.id, type: 'appointment' }
-            );
-            notifiedRef.current.add(key);
-          }
-
-          if (diffMinutes < -10) {
-            notifiedRef.current.delete(key);
-          }
-        } catch (error) {
-          console.error(`❌ Erro ao processar agendamento ${agendamento.id}:`, error);
-        }
-      });
-    };
-
-    checkAppointments();
-    const intervalId = setInterval(checkAppointments, checkInterval);
-    
-    return () => clearInterval(intervalId);
-  }, [agendamentos, enabled, checkInterval, advanceNoticeMinutes, sendNotification]);
-
-  const resetNotifications = useCallback(() => {
-    notifiedRef.current.clear();
-  }, []);
-
-  return {
-    permission: permissionRef.current,
-    requestPermission: async () => {
-      if ('Notification' in window) {
-        permissionRef.current = await Notification.requestPermission();
-      }
-    },
-    resetNotifications,
-    sendNotification
+    setUpdateAvailable
   };
 };
 
@@ -438,138 +120,93 @@ export const useAppointmentNotifications = (
 // ======================
 
 export const useOnlineStatus = () => {
-  const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
-  const [connectionType, setConnectionType] = useState<string>('unknown');
+  const [isOnline, setIsOnline] = useState<boolean>(
+    typeof navigator !== 'undefined' ? navigator.onLine : true
+  );
 
   useEffect(() => {
-    const updateConnection = () => {
-      setIsOnline(navigator.onLine);
-      
-      // Detectar tipo de conexão se disponível
-      const conn = (navigator as any).connection;
-      if (conn) {
-        setConnectionType(`${conn.effectiveType || 'unknown'} (${conn.downlink}Mbps)`);
-      }
-    };
-
-    updateConnection();
-    
-    const handleOnline = () => {
-      setIsOnline(true);
-      console.log('🟢 App online');
-      window.dispatchEvent(new CustomEvent('lunara:online'));
-      updateConnection();
-    };
-    
-    const handleOffline = () => {
-      setIsOnline(false);
-      console.log('🔴 App offline');
-      window.dispatchEvent(new CustomEvent('lunara:offline'));
-    };
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-    
-    // Monitorar mudanças de conexão
-    const conn = (navigator as any).connection;
-    if (conn) {
-      conn.addEventListener('change', updateConnection);
-    }
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
-      if (conn) {
-        conn.removeEventListener('change', updateConnection);
-      }
     };
   }, []);
 
-  return { isOnline, connectionType };
+  return isOnline;
 };
 
 // ======================
-// HOOK: useTabNavigation
+// HOOK: useAppointmentNotifications
 // ======================
 
-export const useTabNavigation = (
-  activeTab: Tab,
-  setActiveTab: (tab: Tab) => void,
-  availableTabs: Tab[]
+export const useAppointmentNotifications = (
+  agendamentos: Agendamento[],
+  options: { enabled?: boolean; advanceNoticeMinutes?: number[] } = {}
 ) => {
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const tabParam = params.get('tab') as Tab;
-    
-    if (tabParam && availableTabs.includes(tabParam) && tabParam !== activeTab) {
-      setActiveTab(tabParam);
-    }
-  }, [availableTabs, activeTab, setActiveTab]);
+  const { enabled = true, advanceNoticeMinutes = [30, 5, 1] } = options;
+  const notifiedRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (activeTab !== 'home') {
-      params.set('tab', activeTab);
-    } else {
-      params.delete('tab');
-    }
-    
-    const newUrl = `${window.location.pathname}${params.toString() ? `?${params}` : ''}`;
-    if (window.location.search !== params.toString()) {
-      window.history.replaceState({}, '', newUrl);
-    }
-  }, [activeTab]);
+    if (!enabled || !agendamentos?.length) return;
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+    const checkAppointments = () => {
+      const now = Date.now();
 
-      const currentIndex = availableTabs.indexOf(activeTab);
-      
-      if (e.key === 'ArrowRight' && currentIndex < availableTabs.length - 1) {
-        e.preventDefault();
-        setActiveTab(availableTabs[currentIndex + 1]);
-      } else if (e.key === 'ArrowLeft' && currentIndex > 0) {
-        e.preventDefault();
-        setActiveTab(availableTabs[currentIndex - 1]);
-      } else if (e.key === 'Home') {
-        e.preventDefault();
-        setActiveTab('home');
-      }
+      agendamentos
+        .filter(a => a.statusAtendimento === 'Agendado' && a.data && a.hora)
+        .forEach(agendamento => {
+          try {
+            const [year, month, day] = agendamento.data.split('-').map(Number);
+            const [hours, minutes] = agendamento.hora.split(':').map(Number);
+            
+            if (!year || !month || !day) return;
+
+            const agendamentoDate = new Date(year, month - 1, day, hours, minutes);
+            const diffMinutes = (agendamentoDate.getTime() - now) / 60000;
+
+            if (diffMinutes < -5 || diffMinutes > 120) return;
+
+            const key = `${agendamento.id}_${agendamento.data}_${agendamento.hora}`;
+
+            const shouldNotify = advanceNoticeMinutes.some(min => 
+              diffMinutes > 0 && diffMinutes <= min && !notifiedRef.current.has(key)
+            );
+
+            if (shouldNotify) {
+              new Notification('⏰ Atendimento em breve', {
+                body: `Atendimento às ${agendamento.hora}`,
+                icon: '/icone.png',
+                tag: `lunara-${agendamento.id}`
+              });
+              notifiedRef.current.add(key);
+            }
+
+            if (diffMinutes < -10) {
+              notifiedRef.current.delete(key);
+            }
+          } catch (error) {
+            console.error('Erro ao processar agendamento:', error);
+          }
+        });
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeTab, availableTabs, setActiveTab]);
-
-  // 🎯 Listener para navegação via notificação
-  useEffect(() => {
-    const handleNavigate = (e: CustomEvent) => {
-      if (e.detail?.tab && availableTabs.includes(e.detail.tab)) {
-        setActiveTab(e.detail.tab);
-      }
-    };
+    checkAppointments();
+    const intervalId = setInterval(checkAppointments, 60000);
     
-    window.addEventListener('lunara:change-tab', handleNavigate as EventListener);
-    return () => {
-      window.removeEventListener('lunara:change-tab', handleNavigate as EventListener);
-    };
-  }, [availableTabs, setActiveTab]);
+    return () => clearInterval(intervalId);
+  }, [agendamentos, enabled, advanceNoticeMinutes]);
 
-  const handleTabChange = useCallback((newTab: Tab) => {
-    if (newTab === activeTab) return;
-    if (!availableTabs.includes(newTab)) {
-      console.warn(`⚠ Tab inválida: ${newTab}`);
-      return;
-    }
-    setActiveTab(newTab);
-  }, [activeTab, availableTabs, setActiveTab]);
-
-  return { handleTabChange };
+  return {};
 };
 
 // ======================
-// COMPONENT: UpdatePrompt (Modal de Atualização)
+// COMPONENT: UpdatePrompt (CORRIGIDO)
 // ======================
 
 interface UpdatePromptProps {
@@ -583,81 +220,72 @@ const UpdatePrompt: React.FC<UpdatePromptProps> = ({ visible, onApply, onDismiss
   if (!visible) return null;
 
   return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-      >
-        <motion.div
-          initial={{ scale: 0.9, opacity: 0, y: 20 }}
-          animate={{ scale: 1, opacity: 1, y: 0 }}
-          exit={{ scale: 0.9, opacity: 0, y: 20 }}
-          className="bg-white dark:bg-zinc-900 w-full max-w-md rounded-[2rem] shadow-2xl p-6 border border-gray-100 dark:border-zinc-800"
-        >
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 bg-[#006699]/10 rounded-xl">
-              <RefreshCw size={24} className="text-[#006699] animate-spin-slow" />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">
-                Nova Versão Disponível! 🎉
-              </h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Uma atualização do Lunara Agenda está pronta.
-              </p>
-            </div>
+    <div 
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="bg-white dark:bg-zinc-900 w-full max-w-md rounded-[2rem] shadow-2xl p-6 border border-gray-200 dark:border-zinc-800">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-2 bg-[#006699]/10 rounded-xl">
+            <RefreshCw size={24} className="text-[#006699]" />
           </div>
-          
-          <div className="bg-gray-50 dark:bg-zinc-800/50 rounded-xl p-4 mb-6">
-            <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-300">
-              <li className="flex items-center gap-2">
-                <CheckCircle size={14} className="text-green-500" />
-                Melhorias de performance
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCircle size={14} className="text-green-500" />
-                Correções de bugs
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCircle size={14} className="text-green-500" />
-                Novas funcionalidades
-              </li>
-            </ul>
+          <div>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">
+              Nova Versão Disponível! 🎉
+            </h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Uma atualização do Lunara Agenda está pronta.
+            </p>
           </div>
-          
-          <div className="flex gap-3">
-            <button
-              onClick={onDismiss}
-              className="flex-1 py-3 text-sm font-bold text-gray-500 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-xl transition-colors"
-              disabled={isUpdating}
-            >
-              Depois
-            </button>
-            <button
-              onClick={onApply}
-              disabled={isUpdating}
-              className="flex-1 py-3 text-sm font-bold bg-[#006699] text-white rounded-xl shadow-lg shadow-[#006699]/20 transition-transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {isUpdating ? (
-                <>
-                  <RefreshCw size={16} className="animate-spin" />
-                  Atualizando...
-                </>
-              ) : (
-                'Atualizar Agora'
-              )}
-            </button>
-          </div>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
+        </div>
+        
+        <div className="bg-gray-50 dark:bg-zinc-800/50 rounded-xl p-4 mb-6">
+          <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-300">
+            <li className="flex items-center gap-2">
+              <CheckCircle size={14} className="text-green-500" />
+              Melhorias de performance
+            </li>
+            <li className="flex items-center gap-2">
+              <CheckCircle size={14} className="text-green-500" />
+              Correções de bugs
+            </li>
+            <li className="flex items-center gap-2">
+              <CheckCircle size={14} className="text-green-500" />
+              Novas funcionalidades
+            </li>
+          </ul>
+        </div>
+        
+        <div className="flex gap-3">
+          <button
+            onClick={onDismiss}
+            disabled={isUpdating}
+            className="flex-1 py-3 text-sm font-bold text-gray-500 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-xl transition-colors disabled:opacity-50"
+          >
+            Depois
+          </button>
+          <button
+            onClick={onApply}
+            disabled={isUpdating}
+            className="flex-1 py-3 text-sm font-bold bg-[#006699] text-white rounded-xl shadow-lg shadow-[#006699]/20 transition-transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {isUpdating ? (
+              <>
+                <RefreshCw size={16} className="animate-spin" />
+                Atualizando...
+              </>
+            ) : (
+              'Atualizar Agora'
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 };
 
 // ======================
-// COMPONENT: Toast System (Fallback de Notificações)
+// COMPONENT: Toast System
 // ======================
 
 interface Toast {
@@ -665,21 +293,20 @@ interface Toast {
   title: string;
   body: string;
   type: 'success' | 'error' | 'info' | 'warning';
-  data?: any;
 }
 
 const ToastContainer: React.FC<{ toasts: Toast[]; onDismiss: (id: string) => void }> = ({ toasts, onDismiss }) => {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed top-4 right-4 z-[1999] flex flex-col gap-2 pointer-events-none">
+    <div className="fixed top-4 right-4 z-[9998] flex flex-col gap-2 pointer-events-none">
       <AnimatePresence>
         {toasts.map(toast => (
           <motion.div
             key={toast.id}
-            initial={{ opacity: 0, x: 100, scale: 0.9 }}
-            animate={{ opacity: 1, x: 0, scale: 1 }}
-            exit={{ opacity: 0, x: 100, scale: 0.9 }}
+            initial={{ opacity: 0, x: 100 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 100 }}
             className={`pointer-events-auto px-4 py-3 rounded-xl shadow-lg border flex items-start gap-3 min-w-[280px] max-w-sm ${
               toast.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' :
               toast.type === 'error' ? 'bg-red-50 border-red-200 text-red-800' :
@@ -693,7 +320,7 @@ const ToastContainer: React.FC<{ toasts: Toast[]; onDismiss: (id: string) => voi
             </div>
             <button
               onClick={() => onDismiss(toast.id)}
-              className="p-1 hover:bg-black/5 rounded-lg transition-colors"
+              className="p-1 hover:bg-black/5 rounded-lg"
             >
               <X size={14} />
             </button>
@@ -722,14 +349,7 @@ class ErrorBoundary extends React.Component<
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('💥 Erro capturado pelo ErrorBoundary:', error, errorInfo);
-    
-    StorageService.saveData('@lunara_last_error', {
-      message: error.message,
-      stack: error.stack,
-      componentStack: errorInfo.componentStack,
-      timestamp: new Date().toISOString()
-    });
+    console.error('💥 Erro capturado:', error, errorInfo);
   }
 
   render() {
@@ -741,11 +361,11 @@ class ErrorBoundary extends React.Component<
           <div className="text-6xl mb-4">😕</div>
           <h2 className="text-xl font-bold mb-2">Algo deu errado</h2>
           <p className="text-gray-600 dark:text-gray-400 mb-4">
-            Tente recarregar a página. Se o problema persistir, entre em contato com o suporte.
+            Tente recarregar a página.
           </p>
           <button
             onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-[#006699] text-white rounded-lg hover:bg-[#005280] transition-colors"
+            className="px-4 py-2 bg-[#006699] text-white rounded-lg hover:bg-[#005280]"
           >
             Recarregar Página
           </button>
@@ -764,103 +384,67 @@ function AppContent() {
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  
-  // 🎯 Estado para toasts de notificação fallback
   const [toasts, setToasts] = useState<Toast[]>([]);
   
+  // 🎯 NOVO: Estado para controlar exibição do modal
+  const [showUpdatePrompt, setShowUpdatePrompt] = useState(false);
+  const [userDismissedUpdate, setUserDismissedUpdate] = useState(false);
+  
   const { agendamentos } = useAppContext();
-  const { isOnline, connectionType } = useOnlineStatus();
+  const isOnline = useOnlineStatus();
   const shouldReduceMotion = useReducedMotion();
   
-  // 🎯 Integração com Service Worker
-  const {
-    swReady,
-    updateAvailable,
-    isUpdating,
-    cacheStats,
-    lastSync,
-    applyUpdate,
-    requestCacheStats,
-    clearCache,
-    registerSync,
-    precacheUrls
-  } = useServiceWorkerIntegration();
+  // 🎯 Service Worker
+  const { swReady, updateAvailable, isUpdating, applyUpdate } = useServiceWorker();
   
-  // 🎯 Configurar tabs disponíveis
-  const availableTabs = useMemo(() => TABS_CONFIG.map(tab => tab.id), []);
-  const { handleTabChange } = useTabNavigation(activeTab, setActiveTab, availableTabs);
+  // 🎯 Mostrar modal quando há update disponível E usuário não dispensou
+  useEffect(() => {
+    if (updateAvailable && !userDismissedUpdate) {
+      setShowUpdatePrompt(true);
+    }
+  }, [updateAvailable, userDismissedUpdate]);
   
-  // 🎯 Hook de notificações com integração de toasts
-  const { sendNotification: sendAppointmentNotification } = useAppointmentNotifications(agendamentos, {
+  // 🎯 Notificações
+  useAppointmentNotifications(agendamentos, {
     enabled: true,
     advanceNoticeMinutes: [30, 5, 1]
   });
 
-  // 🎯 Loading inicial
+  // Loading inicial
   useEffect(() => {
     const timer = setTimeout(() => setIsLoading(false), 300);
     return () => clearTimeout(timer);
   }, []);
 
-  // 🎯 Listener para notificações fallback (CustomEvent)
+  // Listener para notificações fallback
   useEffect(() => {
-    const handleFallbackNotification = (e: CustomEvent) => {
-      const { title, body, type = 'info', data } = e.detail || {};
-      
+    const handleNotification = (e: CustomEvent) => {
+      const { title, body, type = 'info' } = e.detail || {};
       if (title && body) {
         const toastId = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        
-        setToasts(prev => [...prev, {
-          id: toastId,
-          title,
-          body,
-          type: type as Toast['type'],
-          data
-        }]);
-        
-        // Auto-dismiss após 5 segundos
-        setTimeout(() => {
-          setToasts(prev => prev.filter(t => t.id !== toastId));
-        }, 5000);
+        setToasts(prev => [...prev, { id: toastId, title, body, type }]);
+        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== toastId)), 5000);
       }
     };
     
-    window.addEventListener('lunara:notification', handleFallbackNotification as EventListener);
-    return () => {
-      window.removeEventListener('lunara:notification', handleFallbackNotification as EventListener);
-    };
+    window.addEventListener('lunara:notification', handleNotification as EventListener);
+    return () => window.removeEventListener('lunara:notification', handleNotification as EventListener);
   }, []);
 
-  // 🎯 Listener para navegação via agendamento (notificação click)
-  useEffect(() => {
-    const handleNavigateToAgendamento = (e: CustomEvent) => {
-      const { agendamentoId } = e.detail || {};
-      if (agendamentoId && activeTab !== 'agenda') {
-        setActiveTab('agenda');
-        // Pode destacar o agendamento na UI aqui
-        console.log('🎯 Navegando para agendamento:', agendamentoId);
-      }
-    };
-    
-    window.addEventListener('lunara:navigate-to-agendamento', handleNavigateToAgendamento as EventListener);
-    return () => {
-      window.removeEventListener('lunara:navigate-to-agendamento', handleNavigateToAgendamento as EventListener);
-    };
-  }, [activeTab]);
+  // Tabs
+  const availableTabs = useMemo(() => TABS_CONFIG.map(tab => tab.id), []);
+  const mobileTabs = useMemo(() => TABS_CONFIG.filter(tab => tab.showInMobile), []);
+  const desktopTabs = useMemo(() => TABS_CONFIG, []);
 
-  // 🎯 Registrar sync para operações pendentes quando voltar online
-  useEffect(() => {
-    if (isOnline && swReady) {
-      // Verificar se há operações pendentes no storage
-      const pendingOps = StorageService.getData('@lunara_pending_operations');
-      if (pendingOps?.length > 0) {
-        console.log(`🔄 ${pendingOps.length} operações pendentes para sincronizar`);
-        registerSync('sync-agendamentos');
-      }
-    }
-  }, [isOnline, swReady, registerSync]);
+  // Handlers de tab
+  const handleTabChange = useCallback((newTab: Tab) => {
+    if (newTab === activeTab) return;
+    setActiveTab(newTab);
+    if (isMobileMenuOpen) setIsMobileMenuOpen(false);
+  }, [activeTab, isMobileMenuOpen]);
 
-  // 🎯 Calcular direção da animação
+  // Direção da animação
+  const [animationDirection, setAnimationDirection] = useState(0);
   const calculateDirection = useCallback((from: Tab, to: Tab): number => {
     const fromIndex = availableTabs.indexOf(from);
     const toIndex = availableTabs.indexOf(to);
@@ -868,16 +452,13 @@ function AppContent() {
     return toIndex > fromIndex ? 1 : -1;
   }, [availableTabs]);
 
-  const [animationDirection, setAnimationDirection] = useState(0);
-
   const handleTabChangeWithAnimation = useCallback((newTab: Tab) => {
     if (newTab === activeTab) return;
     setAnimationDirection(calculateDirection(activeTab, newTab));
     handleTabChange(newTab);
-    if (isMobileMenuOpen) setIsMobileMenuOpen(false);
-  }, [activeTab, handleTabChange, calculateDirection, isMobileMenuOpen]);
+  }, [activeTab, handleTabChange, calculateDirection]);
 
-  // 🎯 Renderizar tela com Suspense
+  // Renderizar tela
   const renderScreen = useCallback(() => {
     if (isLoading) {
       return (
@@ -910,37 +491,42 @@ function AppContent() {
     );
   }, [activeTab, isLoading, handleTabChangeWithAnimation]);
 
-  // 🎯 Tabs para mobile
-  const mobileTabs = useMemo(() => TABS_CONFIG.filter(tab => tab.showInMobile !== false), []);
-  const desktopTabs = useMemo(() => TABS_CONFIG, []);
+  // Handlers do modal
+  const handleDismissUpdate = useCallback(() => {
+    setShowUpdatePrompt(false);
+    setUserDismissedUpdate(true); // Não mostra de novo até próxima atualização
+  }, []);
 
-  // 🎯 Handler para dismiss de toast
+  const handleApplyUpdate = useCallback(() => {
+    applyUpdate();
+  }, [applyUpdate]);
+
+  // Handler de toast
   const dismissToast = useCallback((id: string) => {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
+  // Verificar se há atendimento próximo
+  const hasUpcomingAppointment = useMemo(() => {
+    return agendamentos?.some(a => 
+      a.statusAtendimento === 'Agendado' && 
+      a.data && a.hora &&
+      new Date(`${a.data}T${a.hora}`).getTime() - Date.now() < 30 * 60 * 1000
+    );
+  }, [agendamentos]);
+
   return (
     <div className="flex h-screen overflow-hidden bg-gray-100 dark:bg-black">
       
-      {/* 🎯 Banner de Status de Conexão */}
+      {/* Banner de Offline */}
       {!isOnline && (
         <div className="fixed top-0 left-0 right-0 z-[1000] bg-amber-500 text-white text-center py-2 text-sm font-medium flex items-center justify-center gap-2">
           <WifiOff size={16} />
           <span>Você está offline</span>
-          {process.env.NODE_ENV === 'development' && connectionType !== 'unknown' && (
-            <span className="text-xs opacity-75 ml-2">({connectionType})</span>
-          )}
-        </div>
-      )}
-      
-      {/* 🎯 Indicador de Sync em background (apenas dev) */}
-      {process.env.NODE_ENV === 'development' && lastSync && (
-        <div className="fixed top-0 left-0 z-[999] bg-green-500 text-white text-[10px] px-2 py-0.5 rounded-br-lg">
-          ✓ Sync: {new Date(lastSync).toLocaleTimeString()}
         </div>
       )}
 
-      {/* 🎯 Sidebar Desktop */}
+      {/* Sidebar Desktop */}
       <aside className="hidden md:flex flex-col w-64 bg-white dark:bg-zinc-900 border-r border-gray-200 dark:border-zinc-800">
         <div className="p-6 border-b border-gray-200 dark:border-zinc-800 flex items-center justify-between">
           <div className="flex items-center">
@@ -949,24 +535,21 @@ function AppContent() {
               alt="Lunara Agenda" 
               className="w-8 h-8 mr-3 object-contain" 
               referrerPolicy="no-referrer" 
-              onError={(e) => {
-                (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23006699"><circle cx="12" cy="12" r="10"/></svg>';
-              }}
             />
             <h1 className="text-xl font-bold text-[#006699] tracking-tight">
               Lunara Agenda
             </h1>
           </div>
           
-          {/* 🎯 Indicador de atualização disponível (desktop) */}
-          {updateAvailable && (
+          {/* Badge de atualização - só mostra se há update E usuário não dispensou */}
+          {updateAvailable && !userDismissedUpdate && (
             <button
-              onClick={applyUpdate}
-              disabled={isUpdating}
-              className="p-2 bg-[#006699] text-white rounded-full hover:bg-[#005280] transition-colors disabled:opacity-50 animate-pulse"
-              title="Nova versão disponível - clique para atualizar"
+              onClick={() => setShowUpdatePrompt(true)}
+              className="p-2 bg-[#006699] text-white rounded-full hover:bg-[#005280] transition-colors animate-pulse"
+              title="Nova versão disponível"
+              aria-label="Nova versão disponível - clique para atualizar"
             >
-              <RefreshCw size={16} className={isUpdating ? 'animate-spin' : ''} />
+              <RefreshCw size={16} />
             </button>
           )}
         </div>
@@ -982,7 +565,7 @@ function AppContent() {
                 className={`w-full flex items-center gap-3 px-6 py-3 transition-all duration-200 ${
                   isActive 
                     ? 'bg-[#006699]/10 text-[#006699] border-r-4 border-[#006699] font-semibold' 
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-zinc-800 hover:text-gray-900 dark:hover:text-gray-200'
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-zinc-800'
                 }`}
                 aria-current={isActive ? 'page' : undefined}
               >
@@ -1002,25 +585,11 @@ function AppContent() {
             <div className="mt-1 text-[10px]">
               v3.0 {swReady ? '✓ SW' : '⏳ SW'}
             </div>
-            {/* 🎯 Stats do cache (apenas dev) */}
-            {process.env.NODE_ENV === 'development' && cacheStats && (
-              <details className="mt-2 text-[9px] text-left">
-                <summary className="cursor-pointer hover:text-gray-600">Cache: {Object.values(cacheStats).reduce((acc, s) => acc + s.count, 0)} itens</summary>
-                <div className="mt-1 space-y-0.5">
-                  {Object.entries(cacheStats).map(([name, stats]) => (
-                    <div key={name} className="flex justify-between">
-                      <span>{name.split('-').pop()}:</span>
-                      <span>{stats.count} • {(stats.size / 1024).toFixed(1)}KB</span>
-                    </div>
-                  ))}
-                </div>
-              </details>
-            )}
           </div>
         </div>
       </aside>
 
-      {/* 🎯 Main Content Area */}
+      {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 bg-gray-50 dark:bg-black relative">
         
         {/* Mobile Header */}
@@ -1032,15 +601,15 @@ function AppContent() {
             </div>
             
             <div className="flex items-center gap-2">
-              {/* 🎯 Indicador de atualização (mobile) */}
-              {updateAvailable && (
+              {/* Badge de atualização mobile - só mostra se há update E usuário não dispensou */}
+              {updateAvailable && !userDismissedUpdate && (
                 <button
-                  onClick={applyUpdate}
-                  disabled={isUpdating}
-                  className="p-2 bg-[#006699] text-white rounded-full hover:bg-[#005280] transition-colors disabled:opacity-50 animate-pulse"
+                  onClick={() => setShowUpdatePrompt(true)}
+                  className="p-2 bg-[#006699] text-white rounded-full hover:bg-[#005280] transition-colors animate-pulse"
                   title="Atualizar app"
+                  aria-label="Nova versão disponível"
                 >
-                  <RefreshCw size={18} className={isUpdating ? 'animate-spin' : ''} />
+                  <RefreshCw size={18} />
                 </button>
               )}
               
@@ -1090,7 +659,7 @@ function AppContent() {
           </AnimatePresence>
         </header>
 
-        {/* Content Scroll Area */}
+        {/* Content */}
         <div className="flex-1 overflow-y-auto pb-24 md:pb-0 relative">
           <div className="max-w-5xl mx-auto w-full h-full p-4 md:p-6">
             <ErrorBoundary fallback={
@@ -1144,7 +713,7 @@ function AppContent() {
           </div>
         </div>
 
-        {/* 🎯 Bottom Navigation Mobile */}
+        {/* Bottom Navigation Mobile */}
         <nav 
           className="md:hidden fixed bottom-0 left-0 right-0 flex flex-row items-center justify-around 
                      bg-white/95 dark:bg-zinc-900/95 backdrop-blur-sm border-t border-gray-200 dark:border-zinc-800 
@@ -1171,17 +740,9 @@ function AppContent() {
                 <div className="relative">
                   <Icon size={22} strokeWidth={isActive ? 2.5 : 2} aria-hidden="true" />
                   
-                  {/* 🎯 Indicador de notificação na Agenda */}
-                  {tab.id === 'agenda' && agendamentos?.some(a => 
-                    a.statusAtendimento === 'Agendado' && 
-                    new Date(`${a.data}T${a.hora}`).getTime() - Date.now() < 30 * 60 * 1000
-                  ) && (
+                  {/* Indicador de atendimento próximo na Agenda */}
+                  {tab.id === 'agenda' && hasUpcomingAppointment && (
                     <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white dark:border-zinc-900 animate-pulse" />
-                  )}
-                  
-                  {/* 🎯 Indicador de atualização disponível */}
-                  {updateAvailable && (
-                    <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-[#006699] rounded-full border-2 border-white dark:border-zinc-900 animate-pulse" />
                   )}
                 </div>
                 <span className={`text-[10px] font-medium ${isActive ? 'text-[#006699]' : 'text-gray-400'}`}>
@@ -1193,51 +754,19 @@ function AppContent() {
         </nav>
       </main>
 
-      {/* 🎯 Toast System para notificações fallback */}
+      {/* Toast System */}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
       
-      {/* 🎯 Modal de Atualização */}
+      {/* 🎯 Modal de Atualização - CORRIGIDO */}
       <UpdatePrompt 
-        visible={updateAvailable} 
-        onApply={applyUpdate} 
-        onDismiss={() => {}} 
+        visible={showUpdatePrompt} 
+        onApply={handleApplyUpdate} 
+        onDismiss={handleDismissUpdate}
         isUpdating={isUpdating} 
       />
-
-      {/* 🎯 Global Event Listeners */}
-      <GlobalEventListeners />
     </div>
   );
 }
-
-// ======================
-// COMPONENT: GlobalEventListeners
-// ======================
-
-const GlobalEventListeners: React.FC = () => {
-  useEffect(() => {
-    const handleUpdateAvailable = (e: CustomEvent) => {
-      console.log('🔄 Update disponível:', e.detail);
-    };
-
-    const handleNotification = (e: CustomEvent) => {
-      const { title, body } = e.detail || {};
-      if (title && body) {
-        console.log('🔔 Notificação global:', title, body);
-      }
-    };
-
-    window.addEventListener('lunara:update-available', handleUpdateAvailable as EventListener);
-    window.addEventListener('lunara:notification', handleNotification as EventListener);
-
-    return () => {
-      window.removeEventListener('lunara:update-available', handleUpdateAvailable as EventListener);
-      window.removeEventListener('lunara:notification', handleNotification as EventListener);
-    };
-  }, []);
-
-  return null;
-};
 
 // ======================
 // COMPONENT: App (Root)

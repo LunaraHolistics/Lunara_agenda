@@ -1,3 +1,24 @@
-// Este arquivo mantém compatibilidade com imports antigos
-// Toda a lógica real está em ../services/StorageService
-export { StorageService, StorageKeys } from '../services/StorageService';
+export const StorageService = {
+  saveData: (key: string, data: any): void => {
+    try {
+      localStorage.setItem(key, JSON.stringify(data));
+    } catch (e) {
+      console.error('Erro ao salvar dados', e);
+    }
+  },
+  getData: (key: string): any => {
+    try {
+      const data = localStorage.getItem(key);
+      return data ? JSON.parse(data) : null;
+    } catch (e) {
+      console.error('Erro ao ler dados', e);
+      return null;
+    }
+  },
+  removeItem: (key: string): void => {
+    localStorage.removeItem(key);
+  },
+  clear: (): void => {
+    localStorage.clear();
+  }
+};

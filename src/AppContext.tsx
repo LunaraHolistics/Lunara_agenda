@@ -14,11 +14,11 @@ export const DDI_LIST: CountryDDI[] = [
   { code: '+351', flag: '🇵🇹', name: 'Portugal' },
   { code: '+1', flag: '🇺🇸', name: 'EUA' },
   { code: '+244', flag: '🇦🇴', name: 'Angola' },
-  { code: '+258', flag: '🇲🇿', name: 'Moçambique' },
-  { code: '+238', flag: '🇨🇻', name: 'Cabo Verde' },
+  { code: '+258', flag: '🇲', name: 'Moçambique' },
+  { code: '+238', flag: '🇨', name: 'Cabo Verde' },
   { code: '+245', flag: '🇬🇼', name: 'Guiné-Bissau' },
   { code: '+239', flag: '🇸🇹', name: 'São Tomé e Príncipe' },
-  { code: '+670', flag: '🇹🇱', name: 'Timor-Leste' },
+  { code: '+670', flag: '🇹', name: 'Timor-Leste' },
   { code: '+54', flag: '🇦🇷', name: 'Argentina' },
   { code: '+595', flag: '🇵🇾', name: 'Paraguai' },
   { code: '+598', flag: '🇺🇾', name: 'Uruguai' },
@@ -146,6 +146,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const agendamentosSincronizados = React.useMemo(() => {
+    console.log('AppContext: recalculating agendamentosSincronizados', agendamentos.length);
     return agendamentos.map(ag => {
       const transacao = transacoes.find(t => t.agendamentoId === ag.id);
       if (transacao && transacao.status === 'Pago') {
@@ -170,11 +171,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       try {
         const c = localStorage.getItem(StorageKeys.CLIENTES);
         const t = localStorage.getItem(StorageKeys.TERAPIAS);
+        
         if (!c || !t) return true;
+        
         const parsedC = JSON.parse(c);
         const parsedT = JSON.parse(t);
+        
         if (!Array.isArray(parsedC) || !Array.isArray(parsedT)) return true;
         if (parsedC.length === 0 && parsedT.length === 0) return true;
+        
         return false;
       } catch (e) {
         return true;
@@ -182,6 +187,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     if (isCorruptedOrEmpty()) {
+      console.log("Storage vazio ou corrompido detectado. Forçando inicialização limpa.");
       setClientes(INITIAL_CLIENTES);
       setTerapias(INITIAL_TERAPIAS);
       setPacotes(INITIAL_PACOTES);
@@ -189,6 +195,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setTransacoes(INITIAL_TRANSACOES);
       setBloqueios([]);
       setDespesas([]);
+      
       StorageService.saveData(StorageKeys.CLIENTES, INITIAL_CLIENTES);
       StorageService.saveData(StorageKeys.TERAPIAS, INITIAL_TERAPIAS);
       StorageService.saveData(StorageKeys.PACOTES, INITIAL_PACOTES);
@@ -236,12 +243,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const toKeep: Agendamento[] = [];
         const uniqueScheduled = new Set<string>();
         const availableCounts = new Map<string, number>();
+        
         prev.forEach(ag => {
           if (ag.statusAtendimento === 'Disponivel' && ag.pacoteId && ag.itemPacoteId) {
             const key = `${ag.pacoteId}-${ag.itemPacoteId}`;
             const currentCount = availableCounts.get(key) || 0;
             const pacote = pacotes.find(p => p.id === ag.pacoteId);
             const item = pacote?.itens.find(i => i.id === ag.itemPacoteId);
+            
             if (item && currentCount < item.quantidadeTotal) {
               availableCounts.set(key, currentCount + 1);
               toKeep.push(ag);
@@ -254,6 +263,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             }
           }
         });
+        
         return toKeep;
       });
     }
@@ -287,7 +297,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         a.statusAtendimento === data.statusAtendimento &&
         data.statusAtendimento !== 'Disponivel'
       );
-      if (isDuplicate) return prev;
+
+      if (isDuplicate) {
+        console.warn("Tentativa de criar agendamento duplicado bloqueada.");
+        return prev;
+      }
 
       if (data.pacoteId && data.itemPacoteId && data.statusAtendimento === 'Agendado') {
         const disponivelIdx = prev.findIndex(a => 
@@ -295,9 +309,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           a.itemPacoteId === data.itemPacoteId && 
           a.statusAtendimento === 'Disponivel'
         );
+
         if (disponivelIdx !== -1) {
           const next = [...prev];
           next[disponivelIdx] = { ...next[disponivelIdx], ...data };
+          
           setPacotes(pPrev => pPrev.map(p => {
             if (p.id === data.pacoteId) {
               return {
@@ -311,9 +327,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             }
             return p;
           }));
+
           return next.sort((a, b) => a.data.localeCompare(b.data) || a.hora.localeCompare(b.hora));
         }
       }
+
       const novo = { ...data, id: crypto.randomUUID() } as Agendamento;
       return [...prev, novo].sort((a, b) => a.data.localeCompare(b.data) || a.hora.localeCompare(b.hora));
     });
@@ -323,6 +341,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const updateAgendamento = (data: Agendamento) => {
     setAgendamentos(prev => {
       const old = prev.find(a => a.id === data.id);
+      
       const isDuplicate = prev.some(a => 
         a.id !== data.id &&
         a.clienteId === data.clienteId &&
@@ -334,10 +353,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         a.statusAtendimento === data.statusAtendimento &&
         data.statusAtendimento !== 'Disponivel'
       );
+
       if (isDuplicate) {
         showNotification("Já existe um agendamento idêntico neste horário.", "error");
         return prev;
       }
+
       if (old?.statusAtendimento === 'Disponivel' && data.statusAtendimento === 'Agendado' && data.pacoteId && data.itemPacoteId) {
         setPacotes(pPrev => pPrev.map(p => {
           if (p.id === data.pacoteId) {
@@ -368,9 +389,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           return p;
         }));
       }
+
       const next = prev.map(a => a.id === data.id ? data : a).sort((a, b) => a.data.localeCompare(b.data) || a.hora.localeCompare(b.hora));
       return next;
     });
+
+    setTransacoes(prev => prev.map(t => {
+      if (t.agendamentoId === data.id) {
+        return { ...t, status: data.statusPagamento === 'Pago' ? 'Pago' : 'Pendente' };
+      }
+      return t;
+    }));
+    
     showNotification("Agendamento atualizado!", "success");
   };
 
@@ -401,7 +431,28 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const completeAppointment = (id: string) => {
-    setAgendamentos(prev => prev.map(a => a.id === id ? { ...a, statusAtendimento: 'Concluido' } : a));
+    setAgendamentos(prev => {
+      const ag = prev.find(a => a.id === id);
+      if (!ag) return prev;
+
+      if (ag.statusAtendimento === 'Disponivel' && ag.pacoteId && ag.itemPacoteId) {
+        setPacotes(pPrev => pPrev.map(p => {
+          if (p.id === ag.pacoteId) {
+            return {
+              ...p,
+              itens: p.itens.map(item =>
+                item.id === ag.itemPacoteId
+                  ? { ...item, quantidadeRestante: Math.max(0, item.quantidadeRestante - 1) }
+                  : item
+              )
+            };
+          }
+          return p;
+        }));
+      }
+
+      return prev.map(a => a.id === id ? { ...a, statusAtendimento: 'Concluido' } : a);
+    });
     showNotification("Atendimento concluído!", "success");
   };
 
@@ -424,9 +475,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const addPacote = (data: Omit<Pacote, 'id'>) => {
     const newPacoteId = crypto.randomUUID();
     const novo = { ...data, id: newPacoteId } as Pacote;
+    
     setAgendamentos(prev => {
       const jaExiste = prev.some(a => a.pacoteId === newPacoteId);
-      if (jaExiste) return prev;
+      if (jaExiste) {
+        console.log('Sessões já existem para este pacote. Não recriar.');
+        return prev;
+      }
+
       const novasSessoes: Agendamento[] = [];
       novo.itens.forEach(item => {
         for (let i = 0; i < item.quantidadeTotal; i++) {
@@ -446,12 +502,37 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       });
       return [...prev, ...novasSessoes];
     });
+
     setPacotes(prev => [...prev, novo].sort((a, b) => b.mesReferencia.localeCompare(a.mesReferencia)));
+    
+    // ✅ CORREÇÃO: Criar transação automática ao criar pacote
+    const cliente = clientes.find(c => c.id === novo.clienteId);
+    const transacao: Transacao = {
+      id: crypto.randomUUID(),
+      descricao: `Pacote - ${cliente?.nome || 'Cliente'}`,
+      valor: novo.valorFinal || 0,
+      data: new Date().toISOString().split('T')[0],
+      status: novo.statusPagamento === 'Pago' ? 'Pago' : 'Pendente',
+      tipo: 'Receita',
+      categoria: 'Pacotes',
+      segmento: 'holistica',
+      pacoteId: newPacoteId
+    };
+    setTransacoes(prev => [transacao, ...prev]);
+    
     showNotification("Pacote criado e sessões liberadas!", "success");
   };
 
   const updatePacote = (data: Pacote) => {
     setPacotes(prev => prev.map(p => p.id === data.id ? data : p));
+    
+    setTransacoes(prev => prev.map(t => {
+      if (t.pacoteId === data.id) {
+        return { ...t, status: data.statusPagamento === 'Pago' ? 'Pago' : 'Pendente' };
+      }
+      return t;
+    }));
+    
     showNotification("Pacote atualizado!", "success");
   };
 
@@ -459,7 +540,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setAgendamentos(prev => (prev || []).filter(a => a.pacoteId !== id));
     setTransacoes(prev => (prev || []).filter(t => t.pacoteId !== id));
     setPacotes(prev => (prev || []).filter(p => p.id !== id));
-    showNotification("Pacote e todos os registros vinculados foram removidos!", "info");
+    showNotification("Pacote e todos os registros vinculados (agenda e financeiro) foram removidos!", "info");
   };
 
   const addBloqueio = (data: Omit<Bloqueio, 'id'>) => {
@@ -488,6 +569,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const updateTransacao = (data: Transacao) => {
     setTransacoes(prev => prev.map(t => t.id === data.id ? data : t));
+    
     if (data.status === 'Pago') {
       if (data.agendamentoId) {
         setAgendamentos(prev => prev.map(ag => 
@@ -580,9 +662,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       (clientes || []).some(c => c.id === a.clienteId) && 
       (terapias || []).some(t => t.id === a.terapiaId)
     );
+    
     const toKeep: Agendamento[] = [];
     const uniqueScheduled = new Set<string>();
     const availableCounts = new Map<string, number>();
+    
     validAgendamentos.forEach(ag => {
       if (ag.statusAtendimento === 'Disponivel' && ag.pacoteId && ag.itemPacoteId) {
         const key = `${ag.pacoteId}-${ag.itemPacoteId}`;
@@ -601,41 +685,57 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
       }
     });
+
     setAgendamentos(toKeep);
+    
     const validPacotes = (pacotes || []).filter(p => (clientes || []).some(c => c.id === p.clienteId));
     setPacotes(validPacotes);
+    
     showNotification("Banco de dados reparado e duplicados removidos!", "success");
   };
 
   const renewPacote = (pacoteId: string) => {
     const originalPacote = pacotes.find(p => p.id === pacoteId);
     if (!originalPacote) return;
+
     const [year, month] = originalPacote.mesReferencia.split('-').map(Number);
     const nextDate = new Date(year, month, 1); 
     const nextMesReferencia = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}`;
+
     const alreadyRenewed = pacotes.some(p => p.clienteId === originalPacote.clienteId && p.mesReferencia === nextMesReferencia);
     if (alreadyRenewed) {
       showNotification("Este pacote já foi renovado para o próximo mês.", "info");
       return;
     }
+
     const newPacoteId = crypto.randomUUID();
+
     const jaExiste = agendamentos.some(a => a.pacoteId === newPacoteId);
-    if (jaExiste) return;
+    if (jaExiste) {
+      console.log('Sessões já existem para este pacote. Não recriar.');
+      return;
+    }
+
     const updatedOriginalPacote = { ...originalPacote, status: 'Concluido' as const };
     setPacotes(prev => prev.map(p => p.id === pacoteId ? updatedOriginalPacote : p));
+
     const newItens = originalPacote.itens.map(item => ({
       ...item,
       id: crypto.randomUUID(),
       quantidadeRestante: item.quantidadeTotal
     }));
+
     const originalAgendamentos = agendamentos.filter(a => a.pacoteId === pacoteId && a.statusAtendimento !== 'Cancelado');
     const novasSessoes: Agendamento[] = [];
+    
     originalAgendamentos.forEach(a => {
       const d = new Date(a.data + 'T00:00:00');
       d.setDate(d.getDate() + 28);
+      
       const item = newItens.find(i => i.terapiaId === a.terapiaId);
       if (item && item.quantidadeRestante > 0) {
         item.quantidadeRestante--;
+        
         novasSessoes.push({
           ...a,
           id: crypto.randomUUID(),
@@ -648,6 +748,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         });
       }
     });
+
     newItens.forEach(item => {
       const restante = item.quantidadeRestante;
       for (let i = 0; i < restante; i++) {
@@ -665,6 +766,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         });
       }
     });
+
     const newPacote: Pacote = {
       ...originalPacote,
       id: newPacoteId,
@@ -676,8 +778,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       bancoPagamento: undefined,
       itens: newItens
     };
+
     setPacotes(prev => [...prev, newPacote]);
     setAgendamentos(prev => [...prev, ...novasSessoes]);
+    
     const cliente = clientes.find(c => c.id === originalPacote.clienteId);
     const transacao: Transacao = {
       id: crypto.randomUUID(),
@@ -690,6 +794,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       pacoteId: newPacoteId
     };
     setTransacoes(prev => [transacao, ...prev]);
+
     showNotification("Pacote renovado e sessões liberadas!", "success");
   };
 

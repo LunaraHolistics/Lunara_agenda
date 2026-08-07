@@ -1,9 +1,6 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    
-    <!-- 🎯 Script de compatibilidade (mantido do original) -->
     <script>
       // Desativar APIs experimentais que causam erros de Origin Trial
       window.ai = {
@@ -12,56 +9,16 @@
         languageModel: { capabilities: () => Promise.resolve({ available: 'no' }) }
       };
       // Silenciar erro de Permissions-Policy
-      document.currentScript.parentElement.insertAdjacentHTML('afterbegin', '<meta http-equiv="Permissions-Policy" content="language-detector=(), proofreader=()">');
+      document.currentScript.parentElement.insertAdjacentHTML('afterbegin', '<meta http-equiv=\"Permissions-Policy\" content=\"language-detector=(), proofreader=()\">');
     </script>
-    
-    <!-- 🎯 Viewport otimizado para mobile/PWA -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    
-    <!-- 🎯 Ícones e PWA -->
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/png" href="/favicon.png" />
-    <link rel="apple-touch-icon" href="/icone-192.png" />
-    <link rel="manifest" href="/manifest.json" />
-    
-    <!-- 🎯 Tema e cores -->
-    <meta name="theme-color" content="#006699" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
-    <meta name="color-scheme" content="light dark" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Lunara Agenda" />
-    
-    <!-- 🎯 SEO Básico -->
     <title>Lunara Agenda</title>
-    <meta name="description" content="Sistema de agendamento e gestão para terapeutas holísticos" />
-    <meta name="keywords" content="agenda, terapia, holística, agendamento, gestão" />
-    <meta name="author" content="Lunara Agenda" />
-    <meta name="robots" content="index, follow" />
-    
-    <!-- 🎯 Open Graph / Social -->
-    <meta property="og:type" content="website" />
-    <meta property="og:title" content="Lunara Agenda - Gestão Terapêutica" />
-    <meta property="og:description" content="Sistema completo de agendamento e gestão para terapeutas holísticos" />
-    <meta property="og:image" content="/icone-512.png" />
-    <meta property="og:locale" content="pt_BR" />
-    
-    <!-- 🎯 Preconnect para performance -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin />
-    <link rel="preconnect" href="https://api.supabase.co" crossorigin />
   </head>
-  <body class="antialiased">
+  <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    
-    <!-- 🎯 Registro do Service Worker (fallback) -->
-    <script>
-      if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/service-worker.js').catch(console.error);
-        });
-      }
-      // Prevenir zoom em inputs no iOS
-      document.addEventListener('gesturestart', e => e.preventDefault());
-    </script>
   </body>
 </html>
+

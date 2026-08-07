@@ -1,8 +1,25 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon, ShieldAlert, X, GripVertical, Clock, AlertCircle, CheckCircle2, Calendar, Trash2, ChevronDown, ChevronUp, MessageCircle, DollarSign } from 'lucide-react';
-import { Cliente, Terapia, Agendamento, Bloqueio, Pacote } from '../types';
-import { StorageService } from '../utils/storage';
-import { useAppContext } from '../AppContext';
+import React, { useState, useEffect, useRef } from "react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  Calendar as CalendarIcon,
+  ShieldAlert,
+  X,
+  GripVertical,
+  Clock,
+  AlertCircle,
+  CheckCircle2,
+  Calendar,
+  Trash2,
+  ChevronDown,
+  ChevronUp,
+  MessageCircle,
+  DollarSign,
+} from "lucide-react";
+import { Cliente, Terapia, Agendamento, Bloqueio, Pacote } from "../types";
+import { StorageService } from "../utils/storage";
+import { useAppContext } from "../AppContext";
 
 type DiaBloqueado = {
   data: string;
@@ -10,12 +27,12 @@ type DiaBloqueado = {
 };
 
 export default function AgendaScreen() {
-  const { 
-    completeAppointment, 
-    showNotification, 
-    confirmAction, 
-    safeDate, 
-    promptAction, 
+  const {
+    completeAppointment,
+    showNotification,
+    confirmAction,
+    safeDate,
+    promptAction,
     clientes,
     terapias,
     agendamentos,
@@ -29,29 +46,32 @@ export default function AgendaScreen() {
     addBloqueio,
     deleteBloqueio,
     addAgendamento,
-    deleteAgendamento
+    deleteAgendamento,
   } = useAppContext();
-  
+
   // State
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  
+
   useEffect(() => {
-    const saved = localStorage.getItem('diasBloqueados');
+    const saved = localStorage.getItem("diasBloqueados");
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
           parsed.forEach((d: any) => {
-            const exists = (bloqueios || []).some(b => b.data === d.data);
+            const exists = (bloqueios || []).some((b) => b.data === d.data);
             if (!exists) {
-              addBloqueio({ data: d.data, motivo: d.motivo || 'Bloqueio Legado' });
+              addBloqueio({
+                data: d.data,
+                motivo: d.motivo || "Bloqueio Legado",
+              });
             }
           });
-          localStorage.removeItem('diasBloqueados');
-          console.log('Migração de bloqueios concluída');
+          localStorage.removeItem("diasBloqueados");
+          console.log("Migração de bloqueios concluída");
         }
       } catch (e) {
-        console.error('Erro na migração de bloqueios', e);
+        console.error("Erro na migração de bloqueios", e);
       }
     }
   }, [bloqueios, addBloqueio]);
@@ -61,18 +81,24 @@ export default function AgendaScreen() {
   const [isBloqueiosOpen, setIsBloqueiosOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [isMobileDateModalOpen, setIsMobileDateModalOpen] = useState(false);
-  const [isMobileCompleteModalOpen, setIsMobileCompleteModalOpen] = useState(false);
-  const [mobileSelectedAgendamento, setMobileSelectedAgendamento] = useState<Agendamento | null>(null);
-  const [mobileCompleteAgendamento, setMobileCompleteAgendamento] = useState<Agendamento | null>(null);
-  const [mobileNewDate, setMobileNewDate] = useState('');
-  
+  const [isMobileCompleteModalOpen, setIsMobileCompleteModalOpen] =
+    useState(false);
+  const [mobileSelectedAgendamento, setMobileSelectedAgendamento] =
+    useState<Agendamento | null>(null);
+  const [mobileCompleteAgendamento, setMobileCompleteAgendamento] =
+    useState<Agendamento | null>(null);
+  const [mobileNewDate, setMobileNewDate] = useState("");
+
   const touchTimer = useRef<NodeJS.Timeout | null>(null);
   const isLongPressTriggered = useRef(false);
   const touchStartY = useRef(0);
   const [isDayAgendaOpen, setIsDayAgendaOpen] = useState(false);
   const [minimizado, setMinimizado] = useState(false);
+
   const [showOrfaos, setShowOrfaos] = useState(false);
-  const [expandedClienteId, setExpandedClienteId] = useState<string | null>(null);
+  const [expandedClienteId, setExpandedClienteId] = useState<string | null>(
+    null,
+  );
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverDay, setDragOverDay] = useState<number | null>(null);
   const [dragItem, setDragItem] = useState<any>(null);
@@ -90,18 +116,23 @@ export default function AgendaScreen() {
     isDayLongPress.current = false;
     dayTouchTimer.current = setTimeout(() => {
       isDayLongPress.current = true;
-      const diaEstaBloqueado = (bloqueios || []).some(d => d.data === dateStr);
+      const diaEstaBloqueado = (bloqueios || []).some(
+        (d) => d.data === dateStr,
+      );
       if (diaEstaBloqueado) {
-        confirmAction('Deseja desbloquear este dia?', () => {
-          const b = (bloqueios || []).find(x => x.data === dateStr);
+        confirmAction("Deseja desbloquear este dia?", () => {
+          const b = (bloqueios || []).find((x) => x.data === dateStr);
           if (b) deleteBloqueio(b.id);
         });
       } else {
-        confirmAction(`Deseja bloquear o dia ${dateStr.split('-').reverse().join('/')}?`, () => {
-          promptAction('Motivo do bloqueio (opcional):', '', (motivo) => {
-            addBloqueio({ data: dateStr, motivo });
-          });
-        });
+        confirmAction(
+          `Deseja bloquear o dia ${dateStr.split("-").reverse().join("/")}?`,
+          () => {
+            promptAction("Motivo do bloqueio (opcional):", "", (motivo) => {
+              addBloqueio({ data: dateStr, motivo });
+            });
+          },
+        );
       }
     }, 600);
   };
@@ -111,7 +142,6 @@ export default function AgendaScreen() {
       clearTimeout(dayTouchTimer.current);
       dayTouchTimer.current = null;
     }
-    // Reset after a short delay to allow onClick to see the state
     setTimeout(() => {
       isDayLongPress.current = false;
     }, 150);
@@ -127,12 +157,12 @@ export default function AgendaScreen() {
   }, []);
 
   // Form State - Agendamento
-  const [formClienteId, setFormClienteId] = useState('');
+  const [formClienteId, setFormClienteId] = useState("");
   const [activePackage, setActivePackage] = useState<Pacote | null>(null);
 
   useEffect(() => {
     if (formClienteId) {
-      const active = (pacotes || []).find(p => p.clienteId === formClienteId);
+      const active = (pacotes || []).find((p) => p.clienteId === formClienteId);
       setActivePackage(active || null);
     } else {
       setActivePackage(null);
@@ -140,38 +170,54 @@ export default function AgendaScreen() {
   }, [formClienteId, pacotes]);
 
   const [formTerapiaIds, setFormTerapiaIds] = useState<string[]>([]);
-  const [formPacoteId, setFormPacoteId] = useState<string | undefined>(undefined);
-  const [formItemPacoteId, setFormItemPacoteId] = useState<string | undefined>(undefined);
-  const [formData, setFormData] = useState('');
-  const [formHora, setFormHora] = useState('');
+  const [formPacoteId, setFormPacoteId] = useState<string | undefined>(
+    undefined,
+  );
+  const [formItemPacoteId, setFormItemPacoteId] = useState<string | undefined>(
+    undefined,
+  );
+  const [formData, setFormData] = useState("");
+  const [formHora, setFormHora] = useState("");
   const [formValor, setFormValor] = useState(0);
-  const [formStatusPagamento, setFormStatusPagamento] = useState<'Pendente' | 'Pago'>('Pendente');
+  const [formStatusPagamento, setFormStatusPagamento] = useState<
+    "Pendente" | "Pago"
+  >("Pendente");
   const [recorrencia, setRecorrencia] = useState(false);
-  const [frequencia, setFrequencia] = useState<'semanal' | 'quinzenal'>('semanal');
-  const [dataFim, setDataFim] = useState('');
+  const [frequencia, setFrequencia] = useState<"semanal" | "quinzenal">(
+    "semanal",
+  );
+  const [dataFim, setDataFim] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const isDragging = useRef(false);
 
   // Form State - Bloqueio
-  const [blockData, setBlockData] = useState('');
-  const [blockHoraInicio, setBlockHoraInicio] = useState('');
-  const [blockHoraFim, setBlockHoraFim] = useState('');
-  const [blockMotivo, setBlockMotivo] = useState('');
+  const [blockData, setBlockData] = useState("");
+  const [blockHoraInicio, setBlockHoraInicio] = useState("");
+  const [blockHoraFim, setBlockHoraFim] = useState("");
+  const [blockMotivo, setBlockMotivo] = useState("");
 
   useEffect(() => {
     // fetchData removido para Local-First
   }, [refreshTrigger]);
 
   // Calendar Helpers
-  const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
-  const getFirstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay();
-  const prevMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
-  const nextMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
+  const getDaysInMonth = (year: number, month: number) =>
+    new Date(year, month + 1, 0).getDate();
+  const getFirstDayOfMonth = (year: number, month: number) =>
+    new Date(year, month, 1).getDay();
+  const prevMonth = () =>
+    setCurrentMonth(
+      new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1),
+    );
+  const nextMonth = () =>
+    setCurrentMonth(
+      new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1),
+    );
 
   const bloquearDia = (e: React.MouseEvent, data: string) => {
     e.preventDefault();
     e.stopPropagation();
-    promptAction('Motivo do bloqueio (opcional):', '', (motivo) => {
+    promptAction("Motivo do bloqueio (opcional):", "", (motivo) => {
       addBloqueio({ data, motivo });
     });
   };
@@ -179,11 +225,11 @@ export default function AgendaScreen() {
   const desbloquearDia = (e: React.MouseEvent, data: string) => {
     e.preventDefault();
     e.stopPropagation();
-    const bloqueio = (bloqueios || []).find(b => b.data === data);
+    const bloqueio = (bloqueios || []).find((b) => b.data === data);
     if (bloqueio) {
-      confirmAction('Deseja desbloquear este dia?', () => {
+      confirmAction("Deseja desbloquear este dia?", () => {
         deleteBloqueio(bloqueio.id);
-        showNotification('Dia desbloqueado!', 'info');
+        showNotification("Dia desbloqueado!", "info");
       });
     }
   };
@@ -192,7 +238,9 @@ export default function AgendaScreen() {
   const month = currentMonth.getMonth();
   const daysInMonth = getDaysInMonth(year, month);
   const firstDay = getFirstDayOfMonth(year, month);
-  const monthName = new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(currentMonth);
+  const monthName = new Intl.DateTimeFormat("pt-BR", { month: "long" }).format(
+    currentMonth,
+  );
 
   useEffect(() => {
     const handleAutoScroll = (e: DragEvent) => {
@@ -203,18 +251,18 @@ export default function AgendaScreen() {
       const height = window.innerHeight;
 
       if (y < threshold) {
-        window.scrollBy({ top: -scrollSpeed, behavior: 'auto' });
+        window.scrollBy({ top: -scrollSpeed, behavior: "auto" });
       }
 
       if (y > height - threshold) {
-        window.scrollBy({ top: scrollSpeed, behavior: 'auto' });
+        window.scrollBy({ top: scrollSpeed, behavior: "auto" });
       }
     };
 
-    window.addEventListener('dragover', handleAutoScroll);
+    window.addEventListener("dragover", handleAutoScroll);
 
     return () => {
-      window.removeEventListener('dragover', handleAutoScroll);
+      window.removeEventListener("dragover", handleAutoScroll);
     };
   }, []);
 
@@ -222,45 +270,61 @@ export default function AgendaScreen() {
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    e.dataTransfer.dropEffect = 'move';
+    e.dataTransfer.dropEffect = "move";
   };
 
-  const handleDragStart = (e: React.DragEvent, data: { id?: string; type: 'agendamento' | 'terapia'; clienteId?: string; terapiaId?: string; pacoteId?: string; itemPacoteId?: string; name: string; time: string }) => {
+  const handleDragStart = (
+    e: React.DragEvent,
+    data: {
+      id?: string;
+      type: "agendamento" | "terapia";
+      clienteId?: string;
+      terapiaId?: string;
+      pacoteId?: string;
+      itemPacoteId?: string;
+      name: string;
+      time: string;
+    },
+  ) => {
     e.stopPropagation();
-    e.dataTransfer.effectAllowed = 'move';
-    
-    const id = data.id || e.currentTarget.getAttribute('data-id');
-    if (id) {
-      e.dataTransfer.setData('id', String(id));
-      e.dataTransfer.setData('type', data.type);
-      setDraggingId(String(id));
-      console.log('DRAG START:', id, data.type);
-    }
-    
-    if (data.clienteId) e.dataTransfer.setData('clienteId', String(data.clienteId));
-    if (data.terapiaId) e.dataTransfer.setData('terapiaId', String(data.terapiaId));
-    if (data.pacoteId) e.dataTransfer.setData('pacoteId', String(data.pacoteId));
-    if (data.itemPacoteId) e.dataTransfer.setData('itemPacoteId', String(data.itemPacoteId));
+    e.dataTransfer.effectAllowed = "move";
 
-    if (data.type === 'agendamento' && !isMobile) {
+    const id = data.id || e.currentTarget.getAttribute("data-id");
+    if (id) {
+      e.dataTransfer.setData("id", String(id));
+      e.dataTransfer.setData("type", data.type);
+      setDraggingId(String(id));
+      console.log("DRAG START:", id, data.type);
+    }
+
+    if (data.clienteId)
+      e.dataTransfer.setData("clienteId", String(data.clienteId));
+    if (data.terapiaId)
+      e.dataTransfer.setData("terapiaId", String(data.terapiaId));
+    if (data.pacoteId)
+      e.dataTransfer.setData("pacoteId", String(data.pacoteId));
+    if (data.itemPacoteId)
+      e.dataTransfer.setData("itemPacoteId", String(data.itemPacoteId));
+
+    if (data.type === "agendamento" && !isMobile) {
       setMinimizado(false);
       setDropZoneMinimizado(false);
     }
 
     if (dragPreviewRef.current) {
       const preview = dragPreviewRef.current;
-      const nameEl = preview.querySelector('.preview-name');
-      const timeEl = preview.querySelector('.preview-time');
+      const nameEl = preview.querySelector(".preview-name");
+      const timeEl = preview.querySelector(".preview-time");
       if (nameEl) nameEl.textContent = data.name;
       if (timeEl) timeEl.textContent = data.time;
-      
+
       e.dataTransfer.setDragImage(preview, 70, 30);
     }
   };
 
   useEffect(() => {
     const total = formTerapiaIds.reduce((sum, tid) => {
-      const terapia = terapias.find(t => t.id === tid);
+      const terapia = terapias.find((t) => t.id === tid);
       return sum + (terapia?.valor || 0);
     }, 0);
     setFormValor(total);
@@ -271,39 +335,48 @@ export default function AgendaScreen() {
     e.stopPropagation();
     isDragging.current = false;
 
-    const type = e.dataTransfer.getData('type');
-    const id = e.dataTransfer.getData('id');
-    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    const diaEstaBloqueado = (bloqueios || []).some(d => d.data === dateStr);
+    const type = e.dataTransfer.getData("type");
+    const id = e.dataTransfer.getData("id");
+    const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const diaEstaBloqueado = (bloqueios || []).some((d) => d.data === dateStr);
 
     if (diaEstaBloqueado) {
-      showNotification('Este dia está bloqueado.', 'error');
+      showNotification("Este dia está bloqueado.", "error");
       setDraggingId(null);
       return;
     }
 
-    console.log('DROP:', type, id, dateStr);
+    console.log("DROP:", type, id, dateStr);
 
     if (!id) return;
 
-    if (type === 'agendamento') {
-      const item = (agendamentos || []).find(a => String(a.id) === String(id));
-      if (item?.statusAtendimento === 'Concluido') {
-        showNotification('Não é possível mover uma sessão concluída.', 'error');
+    if (type === "agendamento") {
+      const item = (agendamentos || []).find(
+        (a) => String(a.id) === String(id),
+      );
+      if (item?.statusAtendimento === "Concluido") {
+        showNotification("Não é possível mover uma sessão concluída.", "error");
         setDraggingId(null);
         return;
       }
 
-      updateAgendamento({ ...item!, data: dateStr, statusAtendimento: 'Agendado' });
+      updateAgendamento({
+        ...item!,
+        data: dateStr,
+        statusAtendimento: "Agendado",
+      });
     }
 
-    if (type === 'terapia') {
-      setFormClienteId(e.dataTransfer.getData('clienteId') || '');
+    if (type === "terapia") {
+      setFormClienteId(e.dataTransfer.getData("clienteId") || "");
       setFormData(dateStr);
-      setFormTerapiaIds(prev => [...prev, e.dataTransfer.getData('terapiaId')]);
-      setFormHora('09:00');
-      setFormPacoteId(e.dataTransfer.getData('pacoteId') || undefined);
-      setFormItemPacoteId(e.dataTransfer.getData('itemPacoteId') || undefined);
+      setFormTerapiaIds((prev) => [
+        ...prev,
+        e.dataTransfer.getData("terapiaId"),
+      ]);
+      setFormHora("09:00");
+      setFormPacoteId(e.dataTransfer.getData("pacoteId") || undefined);
+      setFormItemPacoteId(e.dataTransfer.getData("itemPacoteId") || undefined);
       setIsModalOpen(true);
     }
 
@@ -313,31 +386,43 @@ export default function AgendaScreen() {
   const handleDropToFooter = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    const type = e.dataTransfer.getData('type');
-    const id = e.dataTransfer.getData('id');
+    const type = e.dataTransfer.getData("type");
+    const id = e.dataTransfer.getData("id");
 
-    if (type === 'agendamento' && id) {
-      const item = (agendamentos || []).find(a => String(a.id) === String(id));
-      if (item?.statusAtendimento === 'Concluido') {
-        showNotification('Não é possível mover uma sessão concluída.', 'error');
+    if (type === "agendamento" && id) {
+      const item = (agendamentos || []).find(
+        (a) => String(a.id) === String(id),
+      );
+      if (item?.statusAtendimento === "Concluido") {
+        showNotification("Não é possível mover uma sessão concluída.", "error");
         setDraggingId(null);
         return;
       }
 
-      updateAgendamento({ ...item!, data: '', hora: '', statusAtendimento: 'Disponivel' });
+      updateAgendamento({
+        ...item!,
+        data: "",
+        hora: "",
+        statusAtendimento: "Disponivel",
+      });
     }
     setDraggingId(null);
   };
 
   const handleSaveAgendamento = async () => {
-    if (!formClienteId || formTerapiaIds.length === 0 || !formData || !formHora) {
-      setErrorMessage('Preencha todos os campos obrigatórios.');
+    if (
+      !formClienteId ||
+      formTerapiaIds.length === 0 ||
+      !formData ||
+      !formHora
+    ) {
+      setErrorMessage("Preencha todos os campos obrigatórios.");
       return;
     }
 
-    const diaEstaBloqueado = (bloqueios || []).some(d => d.data === formData);
+    const diaEstaBloqueado = (bloqueios || []).some((d) => d.data === formData);
     if (diaEstaBloqueado) {
-      setErrorMessage('Este dia está bloqueado.');
+      setErrorMessage("Este dia está bloqueado.");
       return;
     }
 
@@ -346,18 +431,17 @@ export default function AgendaScreen() {
     if (recorrencia && dataFim) {
       let curr = new Date(`${formData}T00:00:00`);
       const end = new Date(`${dataFim}T23:59:59`);
-      const step = frequencia === 'semanal' ? 7 : 14;
+      const step = frequencia === "semanal" ? 7 : 14;
       while (true) {
         curr.setDate(curr.getDate() + step);
         if (curr > end) break;
-        const nextDate = curr.toISOString().split('T')[0];
-        
-        // Check if recurrent date is blocked
-        if ((bloqueios || []).some(b => b.data === nextDate)) {
+        const nextDate = curr.toISOString().split("T")[0];
+
+        if ((bloqueios || []).some((b) => b.data === nextDate)) {
           console.log(`Pulando data bloqueada na recorrência: ${nextDate}`);
           continue;
         }
-        
+
         datesToSchedule.push(nextDate);
       }
     }
@@ -374,39 +458,45 @@ export default function AgendaScreen() {
             hora: formHora,
             pacoteId: formPacoteId,
             itemPacoteId: formItemPacoteId,
-            statusPagamento: 'Pendente',
-            statusAtendimento: 'Agendado',
-            valorCobrado: 0
+            statusPagamento: "Pendente",
+            statusAtendimento: "Agendado",
+            valorCobrado: 0,
           });
         }
       }
 
       setIsModalOpen(false);
-      setFormTerapiaIds([]); // Reset therapy IDs
+      setFormTerapiaIds([]);
     };
 
     await saveAll();
   };
 
   const handleDeleteAgendamento = (agendamentoId: string) => {
-    const item = (agendamentos || []).find(a => String(a.id) === String(agendamentoId));
-    if (item?.statusAtendimento === 'Concluido') {
-      showNotification('Não é possível remover uma sessão concluída.', 'error');
+    const item = (agendamentos || []).find(
+      (a) => String(a.id) === String(agendamentoId),
+    );
+    if (item?.statusAtendimento === "Concluido") {
+      showNotification("Não é possível remover uma sessão concluída.", "error");
       return;
     }
 
-    confirmAction('Deseja realmente remover este agendamento da agenda? Ele ficará disponível para reagendamento.', () => {
-      deleteAgendamento(agendamentoId);
-    }, { isDanger: true });
+    confirmAction(
+      "Deseja realmente remover este agendamento da agenda? Ele ficará disponível para reagendamento.",
+      () => {
+        deleteAgendamento(agendamentoId);
+      },
+      { isDanger: true },
+    );
   };
 
   const handleCompleteAppointment = async (id: string) => {
     await completeAppointment(id);
-    setRefreshTrigger(prev => prev + 1);
+    setRefreshTrigger((prev) => prev + 1);
   };
 
   const openDayAgenda = (day: number) => {
-    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     setSelectedDate(dateStr);
     setIsDayAgendaOpen(true);
   };
@@ -425,55 +515,54 @@ export default function AgendaScreen() {
   };
 
   const handleTouchStart = (e: React.TouchEvent, ag: Agendamento) => {
-    if (!isMobile || ag.statusAtendimento === 'Concluido') return;
-    
+    if (!isMobile || ag.statusAtendimento === "Concluido") return;
+
     e.stopPropagation();
     isLongPressTriggered.current = false;
     touchStartY.current = e.touches[0].clientY;
     const target = e.currentTarget as HTMLElement;
-    
-    // Feedback visual do toque longo
-    target.style.transition = 'transform 2s ease-in-out, box-shadow 2s ease-in-out';
-    target.style.transform = 'scale(0.95)';
-    target.style.boxShadow = 'inset 0 0 10px rgba(0,0,0,0.1)';
-    
+
+    target.style.transition =
+      "transform 2s ease-in-out, box-shadow 2s ease-in-out";
+    target.style.transform = "scale(0.95)";
+    target.style.boxShadow = "inset 0 0 10px rgba(0,0,0,0.1)";
+
     touchTimer.current = setTimeout(() => {
       isLongPressTriggered.current = true;
-      target.style.transition = 'transform 0.2s, box-shadow 0.2s';
-      target.style.transform = 'scale(1)';
-      target.style.boxShadow = 'none';
-      handleMobileSelect(ag); // Abre reagendamento
+      target.style.transition = "transform 0.2s, box-shadow 0.2s";
+      target.style.transform = "scale(1)";
+      target.style.boxShadow = "none";
+      handleMobileSelect(ag);
     }, 2000);
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (!isMobile) return;
-    
+
     e.stopPropagation();
-    // Se moveu o dedo mais de 10px, cancela o toque longo
     const currentY = e.touches[0].clientY;
     if (Math.abs(currentY - touchStartY.current) > 10) {
       if (touchTimer.current) {
         clearTimeout(touchTimer.current);
         touchTimer.current = null;
       }
-      isLongPressTriggered.current = true; // Previne o toque simples
-      
+      isLongPressTriggered.current = true;
+
       const target = e.currentTarget as HTMLElement;
-      target.style.transition = 'transform 0.2s, box-shadow 0.2s';
-      target.style.transform = 'scale(1)';
-      target.style.boxShadow = 'none';
+      target.style.transition = "transform 0.2s, box-shadow 0.2s";
+      target.style.transform = "scale(1)";
+      target.style.boxShadow = "none";
     }
   };
 
   const handleTouchEnd = (e: React.TouchEvent, ag: Agendamento) => {
-    if (!isMobile || ag.statusAtendimento === 'Concluido') return;
-    
+    if (!isMobile || ag.statusAtendimento === "Concluido") return;
+
     e.stopPropagation();
     const target = e.currentTarget as HTMLElement;
-    target.style.transition = 'transform 0.2s, box-shadow 0.2s';
-    target.style.transform = 'scale(1)';
-    target.style.boxShadow = 'none';
+    target.style.transition = "transform 0.2s, box-shadow 0.2s";
+    target.style.transform = "scale(1)";
+    target.style.boxShadow = "none";
 
     if (touchTimer.current) {
       clearTimeout(touchTimer.current);
@@ -481,8 +570,7 @@ export default function AgendaScreen() {
     }
 
     if (!isLongPressTriggered.current) {
-      // Toque simples (Tap)
-      e.preventDefault(); // Previne o onClick
+      e.preventDefault();
       setMobileCompleteAgendamento(ag);
       setIsMobileCompleteModalOpen(true);
     }
@@ -490,41 +578,47 @@ export default function AgendaScreen() {
 
   const handleConfirmMobileDate = () => {
     if (!mobileSelectedAgendamento || !mobileNewDate) return;
-    
+
     if (!/^\d{4}-\d{2}-\d{2}$/.test(mobileNewDate)) {
-      showNotification('Formato de data inválido.', 'error');
+      showNotification("Formato de data inválido.", "error");
       return;
     }
-    
-    const diaEstaBloqueado = (bloqueios || []).some(d => d.data === mobileNewDate);
-    if (diaEstaBloqueado) {
-      showNotification('Este dia está bloqueado.', 'error');
-      return;
-    }
-    
-    setAgendamentos(prev =>
-      prev.map(item =>
-        String(item.id) === String(mobileSelectedAgendamento.id)
-          ? { ...item, data: mobileNewDate, statusAtendimento: 'Agendado' }
-          : item
-      )
+
+    const diaEstaBloqueado = (bloqueios || []).some(
+      (d) => d.data === mobileNewDate,
     );
-    showNotification('Agendamento reagendado!', 'success');
+    if (diaEstaBloqueado) {
+      showNotification("Este dia está bloqueado.", "error");
+      return;
+    }
+
+    setAgendamentos((prev) =>
+      prev.map((item) =>
+        String(item.id) === String(mobileSelectedAgendamento.id)
+          ? { ...item, data: mobileNewDate, statusAtendimento: "Agendado" }
+          : item,
+      ),
+    );
+    showNotification("Agendamento reagendado!", "success");
     setIsMobileDateModalOpen(false);
     setMobileSelectedAgendamento(null);
   };
 
-  const handleMobileFooterClick = (clienteId: string, terapiaId: string, pacoteId?: string, itemPacoteId?: string) => {
+  const handleMobileFooterClick = (
+    clienteId: string,
+    terapiaId: string,
+    pacoteId?: string,
+    itemPacoteId?: string,
+  ) => {
     setFormClienteId(clienteId);
-    setFormData(''); // Let the user pick the date
+    setFormData("");
     setFormTerapiaIds([terapiaId]);
-    setFormHora('09:00'); // Default time
+    setFormHora("09:00");
     setFormPacoteId(pacoteId);
     setFormItemPacoteId(itemPacoteId);
     setIsModalOpen(true);
   };
 
-  // Long Press logic for dragging existing appointments
   const startLongPress = (id: string) => {
     longPressTimer.current = setTimeout(() => {
       // Logic for starting drag if needed via state
@@ -536,21 +630,32 @@ export default function AgendaScreen() {
       {/* Header */}
       <div className="p-4 bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] border-b border-gray-200 dark:border-gray-800 sticky top-0 z-10 flex justify-between items-center">
         <div className="flex items-center gap-4">
-          <button onClick={prevMonth} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full text-[var(--color-text-sec-light)] transition-colors"><ChevronLeft size={24} /></button>
+          <button
+            onClick={prevMonth}
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full text-[var(--color-text-sec-light)] transition-colors"
+          >
+            <ChevronLeft size={24} />
+          </button>
           <h2 className="text-lg font-bold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] min-w-[140px] text-center capitalize">
-            {monthName} <span className="text-[var(--color-primary)]">{year}</span>
+            {monthName}{" "}
+            <span className="text-[var(--color-primary)]">{year}</span>
           </h2>
-          <button onClick={nextMonth} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full text-[var(--color-text-sec-light)] transition-colors"><ChevronRight size={24} /></button>
+          <button
+            onClick={nextMonth}
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full text-[var(--color-text-sec-light)] transition-colors"
+          >
+            <ChevronRight size={24} />
+          </button>
         </div>
         <div className="flex gap-2">
-          <button 
+          <button
             onClick={() => setShowOrfaos(!showOrfaos)}
-            className={`p-2 rounded-full transition-all ${showOrfaos ? 'bg-[var(--color-primary)] text-white shadow-lg scale-110' : 'bg-[var(--color-primary)]/10 text-[var(--color-primary)] hover:bg-[var(--color-primary)]/20'}`}
+            className={`p-2 rounded-full transition-all ${showOrfaos ? "bg-[var(--color-primary)] text-white shadow-lg scale-110" : "bg-[var(--color-primary)]/10 text-[var(--color-primary)] hover:bg-[var(--color-primary)]/20"}`}
             title="Sessões Órfãs"
           >
             <AlertCircle size={20} />
           </button>
-          <button 
+          <button
             onClick={() => setIsBloqueiosOpen(true)}
             className="p-2 bg-[var(--color-error)]/10 text-[var(--color-error)] rounded-full hover:bg-[var(--color-error)]/20 transition-colors"
           >
@@ -566,65 +671,111 @@ export default function AgendaScreen() {
             <AlertCircle size={14} /> Pacotes Aguardando Agendamento
           </h3>
           <div className="flex overflow-x-auto gap-3 pb-2 no-scrollbar">
-            {(clientes || []).map(cliente => {
-              const clientePacotes = (pacotes || []).filter(p => p.clienteId === cliente.id);
-              const orfaos = clientePacotes.flatMap(p => {
-                return p.itens.filter(item => Number(item.quantidadeRestante || 0) > 0).map(item => ({
-                  pacoteId: p.id,
-                  itemPacoteId: item.id,
-                  terapiaId: item.terapiaId,
-                  nome: (terapias || []).find(t => t.id === item.terapiaId)?.nome || 'Desconhecida',
-                  restante: item.quantidadeRestante
-                }));
+            {(clientes || []).map((cliente) => {
+              const currentMonthStr = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, "0")}`;
+              const clientePacotes = (pacotes || []).filter((p) => {
+                const match =
+                  p.clienteId === cliente.id &&
+                  p.mesReferencia === currentMonthStr &&
+                  p.status === "Ativo";
+                return match;
+              });
+              const orfaos = clientePacotes.flatMap((p) => {
+                return p.itens
+                  .filter((item) => Number(item.quantidadeRestante || 0) > 0)
+                  .map((item) => ({
+                    pacoteId: p.id,
+                    itemPacoteId: item.id,
+                    terapiaId: item.terapiaId,
+                    nome:
+                      (terapias || []).find((t) => t.id === item.terapiaId)
+                        ?.nome || "Desconhecida",
+                    restante: item.quantidadeRestante,
+                  }));
               });
 
               if (orfaos.length === 0) return null;
 
               return (
-                <div key={cliente.id} className="bg-white dark:bg-gray-800 p-3 rounded-xl shadow-sm border border-orange-200 dark:border-orange-800 shrink-0 min-w-[160px]">
-                  <p className="text-[11px] font-bold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] mb-2 truncate border-b border-gray-100 dark:border-gray-700 pb-1">{cliente.nome}</p>
+                <div
+                  key={cliente.id}
+                  className="bg-white dark:bg-gray-800 p-3 rounded-xl shadow-sm border border-orange-200 dark:border-orange-800 shrink-0 min-w-[160px]"
+                >
+                  <p className="text-[11px] font-bold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] mb-2 truncate border-b border-gray-100 dark:border-gray-700 pb-1">
+                    {cliente.nome}
+                  </p>
                   <div className="space-y-1.5">
-                          {orfaos.map((o, idx) => (
-                            <div 
-                              key={idx} 
-                              draggable={isMobile ? undefined : true}
-                              onDragStart={isMobile ? undefined : (e) => {
+                    {orfaos.map((o, idx) => (
+                      <div
+                        key={idx}
+                        draggable={isMobile ? undefined : true}
+                        onDragStart={
+                          isMobile
+                            ? undefined
+                            : (e) => {
                                 e.stopPropagation();
                                 isDragging.current = true;
                                 const target = e.currentTarget;
                                 setTimeout(() => {
-                                  target.style.opacity = '0.4';
-                                  target.style.transform = 'scale(1.05)';
-                                  target.style.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)';
+                                  target.style.opacity = "0.4";
+                                  target.style.transform = "scale(1.05)";
+                                  target.style.boxShadow =
+                                    "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)";
                                 }, 0);
                                 handleDragStart(e, {
                                   id: o.terapiaId,
-                                  type: 'terapia',
+                                  type: "terapia",
                                   clienteId: cliente.id,
                                   terapiaId: o.terapiaId,
                                   pacoteId: o.pacoteId,
                                   itemPacoteId: o.itemPacoteId,
-                                  name: cliente.nome || 'Cliente',
-                                  time: 'Novo'
+                                  name: cliente.nome || "Cliente",
+                                  time: "Novo",
                                 });
-                              }}
-                              onDragEnd={isMobile ? undefined : (e) => {
+                              }
+                        }
+                        onDragEnd={
+                          isMobile
+                            ? undefined
+                            : (e) => {
                                 e.stopPropagation();
                                 isDragging.current = false;
                                 setDraggingId(null);
-                                e.currentTarget.style.opacity = '1';
-                                e.currentTarget.style.transform = 'scale(1)';
-                                e.currentTarget.style.boxShadow = 'none';
-                              }}
-                              onClick={isMobile ? () => handleMobileFooterClick(cliente.id, o.terapiaId, o.pacoteId, o.itemPacoteId) : undefined}
-                              style={isMobile ? { touchAction: 'manipulation', cursor: 'pointer', pointerEvents: 'auto' } : { userSelect: 'none', touchAction: 'none' }}
-                              className={`flex justify-between items-center gap-2 ${isMobile ? '' : 'cursor-grab active:cursor-grabbing'} bg-orange-50 dark:bg-orange-900/20 p-1 rounded transition-all`}
-                            >
-                              <span className="text-[10px] text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] truncate">{o.nome}</span>
-                              <span className="text-[10px] font-black text-white bg-orange-500 px-2 py-0.5 rounded-full">{o.restante}</span>
-                            </div>
-                          ))}
-
+                                e.currentTarget.style.opacity = "1";
+                                e.currentTarget.style.transform = "scale(1)";
+                                e.currentTarget.style.boxShadow = "none";
+                              }
+                        }
+                        onClick={
+                          isMobile
+                            ? () =>
+                                handleMobileFooterClick(
+                                  cliente.id,
+                                  o.terapiaId,
+                                  o.pacoteId,
+                                  o.itemPacoteId,
+                                )
+                            : undefined
+                        }
+                        style={
+                          isMobile
+                            ? {
+                                touchAction: "manipulation",
+                                cursor: "pointer",
+                                pointerEvents: "auto",
+                              }
+                            : { userSelect: "none", touchAction: "none" }
+                        }
+                        className={`flex justify-between items-center gap-2 ${isMobile ? "" : "cursor-grab active:cursor-grabbing"} bg-orange-50 dark:bg-orange-900/20 p-1 rounded transition-all`}
+                      >
+                        <span className="text-[10px] text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] truncate">
+                          {o.nome}
+                        </span>
+                        <span className="text-[10px] font-black text-white bg-orange-500 px-2 py-0.5 rounded-full">
+                          {o.restante}
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               );
@@ -634,21 +785,24 @@ export default function AgendaScreen() {
       )}
 
       {/* Calendar Grid */}
-      <div className="flex-1 overflow-y-auto p-4 pb-64 scrollbar-hide relative z-0">
+      <div className="flex-1 overflow-y-auto p-4 pb-40 scrollbar-hide relative z-0">
         <div className="grid grid-cols-7 gap-1 mb-2">
-          {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(d => (
-            <div key={d} className="text-center text-[10px] font-black uppercase tracking-tighter text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] py-2">
+          {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((d) => (
+            <div
+              key={d}
+              className="text-center text-[10px] font-black uppercase tracking-tighter text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] py-2"
+            >
               {d}
             </div>
           ))}
         </div>
-        
+
         <div className="space-y-1">
           {(() => {
             console.log("RENDER CALENDÁRIO", agendamentos.length);
             const today = new Date();
-            const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-            
+            const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
             const weeks: (number | null)[][] = [];
             let currentWeek: (number | null)[] = Array(firstDay).fill(null);
             for (let i = 1; i <= daysInMonth; i++) {
@@ -667,22 +821,36 @@ export default function AgendaScreen() {
               return (
                 <div key={weekIdx} className="grid grid-cols-7 gap-1 relative">
                   {week.map((day, dayIdx) => {
-                    if (day === null) return <div key={`empty-${weekIdx}-${dayIdx}`} className="aspect-square opacity-20" />;
-                    
-                    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                    const diaEstaBloqueado = (bloqueios || []).some(d => d.data === dateStr);
+                    if (day === null)
+                      return (
+                        <div
+                          key={`empty-${weekIdx}-${dayIdx}`}
+                          className="aspect-square opacity-20"
+                        />
+                      );
+
+                    const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                    const diaEstaBloqueado = (bloqueios || []).some(
+                      (d) => d.data === dateStr,
+                    );
                     const dayAgendamentos = (agendamentos || [])
-                      .filter(a => String(a.data).slice(0, 10) === dateStr && (a.statusAtendimento === 'Agendado' || a.statusAtendimento === 'Concluido'))
+                      .filter(
+                        (a) =>
+                          String(a.data).slice(0, 10) === dateStr &&
+                          (a.statusAtendimento === "Agendado" ||
+                            a.statusAtendimento === "Concluido"),
+                      )
                       .sort((a, b) => a.hora.localeCompare(b.hora));
                     const isToday = String(dateStr) === todayStr;
 
                     return (
-                      <div 
-                        key={`${year}-${month}-${day}`} 
+                      <div
+                        key={`${year}-${month}-${day}`}
                         data-day={day}
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (isDragging.current || isDayLongPress.current) return;
+                          if (isDragging.current || isDayLongPress.current)
+                            return;
                           openDayAgenda(day);
                         }}
                         onTouchStart={(e) => handleDayTouchStart(e, dateStr)}
@@ -697,139 +865,194 @@ export default function AgendaScreen() {
                         onDrop={(e) => {
                           if (diaEstaBloqueado) return;
                           setDragOverDay(null);
-                          console.log('--- DROP DETECTED ---');
-                          console.log('Target Day:', day);
+                          console.log("--- DROP DETECTED ---");
+                          console.log("Target Day:", day);
                           handleDrop(e, day);
                         }}
-                        className={`min-h-[110px] h-auto rounded-xl flex flex-col p-1.5 relative cursor-pointer transition-all border ${
-                          diaEstaBloqueado 
-                            ? 'bg-gray-100 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 opacity-60'
+                        className={`min-h-[90px] h-auto rounded-xl flex flex-col p-1.5 relative cursor-pointer transition-all border ${
+                          diaEstaBloqueado
+                            ? "bg-gray-100 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 opacity-60"
                             : dragOverDay === day
-                              ? 'ring-2 ring-[var(--color-primary)] bg-[var(--color-primary)]/10 border-dashed scale-105 z-10'
-                              : isToday 
-                                ? 'bg-[var(--color-primary)]/5 border-[var(--color-primary)]' 
-                                : 'bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] border-gray-100 dark:border-gray-800'
+                              ? "ring-2 ring-[var(--color-primary)] bg-[var(--color-primary)]/10 border-dashed scale-105 z-10"
+                              : isToday
+                                ? "bg-[var(--color-primary)]/5 border-[var(--color-primary)]"
+                                : "bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] border-gray-100 dark:border-gray-800"
                         } hover:shadow-md hover:border-[var(--color-primary)]/30`}
                       >
                         <div className="flex justify-between items-center mb-1">
-                          <span className={`text-[11px] font-black ${isToday ? 'text-[var(--color-primary)]' : 'text-[var(--color-text-sec-light)] opacity-50'}`}>{day}</span>
+                          <span
+                            className={`text-[11px] font-black ${isToday ? "text-[var(--color-primary)]" : "text-[var(--color-text-sec-light)] opacity-50"}`}
+                          >
+                            {day}
+                          </span>
                           <div className="flex items-center gap-1">
-                            {/* 🎯 ALTERAÇÃO #2: Mostrar apenas 1 agendamento, agrupar os demais */}
-                            {dayAgendamentos.length > 1 && !expandedDays.includes(dateStr) && (
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setExpandedDays(prev => [...prev, dateStr]);
-                                }}
-                                className="text-[9px] font-bold text-white bg-[var(--color-primary)] px-1.5 py-0.5 rounded-full hover:scale-110 transition-transform shadow-sm flex items-center gap-0.5"
-                                title="Ver todos"
+                            {dayAgendamentos.length > 1 &&
+                              !expandedDays.includes(dateStr) && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setExpandedDays((prev) => [
+                                      ...prev,
+                                      dateStr,
+                                    ]);
+                                  }}
+                                  className="text-[9px] font-bold text-white bg-[var(--color-primary)] px-1.5 py-0.5 rounded-full hover:scale-110 transition-transform shadow-sm flex items-center gap-0.5"
+                                  title="Ver todos"
+                                >
+                                  +{dayAgendamentos.length - 1}{" "}
+                                  <ChevronDown size={8} />
+                                </button>
+                              )}
+                            {diaEstaBloqueado && (
+                              <button
+                                onClick={(e) => desbloquearDia(e, dateStr)}
                               >
-                                +{dayAgendamentos.length - 1} <ChevronDown size={8} />
+                                <ShieldAlert
+                                  size={10}
+                                  className="text-[var(--color-error)]"
+                                />
                               </button>
                             )}
                             {diaEstaBloqueado && (
-                              <button onClick={(e) => desbloquearDia(e, dateStr)}>
-                                <ShieldAlert size={10} className="text-[var(--color-error)]" />
-                              </button>
+                              <span className="text-[9px] font-black text-red-600 dark:text-red-400">
+                                🔒
+                              </span>
                             )}
-                            {diaEstaBloqueado && <span className="text-[9px] font-black text-red-600 dark:text-red-400">🔒</span>}
                           </div>
                         </div>
-                        
-                        {/* Debug Info */}
+
                         <div className="flex flex-col text-[7px] opacity-30 pointer-events-none mb-1">
                           <span>{dateStr}</span>
                           <span>Total: {dayAgendamentos.length}</span>
                         </div>
 
-                        { !diaEstaBloqueado && (
+                        {!diaEstaBloqueado && (
                           <div className="flex flex-col gap-1">
-                            {/* 🎯 ALTERAÇÃO #2: slice(0, 1) para mostrar apenas 1 agendamento */}
-                            {dayAgendamentos.slice(0, expandedDays.includes(dateStr) ? undefined : 1).map(ag => {
-                              const cliente = (clientes || []).find(c => c.id === ag.clienteId);
-                              const isConcluido = ag.statusAtendimento === 'Concluido';
-                              return (
-                                <div 
-                                  key={ag.id}
-                                  draggable={!isConcluido && !isMobile}
-                                  data-id={ag.id}
-                                  onClick={(e) => {
-                                    if (!isMobile) {
-                                      openAppointmentModal(e, ag);
+                            {dayAgendamentos
+                              .slice(
+                                0,
+                                expandedDays.includes(dateStr) ? undefined : 1,
+                              )
+                              .map((ag) => {
+                                const cliente = (clientes || []).find(
+                                  (c) => c.id === ag.clienteId,
+                                );
+                                const isConcluido =
+                                  ag.statusAtendimento === "Concluido";
+                                return (
+                                  <div
+                                    key={ag.id}
+                                    draggable={!isConcluido && !isMobile}
+                                    data-id={ag.id}
+                                    onClick={(e) => {
+                                      if (!isMobile) {
+                                        openAppointmentModal(e, ag);
+                                      }
+                                    }}
+                                    onTouchStart={(e) =>
+                                      handleTouchStart(e, ag)
                                     }
-                                  }}
-                                  onTouchStart={(e) => handleTouchStart(e, ag)}
-                                  onTouchMove={handleTouchMove}
-                                  onTouchEnd={(e) => handleTouchEnd(e, ag)}
-                                  onDragStart={(e) => {
-                                    if (ag.statusAtendimento === 'Concluido') {
-                                      e.preventDefault();
-                                      showNotification('Não é possível mover uma sessão concluída.', 'error');
-                                      return;
+                                    onTouchMove={handleTouchMove}
+                                    onTouchEnd={(e) => handleTouchEnd(e, ag)}
+                                    onDragStart={(e) => {
+                                      if (
+                                        ag.statusAtendimento === "Concluido"
+                                      ) {
+                                        e.preventDefault();
+                                        showNotification(
+                                          "Não é possível mover uma sessão concluída.",
+                                          "error",
+                                        );
+                                        return;
+                                      }
+                                      e.stopPropagation();
+                                      isDragging.current = true;
+                                      const target = e.currentTarget;
+                                      setTimeout(() => {
+                                        target.style.opacity = "0.4";
+                                        target.style.transform = "scale(1.05)";
+                                        target.style.boxShadow =
+                                          "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)";
+                                      }, 0);
+                                      handleDragStart(e, {
+                                        id: ag.id,
+                                        type: "agendamento",
+                                        name: cliente?.nome || "Cliente",
+                                        time: ag.hora,
+                                      });
+                                    }}
+                                    onDragEnd={(e) => {
+                                      e.stopPropagation();
+                                      isDragging.current = false;
+                                      setDraggingId(null);
+                                      e.currentTarget.style.opacity = "1";
+                                      e.currentTarget.style.transform =
+                                        "scale(1)";
+                                      e.currentTarget.style.boxShadow = "none";
+                                    }}
+                                    style={
+                                      {
+                                        userSelect: "none",
+                                        touchAction: "none",
+                                        WebkitUserDrag: isConcluido
+                                          ? "none"
+                                          : "element",
+                                      } as any
                                     }
-                                    e.stopPropagation();
-                                    isDragging.current = true;
-                                    const target = e.currentTarget;
-                                    setTimeout(() => {
-                                      target.style.opacity = '0.4';
-                                      target.style.transform = 'scale(1.05)';
-                                      target.style.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)';
-                                    }, 0);
-                                    handleDragStart(e, {
-                                      id: ag.id,
-                                      type: 'agendamento',
-                                      name: cliente?.nome || 'Cliente',
-                                      time: ag.hora
-                                    });
-                                  }}
-                                  onDragEnd={(e) => {
-                                    e.stopPropagation();
-                                    isDragging.current = false;
-                                    setDraggingId(null);
-                                    e.currentTarget.style.opacity = '1';
-                                    e.currentTarget.style.transform = 'scale(1)';
-                                    e.currentTarget.style.boxShadow = 'none';
-                                  }}
-                                  style={{ 
-                                    userSelect: 'none', 
-                                    touchAction: 'none', 
-                                    WebkitUserDrag: isConcluido ? 'none' : 'element'
-                                  } as any}
-                                  className={`text-[9px] p-1 rounded border leading-tight transition-all relative ${isConcluido ? '' : 'cursor-grab active:cursor-grabbing'} ${
-                                    draggingId === ag.id ? 'opacity-50' : ''
-                                  } ${
-                                    isConcluido ? 'bg-gray-100 text-gray-400 border-gray-200' : 'bg-white dark:bg-gray-700 text-[var(--color-primary)] border-[var(--color-primary)]/30'
-                                  } ${ag.statusPagamento === 'Pago' ? 'ring-1 ring-[var(--color-success)]/50' : ''}`}
-                                >
-                                  <div className="flex justify-between items-center font-black">
-                                    <div className="flex items-center gap-1">
-                                      <span>{ag.hora}</span>
-                                      {ag.statusPagamento === 'Pago' && <DollarSign size={8} className="text-[var(--color-success)]" />}
+                                    className={`text-[9px] p-1 rounded border leading-tight transition-all relative ${isConcluido ? "" : "cursor-grab active:cursor-grabbing"} ${
+                                      draggingId === ag.id ? "opacity-50" : ""
+                                    } ${
+                                      isConcluido
+                                        ? "bg-gray-100 text-gray-400 border-gray-200"
+                                        : "bg-white dark:bg-gray-700 text-[var(--color-primary)] border-[var(--color-primary)]/30"
+                                    } ${ag.statusPagamento === "Pago" ? "ring-1 ring-[var(--color-success)]/50" : ""}`}
+                                  >
+                                    <div className="flex justify-between items-center font-black">
+                                      <div className="flex items-center gap-1">
+                                        <span>{ag.hora}</span>
+                                        {ag.statusPagamento === "Pago" && (
+                                          <DollarSign
+                                            size={8}
+                                            className="text-[var(--color-success)]"
+                                          />
+                                        )}
+                                      </div>
+                                      <div className="flex items-center gap-1">
+                                        {isMobile && !isConcluido && (
+                                          <Clock
+                                            size={8}
+                                            className="opacity-50"
+                                          />
+                                        )}
+                                        {isConcluido && (
+                                          <CheckCircle2 size={8} />
+                                        )}
+                                      </div>
                                     </div>
-                                    <div className="flex items-center gap-1">
-                                      {isMobile && !isConcluido && <Clock size={8} className="opacity-50" />}
-                                      {isConcluido && <CheckCircle2 size={8} />}
+                                    <div className="truncate">
+                                      {cliente?.nome?.split(" ")[0]}
                                     </div>
                                   </div>
-                                  <div className="truncate">{cliente?.nome?.split(' ')[0]}</div>
-                                </div>
-                              );
-                            })}
-                            
-                            {dayAgendamentos.length > 1 && expandedDays.includes(dateStr) && (
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setExpandedDays(prev => prev.filter(d => d !== dateStr));
-                                }}
-                                className="text-[9px] font-bold text-center text-[var(--color-text-sec-light)] bg-gray-100 dark:bg-gray-800 py-1 rounded mt-1 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors flex items-center justify-center gap-1"
-                              >
-                                Recolher <ChevronUp size={10} />
-                              </button>
-                            )}
+                                );
+                              })}
+
+                            {dayAgendamentos.length > 1 &&
+                              expandedDays.includes(dateStr) && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setExpandedDays((prev) =>
+                                      prev.filter((d) => d !== dateStr),
+                                    );
+                                  }}
+                                  className="text-[9px] font-bold text-center text-[var(--color-text-sec-light)] bg-gray-100 dark:bg-gray-800 py-1 rounded mt-1 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors flex items-center justify-center gap-1"
+                                >
+                                  Recolher <ChevronUp size={10} />
+                                </button>
+                              )}
                           </div>
                         )}
-                        </div>
+                      </div>
                     );
                   })}
                 </div>
@@ -839,102 +1062,181 @@ export default function AgendaScreen() {
         </div>
       </div>
 
-      {/* 🎯 ALTERAÇÃO #1: Barra inferior mobile - quando minimizada, mostra APENAS o puxador */}
-      <div className="absolute bottom-0 left-0 right-0 bg-[var(--color-surface-light)]/95 dark:bg-[var(--color-surface-dark)]/95 backdrop-blur-md border-t border-gray-200 dark:border-gray-800 p-4 pb-10 shadow-[0_-15px_30px_-5px_rgba(0,0,0,0.15)] z-40 rounded-t-[2.5rem]">
-        {/* Header da barra - SEMPRE visível */}
-        <div className="flex justify-between items-center mb-4">
-          <div className="w-12 h-1.5 bg-gray-300 dark:bg-gray-700 rounded-full mx-auto opacity-50"></div>
-          <button 
-            onClick={() => setMinimizado(!minimizado)}
-            className="text-[10px] font-bold text-[var(--color-primary)] bg-[var(--color-primary)]/10 px-3 py-1 rounded-full uppercase tracking-tighter transition-all active:scale-95"
-          >
-            {minimizado ? 'Expandir' : 'Minimizar'}
-          </button>
+      {/* Draggable Clients Area - MODIFICADO */}
+      <div className={`absolute bottom-0 left-0 right-0 bg-[var(--color-surface-light)]/95 dark:bg-[var(--color-surface-dark)]/95 backdrop-blur-md border-t border-gray-200 dark:border-gray-800 z-40 rounded-t-[2.5rem] transition-all duration-300 ${
+        minimizado ? "pb-2" : "pb-10 shadow-[0_-15px_30px_-5px_rgba(0,0,0,0.15)]"
+      }`}>
+        {/* Alça - Sempre visível */}
+        <div className="flex justify-between items-center p-2" onClick={() => setMinimizado(!minimizado)}>
+          <div className="w-12 h-1.5 bg-gray-300 dark:bg-gray-700 rounded-full mx-auto"></div>
         </div>
+        
+        {/* Conteúdo - Só aparece quando expandido */}
+        <div
+          className={`transition-all duration-300 overflow-hidden ${minimizado ? "max-h-0 opacity-0" : "max-h-[1000px] opacity-100 px-4"}`}
+        >
+          <button
+            onClick={() => setMinimizado(!minimizado)}
+            className="w-full text-[10px] font-bold text-[var(--color-primary)] bg-[var(--color-primary)]/10 px-3 py-1 rounded-full uppercase tracking-tighter transition-all active:scale-95 mb-4"
+          >
+            {minimizado ? "Expandir" : "Minimizar"}
+          </button>
 
-        {/* 🎯 ALTERAÇÃO #1: Conteúdo só aparece quando NÃO está minimizado */}
-        {!minimizado && (
-          <div className="transition-all duration-300 overflow-hidden animate-in slide-in-from-top duration-200">
-            <h3 className="text-[10px] font-black text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] uppercase tracking-widest mb-4 flex items-center justify-center gap-2">
-              <GripVertical size={14} className="animate-pulse" /> Arraste a terapia para agendar
-            </h3>
-            <div className="flex overflow-x-auto pb-4 gap-3 snap-x scroll-smooth no-scrollbar">
-              {(clientes || []).filter(cliente => (pacotes || []).some(p => p.clienteId === cliente.id)).map(cliente => {
+          <h3 className="text-[10px] font-black text-[var(--color-text-sec-light)] dark:text-[var(--color-text-sec-dark)] uppercase tracking-widest mb-4 flex items-center justify-center gap-2">
+            <GripVertical size={14} className="animate-pulse" /> Arraste a
+            terapia para agendar
+          </h3>
+          <div className="flex overflow-x-auto pb-4 gap-3 snap-x scroll-smooth no-scrollbar">
+            {(clientes || [])
+              .filter((cliente) => {
+                const currentMonthStr = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, "0")}`;
+                return (pacotes || []).some(
+                  (p) =>
+                    p.clienteId === cliente.id &&
+                    p.mesReferencia === currentMonthStr &&
+                    p.status === "Ativo",
+                );
+              })
+              .map((cliente) => {
                 const isExpanded = expandedClienteId === cliente.id;
-                const clientePacotes = (pacotes || []).filter(p => p.clienteId === cliente.id);
-                const terapiasContratadas = clientePacotes.flatMap(p => {
-                  return p.itens.map(item => ({
+
+                const currentMonthStr = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, "0")}`;
+                const clientePacotes = (pacotes || []).filter(
+                  (p) =>
+                    p.clienteId === cliente.id &&
+                    p.mesReferencia === currentMonthStr &&
+                    p.status === "Ativo",
+                );
+
+                const terapiasContratadas = clientePacotes.flatMap((p) => {
+                  return p.itens.map((item) => ({
                     pacoteId: p.id,
                     itemPacoteId: item.id,
                     terapiaId: item.terapiaId,
-                    nome: (terapias || []).find(t => t.id === item.terapiaId)?.nome || 'Desconhecida',
+                    nome:
+                      (terapias || []).find((t) => t.id === item.terapiaId)
+                        ?.nome || "Desconhecida",
                     restante: item.quantidadeRestante,
-                    total: item.quantidadeTotal
+                    total: item.quantidadeTotal,
                   }));
                 });
 
+                const todasAgendadas =
+                  terapiasContratadas.length > 0 &&
+                  terapiasContratadas.every((tc) => tc.restante === 0);
+
                 return (
-                  <div key={cliente.id} className={`snap-start shrink-0 flex flex-col gap-2 transition-all duration-300 ${isExpanded ? 'min-w-[180px]' : 'min-w-[120px]'}`}>
-                    <div 
-                      onClick={() => setExpandedClienteId(isExpanded ? null : cliente.id)}
+                  <div
+                    key={cliente.id}
+                    className={`snap-start shrink-0 flex flex-col gap-2 transition-all duration-300 ${isExpanded ? "min-w-[180px]" : "min-w-[120px]"}`}
+                  >
+                    <div
+                      onClick={() =>
+                        setExpandedClienteId(isExpanded ? null : cliente.id)
+                      }
                       className={`px-4 py-3 rounded-2xl border shadow-sm cursor-pointer transition-all flex items-center justify-between ${
-                        isExpanded 
-                          ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]' 
-                          : 'bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] border-gray-100 dark:border-gray-700 text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]'
+                        isExpanded
+                          ? "bg-[var(--color-primary)] text-white border-[var(--color-primary)]"
+                          : "bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] border-gray-100 dark:border-gray-700 text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]"
                       }`}
                     >
                       <span className="text-xs font-bold truncate">
-                        {cliente.nome?.split(' ')[0] || "Sem Nome"}
+                        {cliente.nome?.split(" ")[0] || "Sem Nome"}
                       </span>
-                      {terapiasContratadas.length > 0 && <div className={`w-2 h-2 rounded-full ${isExpanded ? 'bg-white' : 'bg-[var(--color-primary)]'}`}></div>}
+                      {terapiasContratadas.length > 0 && (
+                        <div
+                          className={`w-2 h-2 rounded-full ${
+                            isExpanded
+                              ? "bg-white"
+                              : todasAgendadas
+                                ? "bg-[var(--color-success)]"
+                                : "bg-[var(--color-primary)]"
+                          }`}
+                        ></div>
+                      )}
                     </div>
-                    
+
                     {isExpanded && (
                       <div className="flex flex-col gap-2 mt-1 animate-in fade-in zoom-in-95 duration-200">
                         {terapiasContratadas.length > 0 ? (
                           terapiasContratadas.map((tc, idx) => (
-                            <div 
+                            <div
                               key={`${tc.pacoteId}-${tc.itemPacoteId}-${idx}`}
-                              draggable={isMobile ? undefined : (tc.restante > 0)}
-                              onDragStart={isMobile ? undefined : (e) => {
-                                if (tc.restante <= 0) { e.preventDefault(); return; }
-                                e.stopPropagation();
-                                isDragging.current = true;
-                                const target = e.currentTarget;
-                                setTimeout(() => {
-                                  target.style.opacity = '0.4';
-                                  target.style.transform = 'scale(1.05)';
-                                  target.style.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)';
-                                }, 0);
-                                handleDragStart(e, {
-                                  id: tc.terapiaId,
-                                  type: 'terapia',
-                                  clienteId: cliente.id,
-                                  terapiaId: tc.terapiaId,
-                                  pacoteId: tc.pacoteId,
-                                  itemPacoteId: tc.itemPacoteId,
-                                  name: cliente.nome || 'Cliente',
-                                  time: 'Novo'
-                                });
-                              }}
-                              onDragEnd={isMobile ? undefined : (e) => {
-                                e.stopPropagation();
-                                isDragging.current = false;
-                                setDraggingId(null);
-                                e.currentTarget.style.opacity = '1';
-                                e.currentTarget.style.transform = 'scale(1)';
-                                e.currentTarget.style.boxShadow = 'none';
-                              }}
-                              onClick={isMobile ? () => handleMobileFooterClick(cliente.id, tc.terapiaId, tc.pacoteId, tc.itemPacoteId) : undefined}
-                              style={isMobile ? { touchAction: 'manipulation', cursor: 'pointer', pointerEvents: 'auto' } : { userSelect: 'none', touchAction: 'none' }}
+                              draggable={isMobile ? undefined : tc.restante > 0}
+                              onDragStart={
+                                isMobile
+                                  ? undefined
+                                  : (e) => {
+                                      if (tc.restante <= 0) {
+                                        e.preventDefault();
+                                        return;
+                                      }
+                                      e.stopPropagation();
+                                      isDragging.current = true;
+                                      const target = e.currentTarget;
+                                      setTimeout(() => {
+                                        target.style.opacity = "0.4";
+                                        target.style.transform = "scale(1.05)";
+                                        target.style.boxShadow =
+                                          "0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)";
+                                      }, 0);
+                                      handleDragStart(e, {
+                                        id: tc.terapiaId,
+                                        type: "terapia",
+                                        clienteId: cliente.id,
+                                        terapiaId: tc.terapiaId,
+                                        pacoteId: tc.pacoteId,
+                                        itemPacoteId: tc.itemPacoteId,
+                                        name: cliente.nome || "Cliente",
+                                        time: "Novo",
+                                      });
+                                    }
+                              }
+                              onDragEnd={
+                                isMobile
+                                  ? undefined
+                                  : (e) => {
+                                      e.stopPropagation();
+                                      isDragging.current = false;
+                                      setDraggingId(null);
+                                      e.currentTarget.style.opacity = "1";
+                                      e.currentTarget.style.transform =
+                                        "scale(1)";
+                                      e.currentTarget.style.boxShadow = "none";
+                                    }
+                              }
+                              onClick={
+                                isMobile
+                                  ? () =>
+                                      handleMobileFooterClick(
+                                        cliente.id,
+                                        tc.terapiaId,
+                                        tc.pacoteId,
+                                        tc.itemPacoteId,
+                                      )
+                                  : undefined
+                              }
+                              style={
+                                isMobile
+                                  ? {
+                                      touchAction: "manipulation",
+                                      cursor: "pointer",
+                                      pointerEvents: "auto",
+                                    }
+                                  : { userSelect: "none", touchAction: "none" }
+                              }
                               className={`px-3 py-2.5 rounded-xl border text-[10px] font-black flex justify-between items-center transition-all ${
-                                tc.restante > 0 
-                                  ? `bg-white dark:bg-gray-800 border-[var(--color-primary)]/20 text-[var(--color-primary)] ${isMobile ? '' : 'cursor-grab active:cursor-grabbing'} hover:shadow-md` 
-                                  : 'bg-gray-100 dark:bg-gray-900 border-transparent text-gray-400 opacity-50 grayscale cursor-not-allowed'
+                                tc.restante > 0
+                                  ? `bg-white dark:bg-gray-800 border-[var(--color-primary)]/20 text-[var(--color-primary)] ${isMobile ? "" : "cursor-grab active:cursor-grabbing"} hover:shadow-md`
+                                  : "bg-gray-100 dark:bg-gray-900 border-transparent text-gray-400 opacity-50 grayscale cursor-not-allowed"
                               }`}
                             >
                               <span className="truncate mr-2">{tc.nome}</span>
-                              <span className={`px-1.5 rounded-md ${tc.restante > 0 ? 'bg-[var(--color-primary)]/10' : 'bg-gray-200'}`}>{tc.restante}/{tc.total}</span>
+                              <span
+                                className={`px-1.5 rounded-md ${tc.restante > 0 ? "bg-[var(--color-primary)]/10" : "bg-gray-200"}`}
+                              >
+                                {tc.restante}/{tc.total}
+                              </span>
                             </div>
                           ))
                         ) : (
@@ -947,93 +1249,121 @@ export default function AgendaScreen() {
                   </div>
                 );
               })}
+          </div>
+
+          {/* Sessões Disponíveis (Drop Zone) */}
+          <div className="mt-6">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-[10px] font-black text-[var(--color-primary)] uppercase tracking-widest flex items-center gap-2">
+                <Trash2 size={14} /> Solte aqui para desmarcar (Sessões
+                Disponíveis)
+              </h3>
+              <button
+                onClick={() => setDropZoneMinimizado(!dropZoneMinimizado)}
+                className="text-[10px] font-bold text-[var(--color-primary)] bg-[var(--color-primary)]/10 px-3 py-1 rounded-full uppercase tracking-tighter transition-all active:scale-95"
+              >
+                {dropZoneMinimizado ? "Expandir" : "Minimizar"}
+              </button>
             </div>
 
-            {/* Sessões Disponíveis (Drop Zone) */}
-            <div className="mt-6">
-              <div className="flex justify-between items-center mb-3">
-                <h3 className="text-[10px] font-black text-[var(--color-primary)] uppercase tracking-widest flex items-center gap-2">
-                  <Trash2 size={14} /> Solte aqui para desmarcar (Sessões Disponíveis)
-                </h3>
-                <button 
-                  onClick={() => setDropZoneMinimizado(!dropZoneMinimizado)}
-                  className="text-[10px] font-bold text-[var(--color-primary)] bg-[var(--color-primary)]/10 px-3 py-1 rounded-full uppercase tracking-tighter transition-all active:scale-95"
-                >
-                  {dropZoneMinimizado ? 'Expandir' : 'Minimizar'}
-                </button>
-              </div>
-              
-              <div className={`transition-all duration-300 overflow-hidden ${dropZoneMinimizado ? 'max-h-0 opacity-0' : 'max-h-[500px] opacity-100'}`}>
-                <div 
-                  onDragOver={handleDragOver}
-                  onDrop={handleDropToFooter}
-                  className="p-4 rounded-3xl border-2 border-dashed border-[var(--color-primary)]/20 bg-[var(--color-primary)]/5 min-h-[100px] transition-all hover:bg-[var(--color-primary)]/10"
-                >
-                  <div className="flex overflow-x-auto gap-3 pb-2 no-scrollbar">
-                    {(() => {
-                      const pacotesIds = new Set((pacotes || []).map(p => p.id));
-                      return (agendamentos || [])
-                        .filter(a => a.statusAtendimento === 'Disponivel' && pacotesIds.has(a.pacoteId || ''))
-                        .map(ag => {
-                          const cliente = (clientes || []).find(c => c.id === ag.clienteId);
-                          const terapia = (terapias || []).find(t => t.id === ag.terapiaId);
-                          
-                          // 🧠 6. CONTADOR CORRETO (ESSENCIAL)
-                          const total = (agendamentos || []).filter(a => a.pacoteId === ag.pacoteId && a.terapiaId === ag.terapiaId).length;
-                          const concluidos = (agendamentos || []).filter(a => a.pacoteId === ag.pacoteId && a.terapiaId === ag.terapiaId && a.statusAtendimento === 'Concluido').length;
+            <div
+              className={`transition-all duration-300 overflow-hidden ${dropZoneMinimizado ? "max-h-0 opacity-0" : "max-h-[500px] opacity-100"}`}
+            >
+              <div
+                onDragOver={handleDragOver}
+                onDrop={handleDropToFooter}
+                className="p-4 rounded-3xl border-2 border-dashed border-[var(--color-primary)]/20 bg-[var(--color-primary)]/5 min-h-[100px] transition-all hover:bg-[var(--color-primary)]/10"
+              >
+                <div className="flex overflow-x-auto gap-3 pb-2 no-scrollbar">
+                  {(() => {
+                    const pacotesIds = new Set(
+                      (pacotes || []).map((p) => p.id),
+                    );
+                    return (agendamentos || [])
+                      .filter(
+                        (a) =>
+                          a.statusAtendimento === "Disponivel" &&
+                          pacotesIds.has(a.pacoteId || ""),
+                      )
+                      .map((ag) => {
+                        const cliente = (clientes || []).find(
+                          (c) => c.id === ag.clienteId,
+                        );
+                        const terapia = (terapias || []).find(
+                          (t) => t.id === ag.terapiaId,
+                        );
 
-                          return (
-                            <div 
-                              key={ag.id}
-                              draggable={!isMobile}
-                              onDragStart={(e) => {
-                                e.stopPropagation();
-                                isDragging.current = true;
-                                handleDragStart(e, {
-                                  id: ag.id,
-                                  type: 'agendamento',
-                                  name: cliente?.nome || 'Cliente',
-                                  time: 'Reagendar'
-                                });
-                              }}
-                              onDragEnd={(e) => {
-                                e.stopPropagation();
-                                isDragging.current = false;
-                                setDraggingId(null);
-                              }}
-                              className={`bg-white dark:bg-gray-800 p-2 rounded-xl border border-[var(--color-primary)]/30 shadow-sm shrink-0 min-w-[120px] ${isMobile ? '' : 'cursor-grab active:cursor-grabbing'}`}
-                            >
-                              <div className="flex justify-between items-start">
-                                <p className="text-[10px] font-bold truncate max-w-[80px]">{cliente?.nome}</p>
-                                <span className="text-[8px] font-black text-[var(--color-primary)] bg-[var(--color-primary)]/10 px-1.5 py-0.5 rounded-full">
-                                  {concluidos}/{total}
-                                </span>
-                              </div>
-                              <p className="text-[8px] opacity-60 truncate">{terapia?.nome}</p>
+                        const total = (agendamentos || []).filter(
+                          (a) =>
+                            a.pacoteId === ag.pacoteId &&
+                            a.terapiaId === ag.terapiaId,
+                        ).length;
+                        const concluidos = (agendamentos || []).filter(
+                          (a) =>
+                            a.pacoteId === ag.pacoteId &&
+                            a.terapiaId === ag.terapiaId &&
+                            a.statusAtendimento === "Concluido",
+                        ).length;
+
+                        return (
+                          <div
+                            key={ag.id}
+                            draggable={!isMobile}
+                            onDragStart={(e) => {
+                              e.stopPropagation();
+                              isDragging.current = true;
+                              handleDragStart(e, {
+                                id: ag.id,
+                                type: "agendamento",
+                                name: cliente?.nome || "Cliente",
+                                time: "Reagendar",
+                              });
+                            }}
+                            onDragEnd={(e) => {
+                              e.stopPropagation();
+                              isDragging.current = false;
+                              setDraggingId(null);
+                            }}
+                            className={`bg-white dark:bg-gray-800 p-2 rounded-xl border border-[var(--color-primary)]/30 shadow-sm shrink-0 min-w-[120px] ${isMobile ? "" : "cursor-grab active:cursor-grabbing"}`}
+                          >
+                            <div className="flex justify-between items-start">
+                              <p className="text-[10px] font-bold truncate max-w-[80px]">
+                                {cliente?.nome}
+                              </p>
+                              <span className="text-[8px] font-black text-[var(--color-primary)] bg-[var(--color-primary)]/10 px-1.5 py-0.5 rounded-full">
+                                {concluidos}/{total}
+                              </span>
                             </div>
-                          );
-                        });
-                    })()}
-                  </div>
+                            <p className="text-[8px] opacity-60 truncate">
+                              {terapia?.nome}
+                            </p>
+                          </div>
+                        );
+                      });
+                  })()}
                 </div>
               </div>
             </div>
           </div>
-        )}
+        </div>
       </div>
 
       {/* Drag Preview (Hidden) */}
-      <div 
+      <div
         ref={dragPreviewRef}
         className="fixed -top-full left-0 p-4 bg-gradient-to-br from-[var(--color-primary)] to-indigo-600 text-white rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.4)] flex flex-col gap-1.5 min-w-[180px] pointer-events-none z-[-1] border border-white/40 backdrop-blur-md scale-110"
       >
         <div className="flex items-center gap-2 mb-1">
           <div className="w-3 h-3 rounded-full bg-white animate-pulse shadow-[0_0_10px_white]"></div>
-          <span className="preview-name text-base font-black truncate tracking-tight">Cliente</span>
+          <span className="preview-name text-base font-black truncate tracking-tight">
+            Cliente
+          </span>
         </div>
         <div className="flex items-center gap-2 bg-white/30 px-3 py-1.5 rounded-xl w-fit border border-white/20">
           <Clock size={14} className="text-white" />
-          <span className="preview-time text-xs font-black tracking-wider">00:00</span>
+          <span className="preview-time text-xs font-black tracking-wider">
+            00:00
+          </span>
         </div>
       </div>
 
@@ -1043,30 +1373,42 @@ export default function AgendaScreen() {
           <div className="bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] w-full max-w-md rounded-t-[3rem] sm:rounded-[2.5rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300 max-h-[92vh] overflow-y-auto relative">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-black text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] tracking-tighter">
-                Agendar <span className="text-[var(--color-primary)]">Sessão</span>
+                Agendar{" "}
+                <span className="text-[var(--color-primary)]">Sessão</span>
               </h2>
-              <button onClick={() => setIsModalOpen(false)} className="bg-gray-100 dark:bg-gray-800 p-2 rounded-full transition-transform active:scale-90">
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="bg-gray-100 dark:bg-gray-800 p-2 rounded-full transition-transform active:scale-90"
+              >
                 <X size={24} className="text-[var(--color-text-sec-light)]" />
               </button>
             </div>
 
             {errorMessage && (
               <div className="mb-6 p-4 bg-[var(--color-error)]/10 border-l-4 border-[var(--color-error)] rounded-r-xl flex items-center gap-3">
-                <AlertCircle size={20} className="text-[var(--color-error)] shrink-0" />
-                <p className="text-xs text-[var(--color-error)] font-bold">{errorMessage}</p>
+                <AlertCircle
+                  size={20}
+                  className="text-[var(--color-error)] shrink-0"
+                />
+                <p className="text-xs text-[var(--color-error)] font-bold">
+                  {errorMessage}
+                </p>
               </div>
             )}
 
             <div className="space-y-5 pb-8">
               <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-800">
-                <label className="block text-[10px] font-black uppercase tracking-widest text-[var(--color-text-sec-light)] mb-2">Cliente</label>
+                <label className="block text-[10px] font-black uppercase tracking-widest text-[var(--color-text-sec-light)] mb-2">
+                  Cliente
+                </label>
                 {formClienteId ? (
                   <div className="flex items-center justify-between">
                     <div className="text-lg font-bold text-[var(--color-primary)]">
-                      {(clientes || []).find(c => c.id === formClienteId)?.nome || "Cliente"}
+                      {(clientes || []).find((c) => c.id === formClienteId)
+                        ?.nome || "Cliente"}
                     </div>
-                    <a 
-                      href={`https://wa.me/${(clientes || []).find(c => c.id === formClienteId)?.telefone.replace(/\D/g, '')}?text=${encodeURIComponent(`Olá, ${(clientes || []).find(c => c.id === formClienteId)?.nome}! Passando para confirmar nossa sessão de ${(terapias || []).find(t => t.id === formTerapiaIds[0])?.nome || 'terapia'} agendada para o dia ${formData} às ${formHora}. Podemos confirmar? Gratidão, Celso.`)}`}
+                    <a
+                      href={`https://wa.me/${(clientes || []).find((c) => c.id === formClienteId)?.telefone.replace(/\D/g, "")}?text=${encodeURIComponent(`Olá, ${(clientes || []).find((c) => c.id === formClienteId)?.nome}! Passando para confirmar nossa sessão de ${(terapias || []).find((t) => t.id === formTerapiaIds[0])?.nome || "terapia"} agendada para o dia ${formData} às ${formHora}. Podemos confirmar? Gratidão, Celso.`)}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="p-2 text-green-600 hover:bg-green-100 rounded-full"
@@ -1075,22 +1417,40 @@ export default function AgendaScreen() {
                     </a>
                   </div>
                 ) : (
-                  <select value={formClienteId} onChange={e => setFormClienteId(e.target.value)} className="w-full bg-transparent font-bold text-sm outline-none cursor-pointer">
+                  <select
+                    value={formClienteId}
+                    onChange={(e) => setFormClienteId(e.target.value)}
+                    className="w-full bg-transparent font-bold text-sm outline-none cursor-pointer"
+                  >
                     <option value="">Selecione um cliente</option>
-                    {(clientes || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                    {(clientes || []).map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nome}
+                      </option>
+                    ))}
                   </select>
                 )}
               </div>
 
               <div>
-                <label className="block text-[10px] font-black uppercase tracking-widest text-[var(--color-text-sec-light)] mb-3">Terapias Selecionadas</label>
+                <label className="block text-[10px] font-black uppercase tracking-widest text-[var(--color-text-sec-light)] mb-3">
+                  Terapias Selecionadas
+                </label>
                 <div className="space-y-2 mb-3">
                   {formTerapiaIds.map((tid, index) => {
-                    const t = (terapias || []).find(x => x.id === tid);
+                    const t = (terapias || []).find((x) => x.id === tid);
                     return (
-                      <div key={`${tid}-${index}`} className="flex items-center justify-between bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] px-4 py-3 rounded-2xl border border-[var(--color-primary)]/10 shadow-sm">
-                        <span className="text-sm font-bold">{t?.nome || "Terapia"} <span className="text-xs font-normal opacity-60 ml-1">({t?.duracao || 0}m)</span></span>
-                        <button 
+                      <div
+                        key={`${tid}-${index}`}
+                        className="flex items-center justify-between bg-[var(--color-surface-light)] dark:bg-[var(--color-surface-dark)] px-4 py-3 rounded-2xl border border-[var(--color-primary)]/10 shadow-sm"
+                      >
+                        <span className="text-sm font-bold">
+                          {t?.nome || "Terapia"}{" "}
+                          <span className="text-xs font-normal opacity-60 ml-1">
+                            ({t?.duracao || 0}m)
+                          </span>
+                        </span>
+                        <button
                           onClick={() => {
                             const newIds = [...formTerapiaIds];
                             newIds.splice(index, 1);
@@ -1108,39 +1468,73 @@ export default function AgendaScreen() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-gray-100 dark:border-gray-800">
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-[var(--color-text-sec-light)] mb-2">Data</label>
-                  <input type="date" value={formData} onChange={e => setFormData(e.target.value)} className="w-full bg-transparent font-bold text-sm outline-none" />
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-[var(--color-text-sec-light)] mb-2">
+                    Data
+                  </label>
+                  <input
+                    type="date"
+                    value={formData}
+                    onChange={(e) => setFormData(e.target.value)}
+                    className="w-full bg-transparent font-bold text-sm outline-none"
+                  />
                 </div>
                 <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-gray-100 dark:border-gray-800">
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-[var(--color-text-sec-light)] mb-2">Horário</label>
-                  <input type="time" value={formHora} onChange={e => setFormHora(e.target.value)} className="w-full bg-transparent font-bold text-sm outline-none" />
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-[var(--color-text-sec-light)] mb-2">
+                    Horário
+                  </label>
+                  <input
+                    type="time"
+                    value={formHora}
+                    onChange={(e) => setFormHora(e.target.value)}
+                    className="w-full bg-transparent font-bold text-sm outline-none"
+                  />
                 </div>
               </div>
 
               <div className="p-4 bg-[var(--color-primary)]/5 rounded-2xl border border-[var(--color-primary)]/10">
                 <label className="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" checked={recorrencia} onChange={e => setRecorrencia(e.target.checked)} className="w-5 h-5 rounded-lg text-[var(--color-primary)] border-gray-300 focus:ring-[var(--color-primary)]" />
-                  <span className="text-xs font-black uppercase tracking-tight text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">Habilitar Recorrência</span>
+                  <input
+                    type="checkbox"
+                    checked={recorrencia}
+                    onChange={(e) => setRecorrencia(e.target.checked)}
+                    className="w-5 h-5 rounded-lg text-[var(--color-primary)] border-gray-300 focus:ring-[var(--color-primary)]"
+                  />
+                  <span className="text-xs font-black uppercase tracking-tight text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">
+                    Habilitar Recorrência
+                  </span>
                 </label>
 
                 {recorrencia && (
                   <div className="grid grid-cols-2 gap-3 mt-4 animate-in slide-in-from-top-2 duration-200">
                     <div>
-                      <label className="block text-[9px] font-black uppercase text-[var(--color-text-sec-light)] mb-1">Intervalo</label>
-                      <select value={frequencia} onChange={e => setFrequencia(e.target.value as any)} className="w-full p-2 bg-white dark:bg-gray-700 rounded-xl text-xs font-bold outline-none shadow-sm">
+                      <label className="block text-[9px] font-black uppercase text-[var(--color-text-sec-light)] mb-1">
+                        Intervalo
+                      </label>
+                      <select
+                        value={frequencia}
+                        onChange={(e) => setFrequencia(e.target.value as any)}
+                        className="w-full p-2 bg-white dark:bg-gray-700 rounded-xl text-xs font-bold outline-none shadow-sm"
+                      >
                         <option value="semanal">Semanal</option>
                         <option value="quinzenal">Quinzenal</option>
                       </select>
                     </div>
                     <div>
-                      <label className="block text-[9px] font-black uppercase text-[var(--color-text-sec-light)] mb-1">Repetir até</label>
-                      <input type="date" value={dataFim} onChange={e => setDataFim(e.target.value)} className="w-full p-2 bg-white dark:bg-gray-700 rounded-xl text-xs font-bold outline-none shadow-sm" />
+                      <label className="block text-[9px] font-black uppercase text-[var(--color-text-sec-light)] mb-1">
+                        Repetir até
+                      </label>
+                      <input
+                        type="date"
+                        value={dataFim}
+                        onChange={(e) => setDataFim(e.target.value)}
+                        className="w-full p-2 bg-white dark:bg-gray-700 rounded-xl text-xs font-bold outline-none shadow-sm"
+                      />
                     </div>
                   </div>
                 )}
               </div>
 
-              <button 
+              <button
                 onClick={handleSaveAgendamento}
                 className="w-full py-5 mt-4 bg-[var(--color-primary)] text-white font-black text-sm uppercase tracking-[0.2em] rounded-[1.5rem] shadow-xl shadow-[var(--color-primary)]/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
               >
@@ -1158,27 +1552,45 @@ export default function AgendaScreen() {
             <div className="flex justify-between items-center mb-6">
               <div>
                 <h2 className="text-2xl font-black text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] tracking-tighter">
-                  Concluir <span className="text-[var(--color-primary)]">Sessão</span>
+                  Concluir{" "}
+                  <span className="text-[var(--color-primary)]">Sessão</span>
                 </h2>
                 <p className="text-sm font-medium text-[var(--color-text-sec-light)] mt-1">
                   Marcar este atendimento como realizado.
                 </p>
               </div>
-              <button onClick={() => setIsMobileCompleteModalOpen(false)} className="bg-gray-100 dark:bg-gray-800 p-2 rounded-full transition-transform active:scale-90">
+              <button
+                onClick={() => setIsMobileCompleteModalOpen(false)}
+                className="bg-gray-100 dark:bg-gray-800 p-2 rounded-full transition-transform active:scale-90"
+              >
                 <X size={24} className="text-[var(--color-text-sec-light)]" />
               </button>
             </div>
 
             <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 mb-6">
               <p className="font-medium text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">
-                {clientes?.find(c => c.id === mobileCompleteAgendamento.clienteId)?.nome}
+                {
+                  clientes?.find(
+                    (c) => c.id === mobileCompleteAgendamento.clienteId,
+                  )?.nome
+                }
               </p>
               <p className="text-sm text-[var(--color-text-sec-light)] mt-1">
-                {terapias?.find(t => t.id === mobileCompleteAgendamento.terapiaId)?.nome}
+                {
+                  terapias?.find(
+                    (t) => t.id === mobileCompleteAgendamento.terapiaId,
+                  )?.nome
+                }
               </p>
               <div className="flex items-center gap-2 mt-3 text-sm font-bold text-[var(--color-primary)]">
                 <Clock size={16} />
-                <span>{mobileCompleteAgendamento.data.split('-').reverse().join('/')} às {mobileCompleteAgendamento.hora}</span>
+                <span>
+                  {mobileCompleteAgendamento.data
+                    .split("-")
+                    .reverse()
+                    .join("/")}{" "}
+                  às {mobileCompleteAgendamento.hora}
+                </span>
               </div>
             </div>
 
@@ -1204,34 +1616,48 @@ export default function AgendaScreen() {
             <div className="flex justify-between items-center mb-6">
               <div>
                 <h2 className="text-2xl font-black text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] tracking-tighter">
-                  Agenda do <span className="text-[var(--color-primary)]">Dia</span>
+                  Agenda do{" "}
+                  <span className="text-[var(--color-primary)]">Dia</span>
                 </h2>
                 <p className="text-sm font-medium text-[var(--color-text-sec-light)] mt-1">
                   {(() => {
-                    const [y, m, d] = selectedDate.split('-').map(Number);
-                    return new Date(y, m - 1, d).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
+                    const [y, m, d] = selectedDate.split("-").map(Number);
+                    return new Date(y, m - 1, d).toLocaleDateString("pt-BR", {
+                      weekday: "long",
+                      day: "2-digit",
+                      month: "long",
+                    });
                   })()}
                 </p>
               </div>
-              <button onClick={() => setIsDayAgendaOpen(false)} className="bg-gray-100 dark:bg-gray-800 p-2 rounded-full transition-transform active:scale-90">
+              <button
+                onClick={() => setIsDayAgendaOpen(false)}
+                className="bg-gray-100 dark:bg-gray-800 p-2 rounded-full transition-transform active:scale-90"
+              >
                 <X size={24} className="text-[var(--color-text-sec-light)]" />
               </button>
             </div>
 
             <div className="space-y-4 pb-8">
               {(() => {
-                const bloqueio = (bloqueios || []).find(b => b.data === selectedDate);
+                const bloqueio = (bloqueios || []).find(
+                  (b) => b.data === selectedDate,
+                );
                 if (bloqueio) {
                   return (
                     <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-2xl mb-4 flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <ShieldAlert className="text-red-500" size={20} />
                         <div>
-                          <p className="text-xs font-black uppercase text-red-600 dark:text-red-400">Dia Bloqueado</p>
-                          <p className="text-sm font-bold text-red-800 dark:text-red-200">{bloqueio.motivo || 'Sem motivo especificado'}</p>
+                          <p className="text-xs font-black uppercase text-red-600 dark:text-red-400">
+                            Dia Bloqueado
+                          </p>
+                          <p className="text-sm font-bold text-red-800 dark:text-red-200">
+                            {bloqueio.motivo || "Sem motivo especificado"}
+                          </p>
                         </div>
                       </div>
-                      <button 
+                      <button
                         onClick={(e) => desbloquearDia(e, selectedDate)}
                         className="p-2 bg-white dark:bg-gray-800 text-red-500 rounded-xl shadow-sm hover:scale-105 transition-transform"
                       >
@@ -1244,59 +1670,133 @@ export default function AgendaScreen() {
               })()}
 
               {(agendamentos || [])
-                .filter(a => a.data === selectedDate && (a.statusAtendimento === 'Agendado' || a.statusAtendimento === 'Concluido'))
+                .filter(
+                  (a) =>
+                    a.data === selectedDate &&
+                    (a.statusAtendimento === "Agendado" ||
+                      a.statusAtendimento === "Concluido"),
+                )
                 .sort((a, b) => a.hora.localeCompare(b.hora))
-                .map(ag => {
-                  const cliente = (clientes || []).find(c => c.id === ag.clienteId);
-                  const terapia = (terapias || []).find(t => t.id === ag.terapiaId);
-                  const isConcluido = ag.statusAtendimento === 'Concluido';
-                  const isPago = ag.statusPagamento === 'Pago' || !!ag.pacoteId;
+                .map((ag) => {
+                  const cliente = (clientes || []).find(
+                    (c) => c.id === ag.clienteId,
+                  );
+                  const terapia = (terapias || []).find(
+                    (t) => t.id === ag.terapiaId,
+                  );
+                  const isConcluido = ag.statusAtendimento === "Concluido";
+                  const isPago = ag.statusPagamento === "Pago" || !!ag.pacoteId;
                   const pagoViaPacote = !!ag.pacoteId;
 
                   return (
-                    <div key={ag.id} className={`p-4 rounded-2xl border transition-all ${isConcluido ? 'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-800 opacity-70' : 'bg-white dark:bg-gray-800 border-[var(--color-primary)]/20 shadow-sm'}`}>
+                    <div
+                      key={ag.id}
+                      className={`p-4 rounded-2xl border transition-all ${isConcluido ? "bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-800 opacity-70" : "bg-white dark:bg-gray-800 border-[var(--color-primary)]/20 shadow-sm"}`}
+                    >
                       <div className="flex justify-between items-start mb-3">
                         <div>
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="text-lg font-black text-[var(--color-primary)]">{ag.hora}</span>
-                            {isConcluido && <span className="bg-gray-200 text-gray-600 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Concluído</span>}
+                            <span className="text-lg font-black text-[var(--color-primary)]">
+                              {ag.hora}
+                            </span>
+                            {isConcluido && (
+                              <span className="bg-gray-200 text-gray-600 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                                Concluído
+                              </span>
+                            )}
                           </div>
-                          <h3 className="font-bold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">{cliente?.nome || 'Cliente'}</h3>
-                          <p className="text-xs text-[var(--color-text-sec-light)]">{terapia?.nome || 'Terapia'}</p>
+                          <h3 className="font-bold text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">
+                            {cliente?.nome || "Cliente"}
+                          </h3>
+                          <p className="text-xs text-[var(--color-text-sec-light)]">
+                            {terapia?.nome || "Terapia"}
+                          </p>
                         </div>
                         <div className="flex flex-col items-end gap-2">
-                          <span className={`text-[10px] font-black px-2 py-1 rounded-md uppercase ${isPago ? 'bg-[var(--color-success)]/10 text-[var(--color-success)]' : 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]'}`}>
-                            {pagoViaPacote ? 'Pago via Pacote' : isPago ? 'Pago' : 'Pendente'}
+                          <span
+                            className={`text-[10px] font-black px-2 py-1 rounded-md uppercase ${isPago ? "bg-[var(--color-success)]/10 text-[var(--color-success)]" : "bg-[var(--color-warning)]/10 text-[var(--color-warning)]"}`}
+                          >
+                            {pagoViaPacote
+                              ? "Pago via Pacote"
+                              : isPago
+                                ? "Pago"
+                                : "Pendente"}
                           </span>
                         </div>
                       </div>
 
                       <div className="flex gap-2 mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
                         {!isConcluido && (
-                          <button 
-                            onClick={() => handleCompleteAppointment(ag.id)}
-                            className="flex-1 py-2 bg-[var(--color-primary)]/10 text-[var(--color-primary)] font-bold text-xs rounded-xl hover:bg-[var(--color-primary)]/20 transition-colors"
-                          >
-                            Concluir
-                          </button>
+                          <>
+                            <button
+                              onClick={() => handleCompleteAppointment(ag.id)}
+                              className="flex-1 py-2 bg-[var(--color-primary)]/10 text-[var(--color-primary)] font-bold text-xs rounded-xl hover:bg-[var(--color-primary)]/20 transition-colors"
+                            >
+                              Concluir
+                            </button>
+                            <button
+                              onClick={() => {
+                                promptAction(
+                                  "Novo dia (AAAA-MM-DD) e hora (HH:MM):",
+                                  `${ag.data} ${ag.hora}`,
+                                  (val) => {
+                                    if (val) {
+                                      const [data, hora] = val.split(" ");
+                                      updateAgendamento({
+                                        ...ag,
+                                        data,
+                                        hora,
+                                        statusAtendimento: "Agendado",
+                                      });
+                                      showNotification(
+                                        "Reagendado com sucesso!",
+                                        "success",
+                                      );
+                                      setIsDayAgendaOpen(false);
+                                    }
+                                  },
+                                  { title: "Reagendar Atendimento" },
+                                );
+                              }}
+                              className="flex-1 py-2 bg-[var(--color-primary)]/20 text-[var(--color-primary)] font-bold text-xs rounded-xl hover:bg-[var(--color-primary)]/30 transition-colors"
+                            >
+                              Reagendar
+                            </button>
+                          </>
                         )}
-                        
+
                         {!isPago && !isConcluido && (
-                          <button 
+                          <button
                             onClick={() => {
-                              promptAction('Forma de Pagamento (PIX, Crédito, Débito, Transferência, Dinheiro):', 'PIX', (forma) => {
-                                if (forma) {
-                                  updateAgendamento({ ...ag, statusPagamento: 'Pago' });
-                                  addTransacao({
-                                    descricao: `Atendimento - ${cliente?.nome || 'Cliente'}`,
-                                    valor: ag.valorCobrado || 0,
-                                    data: new Date().toISOString().split('T')[0],
-                                    status: 'Pago',
-                                    agendamentoId: ag.id
-                                  });
-                                  showNotification('Pagamento registrado!', 'success');
-                                }
-                              }, { title: 'Registrar Pagamento', placeholder: 'PIX, Dinheiro, etc.' });
+                              promptAction(
+                                "Forma de Pagamento (PIX, Crédito, Débito, Transferência, Dinheiro):",
+                                "PIX",
+                                (forma) => {
+                                  if (forma) {
+                                    updateAgendamento({
+                                      ...ag,
+                                      statusPagamento: "Pago",
+                                    });
+                                    addTransacao({
+                                      descricao: `Atendimento - ${cliente?.nome || "Cliente"}`,
+                                      valor: ag.valorCobrado || 0,
+                                      data: new Date()
+                                        .toISOString()
+                                        .split("T")[0],
+                                      status: "Pago",
+                                      agendamentoId: ag.id,
+                                    });
+                                    showNotification(
+                                      "Pagamento registrado!",
+                                      "success",
+                                    );
+                                  }
+                                },
+                                {
+                                  title: "Registrar Pagamento",
+                                  placeholder: "PIX, Dinheiro, etc.",
+                                },
+                              );
                             }}
                             className="flex-1 py-2 bg-[var(--color-success)]/10 text-[var(--color-success)] font-bold text-xs rounded-xl hover:bg-[var(--color-success)]/20 transition-colors"
                           >
@@ -1304,7 +1804,7 @@ export default function AgendaScreen() {
                           </button>
                         )}
 
-                        <button 
+                        <button
                           onClick={() => handleDeleteAgendamento(ag.id)}
                           className="p-2 bg-red-50 dark:bg-red-900/20 text-red-500 rounded-xl hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
                         >
@@ -1315,10 +1815,16 @@ export default function AgendaScreen() {
                   );
                 })}
 
-              {(agendamentos || []).filter(a => a.data === selectedDate && a.statusAtendimento !== 'Cancelado').length === 0 && (
+              {(agendamentos || []).filter(
+                (a) =>
+                  a.data === selectedDate &&
+                  a.statusAtendimento !== "Cancelado",
+              ).length === 0 && (
                 <div className="text-center py-8 text-[var(--color-text-sec-light)]">
                   <CalendarIcon size={48} className="mx-auto mb-3 opacity-20" />
-                  <p className="text-sm font-medium">Nenhum agendamento para este dia.</p>
+                  <p className="text-sm font-medium">
+                    Nenhum agendamento para este dia.
+                  </p>
                 </div>
               )}
             </div>
@@ -1332,43 +1838,54 @@ export default function AgendaScreen() {
           <div className="bg-[var(--color-bg-light)] dark:bg-[var(--color-bg-dark)] w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in duration-300 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-black text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)] tracking-tighter">
-                Bloqueios de <span className="text-[var(--color-error)]">Agenda</span>
+                Bloqueios de{" "}
+                <span className="text-[var(--color-error)]">Agenda</span>
               </h2>
-              <button onClick={() => setIsBloqueiosOpen(false)} className="bg-gray-100 dark:bg-gray-800 p-2 rounded-full transition-transform active:scale-90">
+              <button
+                onClick={() => setIsBloqueiosOpen(false)}
+                className="bg-gray-100 dark:bg-gray-800 p-2 rounded-full transition-transform active:scale-90"
+              >
                 <X size={24} className="text-[var(--color-text-sec-light)]" />
               </button>
             </div>
 
             <div className="space-y-6">
               <div className="bg-red-50 dark:bg-red-900/10 p-5 rounded-3xl border border-red-100 dark:border-red-900/20">
-                <h3 className="text-[10px] font-black uppercase tracking-widest text-red-500 mb-4">Novo Bloqueio</h3>
+                <h3 className="text-[10px] font-black uppercase tracking-widest text-red-500 mb-4">
+                  Novo Bloqueio
+                </h3>
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-[10px] font-black uppercase tracking-widest text-[var(--color-text-sec-light)] mb-2">Data</label>
-                    <input 
-                      type="date" 
-                      value={blockData} 
-                      onChange={e => setBlockData(e.target.value)}
-                      className="w-full bg-white dark:bg-gray-800 p-3 rounded-xl font-bold text-sm outline-none border border-gray-100 dark:border-gray-700" 
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-[var(--color-text-sec-light)] mb-2">
+                      Data
+                    </label>
+                    <input
+                      type="date"
+                      value={blockData}
+                      onChange={(e) => setBlockData(e.target.value)}
+                      className="w-full bg-white dark:bg-gray-800 p-3 rounded-xl font-bold text-sm outline-none border border-gray-100 dark:border-gray-700"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-black uppercase tracking-widest text-[var(--color-text-sec-light)] mb-2">Motivo</label>
-                    <input 
-                      type="text" 
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-[var(--color-text-sec-light)] mb-2">
+                      Motivo
+                    </label>
+                    <input
+                      type="text"
                       placeholder="Ex: Feriado, Folga, Curso..."
-                      value={blockMotivo} 
-                      onChange={e => setBlockMotivo(e.target.value)}
-                      className="w-full bg-white dark:bg-gray-800 p-3 rounded-xl font-bold text-sm outline-none border border-gray-100 dark:border-gray-700" 
+                      value={blockMotivo}
+                      onChange={(e) => setBlockMotivo(e.target.value)}
+                      className="w-full bg-white dark:bg-gray-800 p-3 rounded-xl font-bold text-sm outline-none border border-gray-100 dark:border-gray-700"
                     />
                   </div>
-                  <button 
+                  <button
                     onClick={() => {
-                      if (!blockData) return showNotification('Selecione uma data', 'error');
+                      if (!blockData)
+                        return showNotification("Selecione uma data", "error");
                       addBloqueio({ data: blockData, motivo: blockMotivo });
-                      setBlockData('');
-                      setBlockMotivo('');
-                      showNotification('Bloqueio adicionado!', 'success');
+                      setBlockData("");
+                      setBlockMotivo("");
+                      showNotification("Bloqueio adicionado!", "success");
                     }}
                     className="w-full py-3 bg-red-500 text-white font-black text-xs uppercase tracking-widest rounded-xl shadow-lg shadow-red-500/20 active:scale-95 transition-transform"
                   >
@@ -1378,29 +1895,50 @@ export default function AgendaScreen() {
               </div>
 
               <div className="space-y-3">
-                <h3 className="text-[10px] font-black uppercase tracking-widest text-[var(--color-text-sec-light)] mb-2">Bloqueios Ativos</h3>
+                <h3 className="text-[10px] font-black uppercase tracking-widest text-[var(--color-text-sec-light)] mb-2">
+                  Bloqueios Ativos
+                </h3>
                 {(bloqueios || []).length > 0 ? (
-                  (bloqueios || []).sort((a, b) => a.data.localeCompare(b.data)).map(b => (
-                    <div key={b.id} className="flex items-center justify-between bg-white dark:bg-gray-800 p-4 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
-                      <div>
-                        <div className="text-sm font-black text-red-500">{new Date(b.data + 'T12:00:00').toLocaleDateString('pt-BR')}</div>
-                        <div className="text-[10px] font-bold text-[var(--color-text-sec-light)]">{b.motivo || 'Bloqueio de Agenda'}</div>
-                      </div>
-                      <button 
-                        onClick={() => {
-                          confirmAction('Deseja remover este bloqueio?', () => {
-                            deleteBloqueio(b.id);
-                            showNotification('Bloqueio removido!', 'success');
-                          });
-                        }}
-                        className="p-2 bg-red-50 dark:bg-red-900/20 text-red-500 rounded-lg"
+                  (bloqueios || [])
+                    .sort((a, b) => a.data.localeCompare(b.data))
+                    .map((b) => (
+                      <div
+                        key={b.id}
+                        className="flex items-center justify-between bg-white dark:bg-gray-800 p-4 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm"
                       >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  ))
+                        <div>
+                          <div className="text-sm font-black text-red-500">
+                            {new Date(b.data + "T12:00:00").toLocaleDateString(
+                              "pt-BR",
+                            )}
+                          </div>
+                          <div className="text-[10px] font-bold text-[var(--color-text-sec-light)]">
+                            {b.motivo || "Bloqueio de Agenda"}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            confirmAction(
+                              "Deseja remover este bloqueio?",
+                              () => {
+                                deleteBloqueio(b.id);
+                                showNotification(
+                                  "Bloqueio removido!",
+                                  "success",
+                                );
+                              },
+                            );
+                          }}
+                          className="p-2 bg-red-50 dark:bg-red-900/20 text-red-500 rounded-lg"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    ))
                 ) : (
-                  <div className="text-center py-6 text-[var(--color-text-sec-light)] italic text-xs">Nenhum bloqueio ativo</div>
+                  <div className="text-center py-6 text-[var(--color-text-sec-light)] italic text-xs">
+                    Nenhum bloqueio ativo
+                  </div>
                 )}
               </div>
             </div>
@@ -1412,16 +1950,28 @@ export default function AgendaScreen() {
       {isMobileDateModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
           <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl w-full max-w-sm shadow-xl">
-            <h3 className="text-lg font-bold mb-4 text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">Reagendar</h3>
-            <input 
-              type="date" 
-              value={mobileNewDate} 
+            <h3 className="text-lg font-bold mb-4 text-[var(--color-text-main-light)] dark:text-[var(--color-text-main-dark)]">
+              Reagendar
+            </h3>
+            <input
+              type="date"
+              value={mobileNewDate}
               onChange={(e) => setMobileNewDate(e.target.value)}
               className="w-full p-3 border rounded-lg mb-6 dark:bg-gray-700 dark:border-gray-600"
             />
             <div className="flex gap-3">
-              <button onClick={() => setIsMobileDateModalOpen(false)} className="flex-1 py-2 rounded-lg bg-gray-200 dark:bg-gray-700">Cancelar</button>
-              <button onClick={handleConfirmMobileDate} className="flex-1 py-2 rounded-lg bg-[var(--color-primary)] text-white">Confirmar</button>
+              <button
+                onClick={() => setIsMobileDateModalOpen(false)}
+                className="flex-1 py-2 rounded-lg bg-gray-200 dark:bg-gray-700"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmMobileDate}
+                className="flex-1 py-2 rounded-lg bg-[var(--color-primary)] text-white"
+              >
+                Confirmar
+              </button>
             </div>
           </div>
         </div>
